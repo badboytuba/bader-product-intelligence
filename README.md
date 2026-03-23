@@ -38,9 +38,15 @@ Usually this is already present in Odoo environments, but it must exist in the s
 
 ## Installation
 
-1. Copy `bader_product_intelligence` into an Odoo addons path.
-2. Update the app list.
-3. Install `Producto Intelligence`.
+1. Clone the repository into the addons path using the technical module directory name:
+
+```bash
+git clone https://github.com/badboytuba/bader-product-intelligence.git bader_product_intelligence
+```
+
+2. Ensure the resulting folder name is exactly `bader_product_intelligence`.
+3. Update the app list.
+4. Install `Producto Intelligence`.
 
 CLI example:
 
