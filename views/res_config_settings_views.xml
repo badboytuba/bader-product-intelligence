@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_bpi" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.bpi</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base_setup.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('settings')]" position="inside">
+                <div class="app_settings_block" data-string="Producto Intelligence" string="Producto Intelligence">
+                    <h2>Producto Intelligence</h2>
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="bpi_gemini_api_key"/>
+                                <div class="text-muted">Gemini para texto, chat e imágenes.</div>
+                                <div class="text-muted">Fallback por entorno: <code>BPI_GEMINI_API_KEY</code> o <code>GOOGLE_API_KEY</code>.</div>
+                                <field name="bpi_gemini_api_key" password="True"/>
+                                <field name="bpi_gemini_text_model"/>
+                                <field name="bpi_gemini_image_model"/>
+                                <field name="bpi_gemini_image_pro_model"/>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="bpi_firecrawl_api_key"/>
+                                <div class="text-muted">Firecrawl para scraping y análisis competitivo.</div>
+                                <div class="text-muted">Fallback por entorno: <code>BPI_FIRECRAWL_API_KEY</code> o <code>FIRECRAWL_API_KEY</code>.</div>
+                                <field name="bpi_firecrawl_api_key" password="True"/>
+                                <field name="bpi_firecrawl_base_url"/>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <label for="bpi_exchange_rate"/>
+                                <div class="text-muted">Tipo de cambio usado por la interfaz para mostrar precio local en ARS.</div>
+                                <field name="bpi_exchange_rate"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>

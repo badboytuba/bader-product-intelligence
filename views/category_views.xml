@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_bpi_category_tree" model="ir.ui.view">
+        <field name="name">product.public.category.bpi.tree</field>
+        <field name="model">product.public.category</field>
+        <field name="arch" type="xml">
+            <tree string="Inteligencia de Categorías">
+                <field name="name"/>
+                <field name="bpi_local_name"/>
+                <field name="bpi_search_volume"/>
+                <field name="bpi_competitiveness"/>
+                <field name="bpi_trend_direction"/>
+                <field name="bpi_last_analyzed_at"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_bpi_category_form" model="ir.ui.view">
+        <field name="name">product.public.category.bpi.form</field>
+        <field name="model">product.public.category</field>
+        <field name="arch" type="xml">
+            <form string="Inteligencia de Categoría">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="bpi_local_name"/>
+                            <field name="bpi_search_volume"/>
+                            <field name="bpi_competitiveness"/>
+                            <field name="bpi_trend_direction"/>
+                            <field name="bpi_seasonality"/>
+                        </group>
+                        <group>
+                            <field name="bpi_local_aliases"/>
+                            <field name="bpi_target_audiences"/>
+                            <field name="bpi_seo_keywords"/>
+                            <field name="bpi_geo_keywords"/>
+                            <field name="bpi_last_analyzed_at"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="bpi_meta_description"/>
+                        <field name="bpi_audience_descriptions"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>
