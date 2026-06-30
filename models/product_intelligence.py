@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import base64
+from collections import Counter
 import ipaddress
 import json
 import logging
@@ -8,14 +9,17 @@ import math
 import os
 import re
 import socket
+import unicodedata
 import uuid
-from urllib.parse import urlparse
+from html import unescape
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.osv import expression
+from odoo.tools import html2plaintext
 
 _logger = logging.getLogger(__name__)
 
@@ -200,20 +204,109 @@ class BPIService(models.AbstractModel):
     _name = "bpi.service"
     _description = "Producto Intelligence Service"
 
+    _CATEGORY_NICHE_ALIASES = {
+        "clinica": "clinica",
+        "clinicas": "clinica",
+        "clinica_dental": "clinica",
+        "clinicas_dentales": "clinica",
+        "laboratorio": "laboratorio",
+        "laboratorios": "laboratorio",
+        "laboratorio_dental": "laboratorio",
+        "laboratorios_dentales": "laboratorio",
+        "estudiante": "estudiantes",
+        "estudiantes": "estudiantes",
+    }
+    _CATEGORY_TYPE_ALLOWED = {
+        "consumible",
+        "equipo",
+        "instrumental",
+        "mobiliario",
+        "protesis",
+        "ortodoncia",
+        "endodoncia",
+        "cirugia",
+        "higiene",
+        "radiologia",
+        "otro",
+    }
+    _CATEGORY_TYPE_ALIASES = {
+        "clamp": "instrumental",
+        "clamps": "instrumental",
+        "clamp_dental": "instrumental",
+        "instrumental_de_mano": "instrumental",
+        "instrumental_dental": "instrumental",
+        "instrumento": "instrumental",
+        "instrumentos": "instrumental",
+        "material": "consumible",
+        "materiales": "consumible",
+        "insumo": "consumible",
+        "insumos": "consumible",
+        "equipamiento": "equipo",
+        "equipos": "equipo",
+    }
+    _CATEGORY_SUBCATEGORY_ALLOWED = {
+        "aislamiento",
+        "adhesivos",
+        "anestesia",
+        "blanqueamiento",
+        "cementos",
+        "composites",
+        "desechables",
+        "endodoncia",
+        "esterilizacion",
+        "fresas",
+        "higiene",
+        "implantes",
+        "impresion",
+        "instrumental_clinico",
+        "laboratorio",
+        "matrices_bandas",
+        "ortodoncia",
+        "profilaxis",
+        "protesis",
+        "radiologia",
+        "restauracion",
+        "otro",
+    }
+    _CATEGORY_SUBCATEGORY_ALIASES = {
+        "clamp": "aislamiento",
+        "clamps": "aislamiento",
+        "clamp_para_dique_de_goma": "aislamiento",
+        "dique": "aislamiento",
+        "dique_de_goma": "aislamiento",
+        "aislamiento_absoluto": "aislamiento",
+        "aislamiento_dental": "aislamiento",
+        "instrumental": "instrumental_clinico",
+        "instrumental_dental": "instrumental_clinico",
+        "instrumental_de_mano": "instrumental_clinico",
+        "higiene_dental": "higiene",
+        "profilaxis_dental": "profilaxis",
+        "fresas_dentales": "fresas",
+        "impresion_dental": "impresion",
+        "materiales_de_impresion": "impresion",
+        "descartables": "desechables",
+        "restauraciones": "restauracion",
+    }
+
     _ENV_FALLBACKS = {
-        "bader_product_intelligence.gemini_api_key": [
-            "BPI_GEMINI_API_KEY",
-            "GOOGLE_API_KEY",
-            "GEMINI_API_KEY",
+        "bader_product_intelligence.openai_api_key": [
+            "BPI_OPENAI_API_KEY",
+            "OPENAI_API_KEY",
         ],
-        "bader_product_intelligence.gemini_text_model": [
-            "BPI_GEMINI_TEXT_MODEL",
+        "bader_product_intelligence.openai_text_model": [
+            "BPI_OPENAI_TEXT_MODEL",
         ],
-        "bader_product_intelligence.gemini_image_model": [
-            "BPI_GEMINI_IMAGE_MODEL",
+        "bader_product_intelligence.openai_image_model": [
+            "BPI_OPENAI_IMAGE_MODEL",
         ],
-        "bader_product_intelligence.gemini_image_pro_model": [
-            "BPI_GEMINI_IMAGE_PRO_MODEL",
+        "bader_product_intelligence.openai_image_edit_model": [
+            "BPI_OPENAI_IMAGE_EDIT_MODEL",
+        ],
+        "bader_product_intelligence.openai_reasoning_effort": [
+            "BPI_OPENAI_REASONING_EFFORT",
+        ],
+        "bader_product_intelligence.openai_text_verbosity": [
+            "BPI_OPENAI_TEXT_VERBOSITY",
         ],
         "bader_product_intelligence.firecrawl_api_key": [
             "BPI_FIRECRAWL_API_KEY",
@@ -236,6 +329,46 @@ class BPIService(models.AbstractModel):
         return default
 
     @api.model
+    def _description_plain_text(self, raw_value):
+        if not raw_value:
+            return False
+        try:
+            text = html2plaintext(raw_value)
+        except Exception:
+            text = str(raw_value)
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"[^\S\n]+", " ", text)
+        text = "\n".join(line.strip() for line in text.split("\n"))
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip() or False
+
+    @api.model
+    def _taxonomy_key(self, value):
+        if not value:
+            return ""
+        text = unicodedata.normalize("NFKD", str(value))
+        text = text.encode("ascii", "ignore").decode("ascii").lower()
+        return re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+
+    @api.model
+    def _normalize_taxonomy_choice(self, value, allowed_values, aliases, default=False):
+        key = self._taxonomy_key(value)
+        if not key:
+            return default
+        if key in allowed_values:
+            return key
+        return aliases.get(key, default)
+
+    @api.model
+    def _normalize_category_niches(self, raw_values):
+        normalized = []
+        for raw_value in raw_values or []:
+            value = self._CATEGORY_NICHE_ALIASES.get(self._taxonomy_key(raw_value))
+            if value and value not in normalized:
+                normalized.append(value)
+        return normalized
+
+    @api.model
     def _require_config(self, key, label):
         value = self._get_config(key)
         if not value:
@@ -243,12 +376,19 @@ class BPIService(models.AbstractModel):
         return value
 
     @api.model
-    def _gemini_endpoint(self, model_name):
-        api_key = self._require_config("bader_product_intelligence.gemini_api_key", "Gemini API Key")
-        return "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s" % (
-            model_name,
-            api_key,
-        )
+    def _public_category_label(self, product, default="Sin categoría"):
+        category = product.public_categ_ids[:1]
+        if not category:
+            return default
+        return category.display_name or category.name or default
+
+    @api.model
+    def _openai_headers(self):
+        api_key = self._require_config("bader_product_intelligence.openai_api_key", "OpenAI API Key")
+        return {
+            "Authorization": "Bearer %s" % api_key,
+            "Content-Type": "application/json",
+        }
 
     @api.model
     def _clean_json_text(self, raw_text):
@@ -259,69 +399,118 @@ class BPIService(models.AbstractModel):
         return raw_text
 
     @api.model
-    def _parse_gemini_text(self, payload):
-        candidates = payload.get("candidates") or []
+    def _parse_openai_text(self, payload):
+        if payload.get("output_text"):
+            return (payload.get("output_text") or "").strip()
         texts = []
-        for candidate in candidates:
-            content = candidate.get("content") or {}
-            for part in content.get("parts") or []:
-                if part.get("text"):
+        for item in payload.get("output") or []:
+            if item.get("type") != "message":
+                continue
+            for part in item.get("content") or []:
+                if part.get("type") == "output_text" and part.get("text"):
                     texts.append(part["text"])
         return "\n".join(texts).strip()
 
     @api.model
-    def _gemini_request(self, model_name, contents, generation_config=None):
+    def _openai_request(self, path, json_payload=None, files=None, data=None, timeout=120):
         import time as _time
+
+        url = "https://api.openai.com/v1/%s" % path.lstrip("/")
+        headers = self._openai_headers()
+        if files:
+            headers.pop("Content-Type", None)
         max_retries = 5
         for attempt in range(max_retries):
             try:
-                response = requests.post(
-                    self._gemini_endpoint(model_name),
-                    json={
-                        "contents": contents,
-                        "generationConfig": generation_config or {},
-                    },
-                    headers={"Content-Type": "application/json"},
-                    timeout=120,
-                )
+                response = requests.post(url, json=json_payload, files=files, data=data, headers=headers, timeout=timeout)
                 response.raise_for_status()
                 return response.json()
             except requests.RequestException as error:
-                status = getattr(getattr(error, "response", None), "status_code", 0)
+                response = getattr(error, "response", None)
+                status = getattr(response, "status_code", 0)
+                openai_error = {}
+                if response is not None:
+                    try:
+                        openai_error = (response.json() or {}).get("error") or {}
+                    except ValueError:
+                        openai_error = {}
+                error_type = openai_error.get("type") or ""
+                error_code = openai_error.get("code") or ""
+                error_label = error_code or error_type or "unknown"
+
+                if status in (401, 403):
+                    _logger.warning("OpenAI authentication/permission error for %s: %s", path, error_label)
+                    raise UserError(
+                        _("La API Key de OpenAI no es valida o no tiene permisos para este proyecto. Configura una API Key activa en Ajustes.")
+                    ) from error
+
+                if status == 400 and error_label in ("model_not_found", "invalid_request_error"):
+                    _logger.warning("OpenAI request/configuration error for %s: %s", path, error_label)
+                    raise UserError(
+                        _("El modelo/configuracion de OpenAI no esta disponible para esta API Key. Revisa el modelo configurado en Ajustes.")
+                    ) from error
+
+                if status == 429 and error_label in ("billing_not_active", "insufficient_quota", "quota_exceeded"):
+                    _logger.error("OpenAI billing/quota error for %s: %s", path, error_label)
+                    raise UserError(
+                        _("La cuenta/proyecto de OpenAI no tiene billing o creditos activos. Activa billing/creditos en OpenAI o configura una API Key de un proyecto activo.")
+                    ) from error
+
                 if status == 429 and attempt < max_retries - 1:
                     wait = 3 * (2 ** attempt)  # 3, 6, 12, 24, 48
-                    _logger.warning("Gemini 429 rate-limited (model %s), retrying in %ss (attempt %s/%s)", model_name, wait, attempt + 1, max_retries)
+                    _logger.warning("OpenAI 429 rate-limited (%s), retrying in %ss (attempt %s/%s)", error_label, wait, attempt + 1, max_retries)
                     _time.sleep(wait)
                     continue
                 if status == 429:
-                    _logger.error("Gemini rate limit exhausted after %s retries for model %s", max_retries, model_name)
+                    _logger.error("OpenAI rate limit exhausted after %s retries (%s)", max_retries, error_label)
                     raise UserError(
-                        _("Límite de uso de Gemini alcanzado. Espera 1-2 minutos e intenta de nuevo.")
+                        _("Límite de uso de OpenAI alcanzado. Espera 1-2 minutos e intenta de nuevo.")
                     ) from error
-                _logger.exception("Gemini request failed for model %s", model_name)
+                _logger.exception("OpenAI request failed for %s (%s)", path, error_label)
                 raise UserError(
-                    _("No se pudo completar la solicitud a Gemini. Revisa la configuracion e intenta de nuevo.")
+                    _("No se pudo completar la solicitud a OpenAI. Revisa la configuracion e intenta de nuevo.")
                 ) from error
             except ValueError as error:
-                _logger.exception("Gemini returned a non-JSON response for model %s", model_name)
-                raise UserError(_("Gemini devolvio una respuesta invalida.")) from error
+                _logger.exception("OpenAI returned a non-JSON response for %s", path)
+                raise UserError(_("OpenAI devolvio una respuesta invalida.")) from error
 
     @api.model
-    def _gemini_json(self, prompt, model_name=False):
-        model_name = model_name or self._get_config("bader_product_intelligence.gemini_text_model", "gemini-2.5-flash")
-        payload = self._gemini_request(
-            model_name,
-            [{"role": "user", "parts": [{"text": prompt}]}],
-            {"responseMimeType": "application/json"},
+    def _openai_response(self, prompt, model_name=False, text_format=None):
+        model_name = model_name or self._get_config("bader_product_intelligence.openai_text_model", "gpt-5.5")
+        text_payload = {"format": text_format or {"type": "text"}}
+        verbosity = (self._get_config("bader_product_intelligence.openai_text_verbosity", "medium") or "medium").strip().lower()
+        if verbosity in ("low", "medium", "high"):
+            text_payload["verbosity"] = verbosity
+        json_payload = {
+            "model": model_name,
+            "input": [
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": prompt}],
+                }
+            ],
+            "text": text_payload,
+            "store": False,
+        }
+        reasoning_effort = (self._get_config("bader_product_intelligence.openai_reasoning_effort", "low") or "low").strip().lower()
+        if model_name.startswith("gpt-5") and reasoning_effort in ("none", "minimal", "low", "medium", "high", "xhigh"):
+            json_payload["reasoning"] = {"effort": reasoning_effort}
+        payload = self._openai_request(
+            "responses",
+            json_payload=json_payload,
         )
-        text = self._clean_json_text(self._parse_gemini_text(payload))
+        return self._parse_openai_text(payload)
+
+    @api.model
+    def _openai_json(self, prompt, model_name=False):
+        text = self._clean_json_text(self._openai_response(prompt, model_name=model_name, text_format={"type": "json_object"}))
         if not text:
-            raise UserError(_("Gemini no devolvió contenido JSON."))
+            raise UserError(_("OpenAI no devolvió contenido JSON."))
         try:
             return json.loads(text)
         except ValueError as error:
-            _logger.exception("Gemini returned invalid JSON: %s", text[:500])
-            raise UserError(_("Gemini devolvio JSON invalido para esta accion.")) from error
+            _logger.exception("OpenAI returned invalid JSON: %s", text[:500])
+            raise UserError(_("OpenAI devolvio JSON invalido para esta accion.")) from error
 
     @api.model
     def _image_mime_from_base64(self, encoded):
@@ -344,63 +533,88 @@ class BPIService(models.AbstractModel):
         return "image/png"
 
     @api.model
-    def _binary_to_inline_data(self, binary_value):
+    def _binary_to_openai_image(self, binary_value, filename="reference.png"):
         if not binary_value:
             return False
         encoded = binary_value.decode() if isinstance(binary_value, bytes) else binary_value
+        try:
+            raw = base64.b64decode(encoded)
+        except Exception:
+            return False
+        mime_type = self._image_mime_from_base64(encoded)
         return {
-            "inlineData": {
-                "mimeType": self._image_mime_from_base64(encoded),
-                "data": encoded,
-            }
+            "filename": filename,
+            "mime_type": mime_type,
+            "raw": raw,
         }
 
     @api.model
-    def _reference_parts(self, product, reference_tokens):
-        parts = []
+    def _data_url_to_openai_image(self, data_url, filename="uploaded-reference.png"):
+        if not data_url or "," not in data_url:
+            return False
+        meta, encoded = data_url.split(",", 1)
+        mime_type = "image/png"
+        if ":" in meta and ";" in meta:
+            mime_type = meta.split(":", 1)[1].split(";", 1)[0] or "image/png"
+        try:
+            raw = base64.b64decode(encoded)
+        except Exception:
+            return False
+        return {
+            "filename": filename,
+            "mime_type": mime_type,
+            "raw": raw,
+        }
+
+    @api.model
+    def _reference_images(self, product, reference_tokens):
+        images = []
         for token in reference_tokens or []:
             if token == "main" and product.image_1920:
-                inline = self._binary_to_inline_data(product.image_1920)
-                if inline:
-                    parts.append(inline)
+                image = self._binary_to_openai_image(product.image_1920, "product-main.png")
+                if image:
+                    images.append(image)
                 continue
 
             if token.startswith("bpi:"):
                 image_id = int(token.split(":")[1])
                 image = self.env["bpi.product.image"].browse(image_id).exists()
                 if image and image.product_tmpl_id == product:
-                    inline = self._binary_to_inline_data(image.image_1920)
-                    if inline:
-                        parts.append(inline)
+                    image_payload = self._binary_to_openai_image(image.image_1920, "bpi-%s.png" % image.id)
+                    if image_payload:
+                        images.append(image_payload)
                 continue
 
             if token.startswith("odoo:"):
                 image_id = int(token.split(":")[1])
                 image = self.env["product.image"].browse(image_id).exists()
                 if image and image.product_tmpl_id == product:
-                    inline = self._binary_to_inline_data(image.image_1920)
-                    if inline:
-                        parts.append(inline)
+                    image_payload = self._binary_to_openai_image(image.image_1920, "odoo-%s.png" % image.id)
+                    if image_payload:
+                        images.append(image_payload)
                 continue
 
             if token.startswith("variant:"):
                 variant_id = int(token.split(":")[1])
                 variant = self.env["product.product"].browse(variant_id).exists()
                 if variant and variant.product_tmpl_id == product:
-                    inline = self._binary_to_inline_data(variant.image_1920 or getattr(variant, "image_variant_1920", False))
-                    if inline:
-                        parts.append(inline)
-        return parts
+                    image_payload = self._binary_to_openai_image(
+                        variant.image_1920 or getattr(variant, "image_variant_1920", False),
+                        "variant-%s.png" % variant.id,
+                    )
+                    if image_payload:
+                        images.append(image_payload)
+        return images
 
     @api.model
-    def _extract_inline_image(self, payload):
-        for candidate in payload.get("candidates") or []:
-            content = candidate.get("content") or {}
-            for part in content.get("parts") or []:
-                inline = part.get("inlineData")
-                if inline and inline.get("data"):
-                    return inline
-        raise UserError(_("Gemini no devolvió una imagen válida."))
+    def _extract_openai_image(self, payload):
+        data = payload.get("data") or []
+        if data and data[0].get("b64_json"):
+            return {"mimeType": "image/png", "data": data[0]["b64_json"]}
+        for item in payload.get("output") or []:
+            if item.get("type") == "image_generation_call" and item.get("result"):
+                return {"mimeType": "image/png", "data": item["result"]}
+        raise UserError(_("OpenAI no devolvió una imagen válida."))
 
     @api.model
     def _detect_price_comparison(self, our_price, competitor_price):
@@ -457,35 +671,257 @@ class BPIService(models.AbstractModel):
         return items
 
     @api.model
+    def _walk_structured_data(self, value, depth=0):
+        """Yield every dict inside JSON-LD, including @graph/offers nests."""
+        if depth > 8:
+            return
+        if isinstance(value, dict):
+            yield value
+            for child in value.values():
+                for item in self._walk_structured_data(child, depth + 1):
+                    yield item
+            return
+        if isinstance(value, list):
+            for child in value:
+                for item in self._walk_structured_data(child, depth + 1):
+                    yield item
+
+    @api.model
+    def _parse_price_number(self, raw_value):
+        if raw_value in (None, False, ""):
+            return False
+        if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool):
+            value = float(raw_value)
+            return value if value > 0 else False
+
+        text = unescape(str(raw_value))
+        text = re.sub(r"(?i)\b(ars|usd|u\$s|us\$|ar\$|precio|price|sale|oferta|regular|final|desde|hasta|iva|incluido|contado)\b", " ", text)
+        text = re.sub(r"[^\d,.\s]", " ", text)
+        text = re.sub(r"\s+", "", text)
+        if not re.search(r"\d", text or ""):
+            return False
+
+        has_dot = "." in text
+        has_comma = "," in text
+        normalized = text
+        if has_dot and has_comma:
+            if text.rfind(",") > text.rfind("."):
+                normalized = text.replace(".", "").replace(",", ".")
+            else:
+                normalized = text.replace(",", "")
+        elif has_comma:
+            parts = text.split(",")
+            if len(parts[-1]) in (1, 2):
+                normalized = "".join(parts[:-1]).replace(",", "") + "." + parts[-1]
+            else:
+                normalized = text.replace(",", "")
+        elif has_dot:
+            parts = text.split(".")
+            if len(parts) > 2:
+                normalized = "".join(parts[:-1]) + ("." + parts[-1] if len(parts[-1]) in (1, 2) else parts[-1])
+            elif len(parts[-1]) == 3 and len(parts[0]) <= 3:
+                normalized = text.replace(".", "")
+
+        try:
+            value = float(normalized)
+        except Exception:
+            return False
+        if value <= 0 or value > 1000000000:
+            return False
+        return value
+
+    @api.model
+    def _extract_title_tag(self, html):
+        if not html:
+            return ""
+        match = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+        if not match:
+            return ""
+        title = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", match.group(1) or ""))
+        return unescape(title).strip()
+
+    @api.model
+    def _extract_canonical_url(self, html, base_url):
+        if not html:
+            return ""
+        patterns = [
+            r'<link[^>]+rel=["\'][^"\']*canonical[^"\']*["\'][^>]+href=["\']([^"\']+)["\']',
+            r'<link[^>]+href=["\']([^"\']+)["\'][^>]+rel=["\'][^"\']*canonical[^"\']*["\']',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, html, re.I)
+            if match:
+                return urljoin(base_url or "", match.group(1).strip())
+        return ""
+
+    @api.model
+    def _html_to_markdown_text(self, html):
+        if not html:
+            return ""
+        clean_html = re.sub(r"<(script|style|noscript)\b[^>]*>.*?</\1>", " ", html, flags=re.I | re.S)
+        try:
+            text = html2plaintext(clean_html)
+        except Exception:
+            text = re.sub(r"<[^>]+>", " ", clean_html)
+        text = unescape(text or "")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"[^\S\n]+", " ", text)
+        text = "\n".join(line.strip() for line in text.split("\n"))
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+    @api.model
+    def _derive_keywords(self, *parts):
+        stopwords = {
+            "para", "con", "sin", "por", "una", "uno", "del", "las", "los", "les", "sus", "este", "esta",
+            "estos", "estas", "sobre", "entre", "desde", "hasta", "como", "más", "mas", "muy", "cada",
+            "producto", "productos", "comprar", "venta", "online", "tienda", "argentina", "bader",
+            "precio", "precios", "stock", "disponible", "disponibles", "oferta", "ofertas", "envio",
+            "envíos", "envios", "carrito", "cantidad", "marca", "modelo", "inicio", "contacto", "buscar",
+            "login", "cuenta", "condiciones", "privacidad", "copyright", "todos", "todas", "your", "the",
+            "and", "for", "with", "sin", "nbsp", "none", "ver", "home", "menu", "catalogo", "categorias",
+        }
+        domain_terms = {
+            "clamp", "clamps", "grapa", "grapas", "dique", "goma", "aislamiento", "absoluto", "molar",
+            "molares", "premolar", "premolares", "dental", "odontologico", "odontológica", "odontologia",
+            "odontología", "instrumental", "acero", "inoxidable", "endodoncia", "operatoria", "clinica",
+            "clínica",
+        }
+
+        def clean_text(value):
+            text = str(value or "")
+            text = html2plaintext(text) if "<" in text else text
+            text = unescape(text).lower()
+            return re.sub(r"\s+", " ", text).strip()
+
+        def tokenize(value):
+            tokens = re.findall(r"[a-záéíóúüñ0-9][a-záéíóúüñ0-9\-]{2,}", clean_text(value), re.I)
+            clean_tokens = []
+            for token in tokens:
+                token = token.strip("-")
+                if not token or token in stopwords:
+                    continue
+                if token.isdigit() and len(token) < 4:
+                    continue
+                clean_tokens.append(token)
+            return clean_tokens
+
+        def has_domain_term(keyword):
+            key = self._taxonomy_key(keyword)
+            return any(self._taxonomy_key(term) in key for term in domain_terms)
+
+        candidate_scores = Counter()
+        priority_parts = [part for part in parts[:-1] if part]
+        body_parts = [parts[-1]] if parts else []
+
+        for part in priority_parts:
+            tokens = tokenize(part)
+            for token in tokens:
+                candidate_scores[token] += 8 if has_domain_term(token) else 3
+            for size in (2, 3):
+                for index in range(0, max(len(tokens) - size + 1, 0)):
+                    phrase = " ".join(tokens[index : index + size])
+                    if len(phrase) <= 48:
+                        candidate_scores[phrase] += 14 if has_domain_term(phrase) else 4
+
+        body_tokens = []
+        for part in body_parts:
+            body_tokens.extend(tokenize(clean_text(part)[:8000]))
+        body_counts = Counter(body_tokens)
+        for token, count in body_counts.most_common(80):
+            if has_domain_term(token):
+                candidate_scores[token] += min(count, 8)
+        for size in (2, 3):
+            phrase_counts = Counter()
+            for index in range(0, max(len(body_tokens) - size + 1, 0)):
+                phrase = " ".join(body_tokens[index : index + size])
+                if len(phrase) <= 48 and has_domain_term(phrase):
+                    phrase_counts[phrase] += 1
+            for phrase, count in phrase_counts.most_common(40):
+                candidate_scores[phrase] += min(count, 5) * size
+
+        if not candidate_scores:
+            return []
+
+        selected = []
+        seen = set()
+        for keyword, _score in candidate_scores.most_common(80):
+            key = self._taxonomy_key(keyword)
+            if not key or key in seen:
+                continue
+            if any(key in self._taxonomy_key(existing) and key != self._taxonomy_key(existing) for existing in selected):
+                continue
+            seen.add(key)
+            selected.append(keyword[:60])
+            if len(selected) >= 14:
+                break
+        return selected
+
+    @api.model
     def _extract_prices(self, html, markdown, structured_data):
         price = False
         offer_price = False
         currency = "ARS"
+
+        def set_candidate(raw_price, raw_currency=None, prefer_offer=False):
+            parsed_price = self._parse_price_number(raw_price)
+            if not parsed_price:
+                return
+            nonlocal price, offer_price, currency
+            currency = raw_currency or currency or "ARS"
+            if prefer_offer:
+                if not offer_price or parsed_price < offer_price:
+                    offer_price = parsed_price
+                return
+            if not price:
+                price = parsed_price
+            elif parsed_price < price and parsed_price > 10:
+                if not offer_price or parsed_price < offer_price:
+                    offer_price = parsed_price
+
         for data in structured_data or []:
-            if isinstance(data, dict) and data.get("@type") == "Product" and data.get("offers"):
-                offers = data["offers"][0] if isinstance(data["offers"], list) else data["offers"]
-                if offers.get("price"):
-                    try:
-                        price = float(str(offers["price"]).replace(",", "."))
-                    except Exception:
-                        pass
-                    currency = offers.get("priceCurrency") or "ARS"
-                if offers.get("lowPrice"):
-                    try:
-                        offer_price = float(str(offers["lowPrice"]).replace(",", "."))
-                    except Exception:
-                        pass
-                break
+            for item in self._walk_structured_data(data):
+                raw_type = item.get("@type") or item.get("type") or ""
+                if isinstance(raw_type, list):
+                    raw_type = " ".join(str(value) for value in raw_type)
+                raw_type = str(raw_type).lower()
+                item_currency = item.get("priceCurrency") or item.get("currency") or item.get("price_currency")
+                if any(key in item for key in ("price", "salePrice", "lowPrice", "highPrice")):
+                    set_candidate(item.get("price") or item.get("salePrice") or item.get("highPrice"), item_currency)
+                    set_candidate(item.get("lowPrice") or item.get("salePrice"), item_currency, prefer_offer=True)
+                if "offer" in raw_type or "product" in raw_type:
+                    spec = item.get("priceSpecification")
+                    if isinstance(spec, dict):
+                        set_candidate(spec.get("price"), spec.get("priceCurrency") or item_currency)
+                    elif isinstance(spec, list):
+                        for spec_item in spec:
+                            if isinstance(spec_item, dict):
+                                set_candidate(spec_item.get("price"), spec_item.get("priceCurrency") or item_currency)
 
         if not price:
             text = "%s\n%s" % (html or "", markdown or "")
-            match = re.search(r"\$\s?([\d\.\,]+)", text)
-            if match:
-                normalized = match.group(1).replace(".", "").replace(",", ".")
-                try:
-                    price = float(normalized)
-                except Exception:
-                    price = False
+            compact_text = re.sub(r"\s+", " ", unescape(text))[:250000]
+            currency_patterns = [
+                (r"(?i)(?:ARS|AR\$|\$)\s*([\d][\d\.\,\s]{2,})", "ARS"),
+                (r"(?i)(?:USD|U\$S|US\$)\s*([\d][\d\.\,\s]{1,})", "USD"),
+                (r"(?i)(?:precio|price|oferta|sale)[^0-9$]{0,60}(?:ARS|AR\$|\$)?\s*([\d][\d\.\,\s]{2,})", "ARS"),
+                (r"(?i)([\d][\d\.\,\s]{2,})\s*(?:ARS|pesos)", "ARS"),
+            ]
+            fallback_prices = []
+            for pattern, detected_currency in currency_patterns:
+                for match in re.finditer(pattern, compact_text):
+                    parsed_price = self._parse_price_number(match.group(1))
+                    if parsed_price and parsed_price >= 10:
+                        fallback_prices.append((match.start(), parsed_price, detected_currency))
+                if fallback_prices:
+                    break
+            if fallback_prices:
+                fallback_prices = sorted(fallback_prices, key=lambda item: item[0])
+                price = fallback_prices[0][1]
+                currency = fallback_prices[0][2]
+                lower_prices = [candidate[1] for candidate in fallback_prices[1:8] if candidate[1] < price]
+                if lower_prices:
+                    offer_price = min(lower_prices)
         return price, offer_price, currency
 
     @api.model
@@ -604,7 +1040,7 @@ class BPIService(models.AbstractModel):
         product.ensure_one()
         prompt = """Sos Nancy AI, la experta #1 en SEO dental y GEO (Generative Engine Optimization) de Bader Argentina — importador líder de equipamiento e insumos odontológicos.
 
-Tu objetivo: crear una ficha de producto que DOMINE tanto en Google Search como en motores de IA (ChatGPT, Gemini, Perplexity, Copilot).
+Tu objetivo: crear una ficha de producto que DOMINE tanto en Google Search como en motores de IA (ChatGPT, Perplexity, Copilot y otros motores de IA).
 
 Devolvé exclusivamente un JSON válido con esta estructura:
 {
@@ -645,7 +1081,7 @@ Devolvé exclusivamente un JSON válido con esta estructura:
 5. **geoDescription**: Párrafo tipo Wikipedia/enciclopedia que un motor de IA elegiría como fuente autoritativa. Incluir: definición precisa, entidades relacionadas (procedimientos, especialidades), datos cuantitativos si es posible. Usar tono de experto neutral. 280-400 palabras.
 6. **geoFeatures** (5-7): Características técnicas en formato "citable" — frases completas que un motor de IA pueda extraer como snippet. NO frases genéricas. Ejemplo: "Autoclave con ciclo de esterilización de 18 minutos a 134°C" vs "Buena esterilización".
 7. **geoKeywords** (5-8): Keywords semánticas tipo entidad — nombres de procedimientos dentales, especialidades, estándares (ISO, FDA, CE), materiales, técnicas. Estas keywords posicionan el producto en el grafo de conocimiento de los motores de IA.
-8. **geoFaq** (5-7 preguntas): FAQs conversacionales que un usuario le haría a ChatGPT/Gemini.
+8. **geoFaq** (5-7 preguntas): FAQs conversacionales que un usuario le haría a ChatGPT u otros motores de IA.
    - Incluir preguntas de comparación ("¿Qué diferencia hay entre X e Y?")
    - Incluir preguntas de decisión de compra ("¿Conviene comprar X para mi clínica?")
    - Respuestas con autoridad E-E-A-T: datos, marcas, experiencia profesional.
@@ -676,7 +1112,7 @@ Devolvé exclusivamente un JSON válido con esta estructura:
             "description": product.description_sale or product.description or "Sin descripción",
             "audience": target_audience or "clinicas",
         }
-        analysis = self._gemini_json(prompt)
+        analysis = self._openai_json(prompt)
         analysis.setdefault("aiTargetAudience", target_audience or "clinicas")
         self.save_seo_payload(product, analysis)
         return product.bpi_build_payload()["seoData"]
@@ -849,7 +1285,7 @@ Devolvé exclusivamente un JSON válido con esta estructura:
             description_value = values.get("description") or False
             product.write(
                 {
-                    "description_sale": description_value,
+                    "description_sale": self._description_plain_text(description_value),
                     "bpi_ai_generated_description": description_value,
                 }
             )
@@ -861,7 +1297,7 @@ Devolvé exclusivamente un JSON válido con esta estructura:
         product.ensure_one()
         prompt = """Sos Nancy AI, copywriter experta en e-commerce dental para Bader Argentina — importador líder de equipamiento e insumos odontológicos en Argentina.
 
-Tu misión: crear contenido de producto que CONVIERTE visitantes en compradores Y que los motores de IA (ChatGPT, Gemini, Perplexity) citen como fuente autoritativa.
+Tu misión: crear contenido de producto que CONVIERTE visitantes en compradores Y que los motores de IA (ChatGPT, Perplexity) citen como fuente autoritativa.
 
 Devolvé solo JSON válido:
 {
@@ -916,16 +1352,18 @@ Generar descripción en HTML válido. Extensión: 180-280 palabras. Estructura o
 """ % {
             "name": product.name,
             "sku": product.default_code or "N/A",
-            "category": product.public_categ_ids[:1].complete_name if product.public_categ_ids else "Sin categoría",
+            "category": self._public_category_label(product),
             "price": product.list_price,
             "description": product.description_sale or product.description or "Sin descripción",
             "tone": tone or "profesional",
             "audience": audience or "clinicas",
         }
-        response = self._gemini_json(prompt)
+        response = self._openai_json(prompt)
+        description_html = response.get("description") or product.bpi_ai_generated_description or product.description_sale or product.description or ""
         return {
             "name": response.get("name") or product.name,
-            "description": response.get("description") or product.description_sale or product.description or "",
+            "description": self._description_plain_text(description_html) or "",
+            "descriptionHtml": description_html,
             "tone": tone or "profesional",
             "audience": audience or "clinicas",
         }
@@ -960,8 +1398,9 @@ Generar descripción en HTML válido. Extensión: 180-280 palabras. Estructura o
         if "name" in values:
             write_values["name"] = (values.get("name") or "").strip() or product.name
         if "description" in values:
-            write_values["description_sale"] = values.get("description") or False
-            write_values["bpi_ai_generated_description"] = values.get("description") or False
+            description_value = values.get("description") or False
+            write_values["description_sale"] = self._description_plain_text(description_value)
+            write_values["bpi_ai_generated_description"] = description_value
         if "audience" in values:
             write_values["bpi_ai_target_audience"] = values.get("audience") or "clinicas"
         if "tone" in values:
@@ -1014,11 +1453,11 @@ Generar entre 5 y 7 FAQs. Cada FAQ debe cubrir una etapa diferente del buyer jou
 """ % {
             "name": product.name,
             "sku": product.default_code or "N/A",
-            "category": product.public_categ_ids[:1].complete_name if product.public_categ_ids else "Sin categoría",
+            "category": self._public_category_label(product),
             "description": product.description_sale or product.description or "Sin descripción",
             "audience": audience or "clinicas",
         }
-        response = self._gemini_json(prompt)
+        response = self._openai_json(prompt)
         return {"faqs": response.get("faqs") or []}
 
     @api.model
@@ -1027,9 +1466,19 @@ Generar entre 5 y 7 FAQs. Cada FAQ debe cubrir una etapa diferente del buyer jou
         values = values or {}
         product.write(
             {
-                "bpi_intelligent_niches": values.get("niches") or [],
-                "bpi_intelligent_type": values.get("type") or False,
-                "bpi_intelligent_subcategory": values.get("subcategory") or False,
+                "bpi_intelligent_niches": self._normalize_category_niches(values.get("niches") or []),
+                "bpi_intelligent_type": self._normalize_taxonomy_choice(
+                    values.get("type"),
+                    self._CATEGORY_TYPE_ALLOWED,
+                    self._CATEGORY_TYPE_ALIASES,
+                    default=False,
+                ),
+                "bpi_intelligent_subcategory": self._normalize_taxonomy_choice(
+                    values.get("subcategory"),
+                    self._CATEGORY_SUBCATEGORY_ALLOWED,
+                    self._CATEGORY_SUBCATEGORY_ALIASES,
+                    default=False,
+                ),
                 "bpi_intelligent_category_manual": bool(values.get("manualMode")),
             }
         )
@@ -1056,19 +1505,31 @@ Producto:
 - Descripcion: %(description)s
 
 Reglas:
-- Niches permitidos: clinica, laboratorio, estudiantes.
-- Type debe ser una familia comercial corta.
-- Subcategory debe ser concreta y entendible para catalogo.
+- niches debe contener solo estos valores exactos: clinica, laboratorio, estudiantes.
+- type debe ser EXACTAMENTE uno de estos valores: consumible, equipo, instrumental, mobiliario, protesis, ortodoncia, endodoncia, cirugia, higiene, radiologia, otro.
+- subcategory debe ser EXACTAMENTE uno de estos valores: aislamiento, adhesivos, anestesia, blanqueamiento, cementos, composites, desechables, endodoncia, esterilizacion, fresas, higiene, implantes, impresion, instrumental_clinico, laboratorio, matrices_bandas, ortodoncia, profilaxis, protesis, radiologia, restauracion, otro.
+- Para clamps, grapas, dique de goma o aislamiento absoluto usa type "instrumental" y subcategory "aislamiento".
+- No devuelvas textos libres como "Clamps" o "Clamp para dique de goma"; usa siempre los codigos exactos anteriores.
 """ % {
             "name": product.name,
-            "category": product.public_categ_ids[:1].complete_name if product.public_categ_ids else "Sin categoria",
+            "category": self._public_category_label(product, "Sin categoria"),
             "description": product.description_sale or product.description or "Sin descripcion",
         }
-        response = self._gemini_json(prompt)
+        response = self._openai_json(prompt)
         values = {
-            "niches": [value for value in (response.get("niches") or []) if value],
-            "type": response.get("type") or False,
-            "subcategory": response.get("subcategory") or False,
+            "niches": self._normalize_category_niches(response.get("niches") or []),
+            "type": self._normalize_taxonomy_choice(
+                response.get("type"),
+                self._CATEGORY_TYPE_ALLOWED,
+                self._CATEGORY_TYPE_ALIASES,
+                default="otro",
+            ),
+            "subcategory": self._normalize_taxonomy_choice(
+                response.get("subcategory"),
+                self._CATEGORY_SUBCATEGORY_ALLOWED,
+                self._CATEGORY_SUBCATEGORY_ALIASES,
+                default="otro",
+            ),
             "manualMode": False,
         }
         return self.save_category(product, values)
@@ -1076,48 +1537,65 @@ Reglas:
     @api.model
     def generate_image(self, product, prompt, reference_tokens=None, style="professional", use_pro=False, uploaded_ref=""):
         product.ensure_one()
-        image_model = self._get_config(
-            "bader_product_intelligence.gemini_image_pro_model" if use_pro else "bader_product_intelligence.gemini_image_model",
-            "gemini-3.1-flash-image-preview",
-        )
+        image_model = self._get_config("bader_product_intelligence.openai_image_model", "gpt-image-2")
+        image_edit_model = self._get_config("bader_product_intelligence.openai_image_edit_model", "gpt-image-1.5")
         style_map = {
             "professional": "fotografía de producto profesional, fondo blanco limpio, iluminación de estudio",
             "lifestyle": "escena lifestyle en consultorio dental moderno",
             "artistic": "composición artística premium y llamativa",
             "minimalist": "composición minimalista blanca y elegante",
         }
-        parts = self._reference_parts(product, reference_tokens)
-        # Include user-uploaded reference image (e.g. logo)
-        if uploaded_ref and "," in uploaded_ref:
-            meta, b64data = uploaded_ref.split(",", 1)
-            mime = "image/png"
-            if ":" in meta and ";" in meta:
-                mime = meta.split(":", 1)[1].split(";", 1)[0]
-            parts.append({"inlineData": {"mimeType": mime, "data": b64data}})
-        parts.append(
-            {
-                "text": """Generá una imagen publicitaria para Bader Argentina.
+        references = self._reference_images(product, reference_tokens)
+        uploaded_image = self._data_url_to_openai_image(uploaded_ref, "uploaded-reference.png")
+        if uploaded_image:
+            references.append(uploaded_image)
+
+        full_prompt = """Generá una imagen publicitaria para Bader Argentina.
 Producto: %(name)s
 Pedido: %(prompt)s
 Estilo: %(style)s
 Reglas:
 - Mantener identidad del producto.
+- Si hay imágenes de referencia, usarlas para preservar forma, marca, color y proporciones.
 - Aspecto premium para e-commerce.
 - Solo una imagen final.
 - Fondo limpio y look comercial.
 """ % {
-                    "name": product.name,
-                    "prompt": prompt,
-                    "style": style_map.get(style, style_map["professional"]),
-                }
-            }
-        )
-        payload = self._gemini_request(
-            image_model,
-            [{"role": "user", "parts": parts}],
-            {"responseModalities": ["TEXT", "IMAGE"]},
-        )
-        inline = self._extract_inline_image(payload)
+            "name": product.name,
+            "prompt": prompt,
+            "style": style_map.get(style, style_map["professional"]),
+        }
+        quality = "high" if use_pro else "medium"
+        if references:
+            files = [
+                ("image[]", (image["filename"], image["raw"], image["mime_type"]))
+                for image in references[:8]
+            ]
+            payload = self._openai_request(
+                "images/edits",
+                files=files,
+                data={
+                    "model": image_edit_model,
+                    "prompt": full_prompt,
+                    "size": "1024x1024",
+                    "quality": quality,
+                    "output_format": "png",
+                },
+                timeout=180,
+            )
+        else:
+            payload = self._openai_request(
+                "images/generations",
+                json_payload={
+                    "model": image_model,
+                    "prompt": full_prompt,
+                    "size": "1024x1024",
+                    "quality": quality,
+                    "output_format": "png",
+                },
+                timeout=180,
+            )
+        inline = self._extract_openai_image(payload)
         return {
             "previewUrl": "data:%s;base64,%s" % (inline.get("mimeType") or "image/png", inline["data"]),
             "mimeType": inline.get("mimeType") or "image/png",
@@ -1194,122 +1672,579 @@ Reglas:
         return True
 
     @api.model
-    def discover_competitors(self, product, limit=10):
-        product.ensure_one()
-        prompt = """Sos Nancy AI y tenés que listar competidores probables para un producto dental vendido en Argentina.
+    def _strip_search_html(self, raw_value):
+        text = re.sub(r"<[^>]+>", " ", raw_value or "")
+        text = unescape(text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
 
-Devolvé solamente JSON válido:
+    @api.model
+    def _competitor_domain(self, raw_url):
+        parsed = urlparse(raw_url or "")
+        return (parsed.netloc or "").lower().replace("www.", "")
+
+    @api.model
+    def _decode_duckduckgo_url(self, raw_href):
+        href = unescape(raw_href or "").strip()
+        if href.startswith("//"):
+            href = "https:" + href
+        parsed = urlparse(href)
+        if parsed.netloc.endswith("duckduckgo.com") or parsed.path.startswith("/l/"):
+            uddg = parse_qs(parsed.query).get("uddg") or []
+            if uddg:
+                return unescape(uddg[0])
+        return href
+
+    @api.model
+    def _normalize_search_url(self, raw_url):
+        parsed = urlparse(raw_url or "")
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return ""
+        fragmentless = parsed._replace(fragment="")
+        return fragmentless.geturl().strip()
+
+    @api.model
+    def _search_candidate_allowed(self, raw_url):
+        clean_url = self._normalize_search_url(raw_url)
+        if not clean_url:
+            return False
+        parsed = urlparse(clean_url)
+        domain = self._competitor_domain(clean_url)
+        if not domain:
+            return False
+        blocked_domains = (
+            "bader.com.ar",
+            "qas.bader.com.ar",
+            "google.",
+            "bing.",
+            "duckduckgo.",
+            "facebook.com",
+            "instagram.com",
+            "youtube.com",
+            "youtu.be",
+            "tiktok.com",
+            "pinterest.",
+            "linkedin.com",
+            "scribd.com",
+        )
+        if any(blocked in domain for blocked in blocked_domains):
+            return False
+        blocked_ext = (".pdf", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".zip", ".doc", ".docx", ".xls", ".xlsx")
+        return not parsed.path.lower().endswith(blocked_ext)
+
+    @api.model
+    def _discovery_tokens(self, *values):
+        stopwords = {
+            "para", "con", "sin", "por", "las", "los", "del", "una", "uno", "the", "and",
+            "bader", "argentina", "odontologia", "odontologico", "odontologica", "dental",
+            "producto", "comprar", "precio", "envio", "acero", "inoxidable",
+        }
+        tokens = []
+        for value in values:
+            text = self._taxonomy_key(value)
+            for token in text.split("_"):
+                if len(token) >= 3 and token not in stopwords and token not in tokens:
+                    tokens.append(token)
+        return tokens
+
+    @api.model
+    def _build_competitor_queries(self, product):
+        name = re.sub(r"\bBader\b", "", product.name or "", flags=re.I).strip() or (product.name or "")
+        category = self._public_category_label(product, "")
+        description = self._description_plain_text(product.description_sale or product.description or "") or ""
+        numbers = []
+        for raw_number in re.findall(r"\b\d+[A-Za-z]?\b", name):
+            if raw_number not in numbers:
+                numbers.append(raw_number)
+
+        text_key = self._taxonomy_key("%s %s %s %s" % (name, category, product.bpi_intelligent_subcategory or "", description[:300]))
+        category_terms = []
+        if any(term in text_key for term in ("clamp", "grapa", "dique", "aislamiento")):
+            category_terms = ["clamp", "dique de goma", "aislamiento absoluto"]
+        elif any(term in text_key for term in ("fresa", "fresas")):
+            category_terms = ["fresa dental"]
+        elif "adhesivo" in text_key:
+            category_terms = ["adhesivo dental"]
+        elif "composite" in text_key:
+            category_terms = ["composite dental"]
+        elif "cemento" in text_key:
+            category_terms = ["cemento dental"]
+        elif "anestesia" in text_key or "anestesico" in text_key:
+            category_terms = ["anestesia dental"]
+        else:
+            category_terms = [category or "insumo odontologico"]
+
+        queries = [
+            '"%s" odontologia Argentina' % name,
+            '"%s" dental comprar Argentina' % name,
+            "%s %s Argentina odontologia" % (name, " ".join(category_terms[:2])),
+        ]
+        for number in numbers[:2]:
+            if any(term in text_key for term in ("clamp", "grapa", "dique", "aislamiento")):
+                queries.append('"clamp %s" "dique de goma" Argentina' % number)
+                queries.append('"grapa %s" odontologia Argentina' % number)
+            else:
+                queries.append('"%s" "%s" Argentina' % (number, category_terms[0]))
+
+        seen = set()
+        normalized = []
+        for query in queries:
+            query = re.sub(r"\s+", " ", query).strip()
+            key = query.lower()
+            if query and key not in seen:
+                normalized.append(query)
+                seen.add(key)
+        return normalized[:5]
+
+    @api.model
+    def _duckduckgo_search(self, query, limit=8):
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; BaderProductIntelligence/1.0; +https://bader.com.ar)",
+            "Accept-Language": "es-AR,es;q=0.9,en;q=0.5",
+        }
+        try:
+            response = requests.post(
+                "https://html.duckduckgo.com/html/",
+                data={"q": query},
+                headers=headers,
+                timeout=15,
+            )
+            if response.status_code >= 400 or "result__a" not in response.text:
+                response = requests.post(
+                    "https://lite.duckduckgo.com/lite/",
+                    data={"q": query},
+                    headers=headers,
+                    timeout=15,
+                )
+            response.raise_for_status()
+        except requests.RequestException as error:
+            _logger.warning("Competitor search failed for query %s: %s", query, error)
+            return []
+
+        html_text = response.text or ""
+        results = []
+        result_matches = list(re.finditer(r'<a[^>]+class=["\'][^"\']*(?:result__a|result-link)[^"\']*["\'][^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html_text, re.I | re.S))
+        for index, match in enumerate(result_matches):
+            raw_url = self._decode_duckduckgo_url(match.group(1))
+            clean_url = self._normalize_search_url(raw_url)
+            if not self._search_candidate_allowed(clean_url):
+                continue
+            title = self._strip_search_html(match.group(2))
+            next_start = result_matches[index + 1].start() if index + 1 < len(result_matches) else match.end() + 2200
+            block = html_text[match.end():next_start]
+            snippet_match = re.search(
+                r'<(?:a|div|td)[^>]+class=["\'][^"\']*(?:result__snippet|result-snippet)[^"\']*["\'][^>]*>(.*?)</(?:a|div|td)>',
+                block,
+                re.I | re.S,
+            )
+            snippet = self._strip_search_html(snippet_match.group(1)) if snippet_match else ""
+            domain = self._competitor_domain(clean_url)
+            if title or snippet:
+                results.append({
+                    "name": title[:160] or domain,
+                    "url": clean_url,
+                    "domain": domain,
+                    "description": snippet[:360],
+                    "sourceQuery": query,
+                    "source": "duckduckgo",
+                })
+            if len(results) >= limit:
+                break
+        return results
+
+    @api.model
+    def _extract_estimated_price(self, text):
+        match = re.search(r"(?:\$|ARS\s*)\s?([\d\.]{2,}(?:,\d{1,2})?)", text or "", re.I)
+        return match.group(0).strip() if match else ""
+
+    @api.model
+    def _candidate_compatibility_score(self, product, candidate):
+        product_text = "%s %s %s %s" % (
+            product.name or "",
+            self._public_category_label(product, ""),
+            product.bpi_intelligent_type or "",
+            product.bpi_intelligent_subcategory or "",
+        )
+        candidate_text = "%s %s %s %s" % (
+            candidate.get("name") or "",
+            candidate.get("description") or "",
+            candidate.get("domain") or "",
+            candidate.get("url") or "",
+        )
+        product_tokens = self._discovery_tokens(product_text)
+        candidate_tokens = set(self._discovery_tokens(candidate_text))
+        score = 0
+        score += min(25, len([token for token in product_tokens if token in candidate_tokens]) * 7)
+
+        product_key = self._taxonomy_key(product_text)
+        candidate_key = self._taxonomy_key(candidate_text)
+        for number in re.findall(r"\b\d+[A-Za-z]?\b", product.name or ""):
+            number_key = self._taxonomy_key(number)
+            if re.search(r"(?:^|_)n?%s(?:_|$)" % re.escape(number_key), candidate_key) or number_key in candidate_key.split("_"):
+                score += 28
+                break
+
+        if any(term in product_key for term in ("clamp", "grapa", "dique", "aislamiento")):
+            if any(term in candidate_key for term in ("clamp", "clamps", "grapa", "dique", "aislamiento")):
+                score += 25
+            if "molar" in candidate_key or "molares" in candidate_key:
+                score += 5
+        if "odont" in candidate_key or "dental" in candidate_key:
+            score += 8
+        domain = candidate.get("domain") or ""
+        if domain.endswith(".com.ar") or "argentina" in candidate_key:
+            score += 8
+        if any(hint in (candidate.get("url") or "").lower() for hint in ("producto", "productos", "product", "articulo", "prod", "item")):
+            score += 8
+        if any(term in domain for term in ("dental", "odont", "insumos", "dentista")):
+            score += 8
+        if any(term in candidate_key for term in ("catalogo", "categoria", "blog", "nomenclatura", "pdf", "documento")):
+            score -= 18
+        if "bader" in domain or "bader" in candidate_key:
+            score -= 100
+        return max(0, min(100, int(score)))
+
+    @api.model
+    def _fallback_rank_competitors(self, candidates, limit):
+        ranked = []
+        per_domain = {}
+        for candidate in sorted(candidates, key=lambda item: item.get("deterministicScore", 0), reverse=True):
+            domain = candidate.get("domain") or ""
+            if per_domain.get(domain, 0) >= 2:
+                continue
+            per_domain[domain] = per_domain.get(domain, 0) + 1
+            score = int(candidate.get("deterministicScore") or 0)
+            ranked.append({
+                "name": candidate.get("name") or domain or "Competidor",
+                "url": candidate.get("url"),
+                "domain": domain,
+                "description": candidate.get("description") or domain,
+                "estimatedPrice": candidate.get("estimatedPrice") or "",
+                "relevanceScore": score,
+                "compatibilityLevel": "direct" if score >= 75 else ("compatible" if score >= 55 else "generic"),
+                "matchReason": candidate.get("matchReason") or _("Resultado real encontrado en buscador y filtrado por similitud de nombre/categoría."),
+                "sourceQuery": candidate.get("sourceQuery") or "",
+                "source": candidate.get("source") or "duckduckgo",
+            })
+            if len(ranked) >= limit:
+                break
+        return ranked
+
+    @api.model
+    def _ai_rank_real_competitor_candidates(self, product, candidates, limit):
+        if not candidates:
+            return []
+        candidate_payload = []
+        by_url = {}
+        for index, candidate in enumerate(candidates, start=1):
+            url = candidate.get("url")
+            if not url:
+                continue
+            by_url[url] = candidate
+            candidate_payload.append({
+                "id": index,
+                "url": url,
+                "domain": candidate.get("domain"),
+                "title": candidate.get("name"),
+                "snippet": candidate.get("description"),
+                "deterministicScore": candidate.get("deterministicScore"),
+                "sourceQuery": candidate.get("sourceQuery"),
+            })
+        prompt = """Sos Nancy AI, analista competitivo dental para Bader Argentina.
+
+Tenés candidatos REALES obtenidos de un buscador. Tu tarea es seleccionar solo productos o páginas de producto que sean competidores directos o compatibles del producto Bader. NO inventes URLs: solo podés devolver URLs que estén exactamente en CANDIDATOS.
+
+Devolvé JSON válido:
 {
-  "query": "",
   "competitors": [
     {
-      "name": "",
       "url": "",
-      "domain": "",
+      "name": "",
       "description": "",
       "estimatedPrice": "",
-      "relevanceScore": 0
+      "relevanceScore": 0,
+      "compatibilityLevel": "direct|compatible|generic",
+      "matchReason": ""
     }
   ]
 }
 
-Producto:
+Criterios:
+- Directo: mismo tipo de producto, mismo uso clínico y, si aplica, mismo número/modelo/medida.
+- Compatible: producto equivalente para el mismo procedimiento aunque cambie marca/modelo.
+- Generic: categoría o listado amplio; usar solo si no hay suficientes directos.
+- Priorizá tiendas odontológicas y marketplaces argentinos con páginas de producto reales.
+- Penalizá documentos, blogs, PDFs, páginas institucionales o categorías demasiado amplias.
+- relevanceScore de 0 a 100.
+- Máximo %(limit)s resultados.
+
+Producto Bader:
 - Nombre: %(name)s
+- SKU: %(sku)s
 - Categoría: %(category)s
-- Marca: Bader
+- Tipo: %(type)s
+- Subcategoría: %(subcategory)s
 - Descripción: %(description)s
 
-Reglas:
-- Sitios reales o muy probables del rubro odontológico en Argentina.
-- URLs en formato https://...
-- relevanceScore entre 1 y 10.
-- máximo %(limit)s resultados.
+CANDIDATOS:
+%(candidates)s
 """ % {
-            "name": product.name,
-            "category": product.public_categ_ids[:1].name if product.public_categ_ids else "Sin categoría",
-            "description": product.description_sale or product.description or "Sin descripción",
             "limit": limit,
+            "name": product.name or "",
+            "sku": product.default_code or "",
+            "category": self._public_category_label(product, "Sin categoría"),
+            "type": product.bpi_intelligent_type or "",
+            "subcategory": product.bpi_intelligent_subcategory or "",
+            "description": (self._description_plain_text(product.description_sale or product.description or "") or "")[:1200],
+            "candidates": json.dumps(candidate_payload[:30], ensure_ascii=False),
         }
-        response = self._gemini_json(prompt)
-        competitors = (response.get("competitors") or [])[:limit]
+        try:
+            response = self._openai_json(prompt)
+        except UserError:
+            _logger.info("OpenAI competitor rerank unavailable; using deterministic ranking")
+            return self._fallback_rank_competitors(candidates, limit)
+
+        ranked = []
+        used = set()
+        for item in response.get("competitors") or []:
+            url = item.get("url")
+            candidate = by_url.get(url)
+            if not candidate or url in used:
+                continue
+            used.add(url)
+            score = item.get("relevanceScore") or candidate.get("deterministicScore") or 0
+            try:
+                score = int(float(score))
+            except Exception:
+                score = int(candidate.get("deterministicScore") or 0)
+            ranked.append({
+                "name": item.get("name") or candidate.get("name") or candidate.get("domain"),
+                "url": url,
+                "domain": candidate.get("domain") or self._competitor_domain(url),
+                "description": item.get("description") or candidate.get("description") or "",
+                "estimatedPrice": item.get("estimatedPrice") or candidate.get("estimatedPrice") or "",
+                "relevanceScore": max(0, min(100, score)),
+                "compatibilityLevel": item.get("compatibilityLevel") or ("direct" if score >= 75 else "compatible"),
+                "matchReason": item.get("matchReason") or "Coincidencia validada sobre resultados reales de búsqueda.",
+                "sourceQuery": candidate.get("sourceQuery") or "",
+                "source": candidate.get("source") or "duckduckgo",
+            })
+            if len(ranked) >= limit:
+                break
+        if len(ranked) < min(limit, 3):
+            seen_urls = {item["url"] for item in ranked}
+            for item in self._fallback_rank_competitors(candidates, limit):
+                if item["url"] not in seen_urls:
+                    ranked.append(item)
+                if len(ranked) >= limit:
+                    break
+        return ranked[:limit]
+
+    @api.model
+    def discover_competitors(self, product, limit=10):
+        product.ensure_one()
+        limit = max(1, min(int(limit or 10), 12))
+        queries = self._build_competitor_queries(product)
+        candidates_by_url = {}
+        for query in queries:
+            for candidate in self._duckduckgo_search(query, limit=8):
+                url = candidate.get("url")
+                if not url:
+                    continue
+                score = self._candidate_compatibility_score(product, candidate)
+                if score < 28:
+                    continue
+                candidate["deterministicScore"] = score
+                candidate["estimatedPrice"] = self._extract_estimated_price("%s %s" % (candidate.get("name") or "", candidate.get("description") or ""))
+                existing = candidates_by_url.get(url)
+                if not existing or score > existing.get("deterministicScore", 0):
+                    candidates_by_url[url] = candidate
+
+        candidates = list(candidates_by_url.values())
+        competitors = self._ai_rank_real_competitor_candidates(product, candidates, limit)
         return {
             "success": True,
-            "query": response.get("query") or product.name,
+            "query": " | ".join(queries),
+            "searchQueries": queries,
+            "candidateCount": len(candidates),
             "totalFound": len(competitors),
             "competitors": competitors,
         }
 
     @api.model
-    def scrape_competitor(self, competitor):
-        competitor.ensure_one()
-        api_key = self._require_config("bader_product_intelligence.firecrawl_api_key", "Firecrawl API Key")
-        base_url = self._get_config("bader_product_intelligence.firecrawl_base_url", "https://api.firecrawl.dev").rstrip("/")
-        competitor.write({"scrape_status": "pending", "scrape_error": False})
-        safe_url = self._validate_external_url(competitor.competitor_url)
-        try:
-            response = requests.post(
-                "%s/v1/scrape" % base_url,
-                json={
-                    "url": safe_url,
-                    "formats": ["markdown", "html"],
-                    "includeTags": ["meta", "title", "h1", "h2", "script", "img", "a"],
-                    "onlyMainContent": False,
-                },
-                headers={"Authorization": "Bearer %s" % api_key, "Content-Type": "application/json"},
-                timeout=120,
+    def _normalize_keyword_list(self, raw_value):
+        if not raw_value:
+            return []
+        if isinstance(raw_value, str):
+            values = re.split(r"[,;\n|]+", raw_value)
+        elif isinstance(raw_value, list):
+            values = raw_value
+        else:
+            values = [raw_value]
+
+        keywords = []
+        seen = set()
+        for value in values:
+            keyword = unescape(str(value or "")).strip()
+            keyword = re.sub(r"\s+", " ", keyword)
+            if not keyword:
+                continue
+            key = self._taxonomy_key(keyword)
+            if key and key not in seen:
+                seen.add(key)
+                keywords.append(keyword[:60])
+            if len(keywords) >= 14:
+                break
+        return keywords
+
+    @api.model
+    def _fetch_competitor_direct(self, safe_url):
+        current_url = self._validate_external_url(safe_url)
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "es-AR,es;q=0.9,pt;q=0.8,en;q=0.6",
+            "Cache-Control": "no-cache",
+        }
+        response = None
+        for _index in range(6):
+            current_url = self._validate_external_url(current_url)
+            try:
+                response = requests.get(current_url, headers=headers, timeout=35, allow_redirects=False)
+            except requests.RequestException as error:
+                raise UserError(_("No se pudo conectar con el sitio del competidor.")) from error
+
+            if response.status_code in (301, 302, 303, 307, 308) and response.headers.get("Location"):
+                current_url = urljoin(current_url, response.headers["Location"])
+                continue
+            break
+
+        if response is None:
+            raise UserError(_("No se pudo obtener el sitio del competidor."))
+
+        if response.status_code in (401, 403, 429):
+            raise UserError(
+                _("El sitio bloqueó el scraper directo (HTTP %s). Configura Firecrawl o probá con una URL pública del producto.")
+                % response.status_code
             )
-            response.raise_for_status()
-            payload = response.json()
-        except (requests.RequestException, ValueError) as error:
-            competitor.write(
-                {
-                    "scrape_status": "failed",
-                    "scrape_error": str(error),
-                    "last_scraped_at": fields.Datetime.now(),
-                }
-            )
-            _logger.exception("Firecrawl scrape failed for competitor %s", competitor.id)
-            raise UserError(_("No se pudo obtener el sitio del competidor desde Firecrawl.")) from error
-        data = payload.get("data") or payload
-        html = data.get("html") or ""
-        markdown = data.get("markdown") or ""
+        if response.status_code >= 400:
+            raise UserError(_("El sitio del competidor respondió HTTP %s.") % response.status_code)
+
+        content_type = (response.headers.get("Content-Type") or "").lower()
+        if content_type and all(allowed not in content_type for allowed in ("text/html", "application/xhtml", "text/plain")):
+            raise UserError(_("La URL no devolvió una página HTML válida para scrapear."))
+
+        html = (response.text or "")[:2500000]
+        if not html.strip():
+            raise UserError(_("La página del competidor está vacía o no pudo leerse."))
+
+        final_url = response.url or current_url
+        metadata = {
+            "title": self._extract_title_tag(html),
+            "description": self._extract_meta_tag(html, "description"),
+            "keywords": self._extract_meta_tag(html, "keywords"),
+            "ogTitle": self._extract_meta_property(html, "og:title"),
+            "ogDescription": self._extract_meta_property(html, "og:description"),
+            "ogImage": urljoin(final_url, self._extract_meta_property(html, "og:image") or ""),
+            "canonicalUrl": self._extract_canonical_url(html, final_url),
+            "sourceURL": final_url,
+            "statusCode": response.status_code,
+        }
+        return {
+            "html": html,
+            "markdown": self._html_to_markdown_text(html),
+            "metadata": metadata,
+            "source": "direct_http",
+            "statusCode": response.status_code,
+            "sourceURL": final_url,
+        }
+
+    @api.model
+    def _apply_competitor_scrape_data(self, competitor, data, source="firecrawl"):
+        html = data.get("html") or data.get("rawHtml") or ""
+        markdown = data.get("markdown") or data.get("content") or data.get("text") or ""
+        if not markdown and html:
+            markdown = self._html_to_markdown_text(html)
         metadata = data.get("metadata") or {}
-        meta_title = metadata.get("title") or self._extract_meta_tag(html, "title")
-        meta_description = metadata.get("description") or self._extract_meta_tag(html, "description")
-        meta_keywords = [kw.strip() for kw in self._extract_meta_tag(html, "keywords").split(",") if kw.strip()]
-        canonical_url = ""
-        canonical_match = re.search(r'<link\s+rel=["\']canonical["\']\s+href=["\']([^"\']+)["\']', html, re.I)
-        if canonical_match:
-            canonical_url = canonical_match.group(1).strip()
+        source_url = (
+            metadata.get("sourceURL")
+            or metadata.get("url")
+            or data.get("sourceURL")
+            or data.get("url")
+            or competitor.competitor_url
+        )
+
+        title_tag = self._extract_title_tag(html)
+        meta_title = metadata.get("title") or metadata.get("ogTitle") or title_tag or self._extract_meta_property(html, "og:title")
+        meta_description = (
+            metadata.get("description")
+            or metadata.get("ogDescription")
+            or self._extract_meta_tag(html, "description")
+            or self._extract_meta_property(html, "og:description")
+        )
+        raw_keywords = metadata.get("keywords") or metadata.get("metaKeywords") or self._extract_meta_tag(html, "keywords")
+        h1_tags = self._extract_headings(html, "h1")
+        h2_tags = self._extract_headings(html, "h2")
+        meta_keywords = self._normalize_keyword_list(raw_keywords)
+        if not meta_keywords:
+            meta_keywords = self._derive_keywords(
+                competitor.competitor_name,
+                competitor.competitor_description,
+                meta_title,
+                meta_description,
+                " ".join(h1_tags),
+                " ".join(h2_tags),
+                markdown[:8000],
+            )
+
+        canonical_url = metadata.get("canonicalUrl") or metadata.get("canonical") or self._extract_canonical_url(html, source_url)
         og_title = metadata.get("ogTitle") or self._extract_meta_property(html, "og:title")
         og_description = metadata.get("ogDescription") or self._extract_meta_property(html, "og:description")
         og_image = metadata.get("ogImage") or self._extract_meta_property(html, "og:image")
-        h1_tags = self._extract_headings(html, "h1")
-        h2_tags = self._extract_headings(html, "h2")
+        if og_image:
+            og_image = urljoin(source_url or competitor.competitor_url, og_image)
         structured_data = self._extract_structured_data(html)
         price, offer_price, currency = self._extract_prices(html, markdown, structured_data)
         features = self._extract_features(markdown)
-        word_count = len(re.findall(r"\w+", markdown or ""))
+        word_count = len(re.findall(r"\w+", markdown or "", re.U))
         image_count = len(re.findall(r"<img\b", html or "", re.I))
-        internal_links, external_links = self._count_links(html, competitor.competitor_url)
-        seo_score = self._calculate_seo_score(meta_title, meta_description, h1_tags, structured_data, og_title, og_description, canonical_url, word_count, image_count, h2_tags)
+        if not image_count and data.get("images"):
+            image_count = len(data.get("images") or [])
+        internal_links, external_links = self._count_links(html, source_url or competitor.competitor_url)
+        seo_score = self._calculate_seo_score(
+            meta_title,
+            meta_description,
+            h1_tags,
+            structured_data,
+            og_title,
+            og_description,
+            canonical_url,
+            word_count,
+            image_count,
+            h2_tags,
+        )
+        compared_price = offer_price or price
         competitor.write(
             {
-                "competitor_title": meta_title or competitor.competitor_title,
+                "competitor_title": meta_title or competitor.competitor_title or competitor.competitor_name,
                 "competitor_description": meta_description or competitor.competitor_description,
                 "competitor_price": price or False,
                 "competitor_offer_price": offer_price or False,
                 "competitor_currency": currency or "ARS",
                 "competitor_features": features,
-                "meta_title": meta_title,
-                "meta_description": meta_description,
+                "price_comparison": self._detect_price_comparison(competitor.product_tmpl_id.list_price, compared_price),
+                "meta_title": meta_title or "",
+                "meta_description": meta_description or "",
                 "meta_keywords": meta_keywords,
                 "h1_tags": h1_tags,
                 "h2_tags": h2_tags,
-                "og_title": og_title,
-                "og_description": og_description,
-                "og_image": og_image,
-                "canonical_url": canonical_url,
+                "og_title": og_title or "",
+                "og_description": og_description or "",
+                "og_image": og_image or "",
+                "canonical_url": canonical_url or "",
                 "structured_data": structured_data,
                 "page_content": (markdown or "")[:5000],
                 "word_count": word_count,
@@ -1317,7 +2252,13 @@ Reglas:
                 "internal_links": internal_links,
                 "external_links": external_links,
                 "seo_score": seo_score,
-                "firecrawl_data": {"metadata": metadata, "success": True},
+                "firecrawl_data": {
+                    "metadata": metadata,
+                    "success": True,
+                    "source": source,
+                    "sourceURL": source_url,
+                    "statusCode": data.get("statusCode") or metadata.get("statusCode"),
+                },
                 "scrape_status": "success",
                 "scrape_error": False,
                 "last_scraped_at": fields.Datetime.now(),
@@ -1326,7 +2267,57 @@ Reglas:
         return competitor.bpi_to_payload()
 
     @api.model
-    def add_competitor(self, product, competitor_name, competitor_url):
+    def scrape_competitor(self, competitor):
+        competitor.ensure_one()
+        competitor.write({"scrape_status": "pending", "scrape_error": False})
+        safe_url = self._validate_external_url(competitor.competitor_url)
+
+        firecrawl_error = ""
+        api_key = self._get_config("bader_product_intelligence.firecrawl_api_key")
+        if api_key:
+            base_url = self._get_config("bader_product_intelligence.firecrawl_base_url", "https://api.firecrawl.dev").rstrip("/")
+            try:
+                response = requests.post(
+                    "%s/v1/scrape" % base_url,
+                    json={
+                        "url": safe_url,
+                        "formats": ["markdown", "html"],
+                        "includeTags": ["meta", "title", "h1", "h2", "script", "img", "a"],
+                        "onlyMainContent": False,
+                    },
+                    headers={"Authorization": "Bearer %s" % api_key, "Content-Type": "application/json"},
+                    timeout=120,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                return self._apply_competitor_scrape_data(competitor, payload.get("data") or payload, source="firecrawl")
+            except (requests.RequestException, ValueError, UserError) as error:
+                firecrawl_error = str(error)
+                _logger.warning("Firecrawl scrape failed for competitor %s; falling back to direct HTTP.", competitor.id, exc_info=True)
+
+        try:
+            direct_data = self._fetch_competitor_direct(safe_url)
+            return self._apply_competitor_scrape_data(competitor, direct_data, source="direct_http")
+        except UserError as error:
+            message = str(error)
+            if firecrawl_error:
+                message = _("Firecrawl falló y el scraper directo tampoco pudo leer la página. Directo: %s") % message
+            competitor.write(
+                {
+                    "scrape_status": "failed",
+                    "scrape_error": message,
+                    "last_scraped_at": fields.Datetime.now(),
+                    "firecrawl_data": {
+                        "success": False,
+                        "source": "direct_http",
+                        "firecrawlError": bool(firecrawl_error),
+                    },
+                }
+            )
+            raise UserError(message) from error
+
+    @api.model
+    def add_competitor(self, product, competitor_name, competitor_url, competitor_description=""):
         product.ensure_one()
         competitor_url = self._validate_external_url(competitor_url)
         name = competitor_name or ""
@@ -1338,11 +2329,23 @@ Reglas:
                 "product_tmpl_id": product.id,
                 "competitor_name": name or _("Competidor"),
                 "competitor_url": competitor_url,
+                "competitor_title": name or _("Competidor"),
+                "competitor_description": competitor_description or False,
                 "scrape_status": "pending",
             }
         )
-        self.scrape_competitor(competitor)
-        return competitor.bpi_to_payload()
+
+        try:
+            return self.scrape_competitor(competitor)
+        except UserError as error:
+            competitor.write(
+                {
+                    "scrape_status": "failed",
+                    "scrape_error": str(error),
+                    "last_scraped_at": fields.Datetime.now(),
+                }
+            )
+            return competitor.bpi_to_payload()
 
     @api.model
     def analyze_competitor(self, competitor):
@@ -1393,7 +2396,7 @@ Competidor:
             "features": ", ".join(competitor.competitor_features or []),
             "content": (competitor.page_content or "")[:1500],
         }
-        analysis = self._gemini_json(prompt)
+        analysis = self._openai_json(prompt)
         price_comparison = analysis.get("priceComparison") or self._detect_price_comparison(
             product.list_price,
             competitor.competitor_offer_price or competitor.competitor_price,
@@ -1467,7 +2470,7 @@ Competidores:
             "seo_keywords": ", ".join(product._bpi_keyword_values("seo")),
             "competitors": json.dumps([comp.bpi_to_payload() for comp in competitors], ensure_ascii=False),
         }
-        strategy = self._gemini_json(prompt)
+        strategy = self._openai_json(prompt)
         product.write(
             {
                 "bpi_competitive_strategy": strategy,
@@ -1524,8 +2527,7 @@ Respondé al último mensaje del usuario:
             "history": "\n".join(history_lines),
             "message": message,
         }
-        model_name = self._get_config("bader_product_intelligence.gemini_text_model", "gemini-2.5-flash")
-        payload = self._gemini_request(model_name, [{"role": "user", "parts": [{"text": prompt}]}], {})
-        reply = self._parse_gemini_text(payload)
+        model_name = self._get_config("bader_product_intelligence.openai_text_model", "gpt-5.5")
+        reply = self._openai_response(prompt, model_name=model_name)
         self.env["bpi.product.chat.message"].create({"session_id": session.id, "role": "assistant", "content": reply})
         return {"response": reply, "sessionId": session.session_key}

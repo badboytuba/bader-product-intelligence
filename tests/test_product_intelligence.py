@@ -92,6 +92,21 @@ class TestProductoIntelligence(TransactionCase):
         self.assertTrue(self.product_new.bpi_featured)
         self.assertEqual(payload["product"]["slug"], "producto-inteligente-premium")
 
+    def test_save_category_normalizes_free_text_ai_values(self):
+        self.service.save_category(
+            self.product_new,
+            {
+                "niches": ["Clínicas Dentales", "estudiante"],
+                "type": "Clamps",
+                "subcategory": "Clamp para dique de goma",
+                "manualMode": False,
+            },
+        )
+
+        self.assertEqual(self.product_new.bpi_intelligent_niches, ["clinica", "estudiantes"])
+        self.assertEqual(self.product_new.bpi_intelligent_type, "instrumental")
+        self.assertEqual(self.product_new.bpi_intelligent_subcategory, "aislamiento")
+
     def test_validate_external_url_blocks_private_networks(self):
         private_resolution = [
             (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("127.0.0.1", 443)),

@@ -31,6 +31,13 @@ class BaderProductIntelligenceController(http.Controller):
             raise MissingError("Imagen no encontrada.")
         return image
 
+    def _ai_job(self, job_id):
+        self._ensure_manager()
+        job = request.env["bpi.ai.job"].sudo().browse(int(job_id)).exists()
+        if not job:
+            raise MissingError("Trabajo IA no encontrado.")
+        return job
+
     @http.route("/bader_product_intelligence/dashboard", type="json", auth="user")
     def dashboard(self, tab="all", search="", page=1, limit=40, **kwargs):
         self._ensure_manager()
@@ -91,6 +98,21 @@ class BaderProductIntelligenceController(http.Controller):
         seo_data = request.env["bpi.service"].analyze_seo(product, target_audience)
         return {"success": True, "seoData": seo_data}
 
+    @http.route("/bader_product_intelligence/ai_job/start_seo", type="json", auth="user")
+    def start_seo_job(self, product_tmpl_id, target_audience="clinicas", **kwargs):
+        product = self._product(product_tmpl_id)
+        job = request.env["bpi.ai.job"].sudo().create_seo_job(
+            product.sudo(),
+            target_audience=target_audience or "clinicas",
+            user=request.env.user,
+        )
+        return {"success": True, "job": job.bpi_to_payload()}
+
+    @http.route("/bader_product_intelligence/ai_job/status", type="json", auth="user")
+    def ai_job_status(self, job_id, **kwargs):
+        job = self._ai_job(job_id)
+        return {"success": True, "job": job.bpi_to_payload()}
+
     @http.route("/bader_product_intelligence/save_seo", type="json", auth="user")
     def save_seo(self, product_tmpl_id, seo_data=None, **kwargs):
         product = self._product(product_tmpl_id)
@@ -140,9 +162,9 @@ class BaderProductIntelligenceController(http.Controller):
         return request.env["bpi.service"].discover_competitors(product, int(limit or 10))
 
     @http.route("/bader_product_intelligence/add_competitor", type="json", auth="user")
-    def add_competitor(self, product_tmpl_id, competitor_name="", competitor_url="", **kwargs):
+    def add_competitor(self, product_tmpl_id, competitor_name="", competitor_url="", competitor_description="", **kwargs):
         product = self._product(product_tmpl_id)
-        competitor = request.env["bpi.service"].add_competitor(product, competitor_name, competitor_url)
+        competitor = request.env["bpi.service"].add_competitor(product, competitor_name, competitor_url, competitor_description=competitor_description)
         return {"success": True, "competitor": competitor}
 
     @http.route("/bader_product_intelligence/scrape_competitor", type="json", auth="user")

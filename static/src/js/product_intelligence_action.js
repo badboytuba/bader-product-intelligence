@@ -2,7 +2,7 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
-import { Component, onWillStart, onWillUnmount, onMounted, useState, useRef } from "@odoo/owl";
+import { Component, onWillStart, onWillUnmount, onMounted, onPatched, useState, useRef } from "@odoo/owl";
 
 const DASHBOARD_PAGE_SIZE = 40;
 
@@ -42,22 +42,69 @@ const TYPE_OPTIONS = [
     { value: "cirugia", label: "Cirugia" },
     { value: "higiene", label: "Higiene" },
     { value: "radiologia", label: "Radiologia" },
+    { value: "otro", label: "Otro" },
 ];
 
+const TYPE_ALIASES = {
+    clamp: "instrumental",
+    clamps: "instrumental",
+    clamp_dental: "instrumental",
+    instrumental_de_mano: "instrumental",
+    instrumental_dental: "instrumental",
+    instrumento: "instrumental",
+    instrumentos: "instrumental",
+    material: "consumible",
+    materiales: "consumible",
+    insumo: "consumible",
+    insumos: "consumible",
+    equipamiento: "equipo",
+    equipos: "equipo",
+};
+
 const SUBCATEGORY_OPTIONS = [
+    { value: "aislamiento", label: "Aislamiento / Clamps" },
     { value: "adhesivos", label: "Adhesivos" },
     { value: "anestesia", label: "Anestesia" },
     { value: "blanqueamiento", label: "Blanqueamiento" },
     { value: "cementos", label: "Cementos" },
     { value: "composites", label: "Composites" },
     { value: "desechables", label: "Desechables" },
+    { value: "endodoncia", label: "Endodoncia" },
     { value: "esterilizacion", label: "Esterilizacion" },
     { value: "fresas", label: "Fresas" },
+    { value: "higiene", label: "Higiene / Profilaxis" },
+    { value: "implantes", label: "Implantes" },
     { value: "impresion", label: "Impresion" },
+    { value: "instrumental_clinico", label: "Instrumental Clinico" },
+    { value: "laboratorio", label: "Laboratorio" },
+    { value: "matrices_bandas", label: "Matrices y Bandas" },
+    { value: "ortodoncia", label: "Ortodoncia" },
     { value: "profilaxis", label: "Profilaxis" },
+    { value: "protesis", label: "Protesis" },
+    { value: "radiologia", label: "Radiologia" },
     { value: "restauracion", label: "Restauracion" },
     { value: "otro", label: "Otro" },
 ];
+
+const SUBCATEGORY_ALIASES = {
+    clamp: "aislamiento",
+    clamps: "aislamiento",
+    clamp_para_dique_de_goma: "aislamiento",
+    dique: "aislamiento",
+    dique_de_goma: "aislamiento",
+    aislamiento_absoluto: "aislamiento",
+    aislamiento_dental: "aislamiento",
+    instrumental: "instrumental_clinico",
+    instrumental_dental: "instrumental_clinico",
+    instrumental_de_mano: "instrumental_clinico",
+    higiene_dental: "higiene",
+    profilaxis_dental: "profilaxis",
+    fresas_dentales: "fresas",
+    impresion_dental: "impresion",
+    materiales_de_impresion: "impresion",
+    descartables: "desechables",
+    restauraciones: "restauracion",
+};
 
 class ProductIntelligenceAction extends Component {
     setup() {
@@ -71,6 +118,7 @@ class ProductIntelligenceAction extends Component {
         this.subcategoryOptions = SUBCATEGORY_OPTIONS;
         this.chatQuickActions = CHAT_QUICK_ACTIONS;
         this.dashboardReloadTimer = null;
+        this.seoJobPollTimer = null;
 
         this.state = useState({
             loading: true,
@@ -108,6 +156,8 @@ class ProductIntelligenceAction extends Component {
             saveBusy: false,
             exchangeRateBusy: false,
             seoBusy: false,
+            seoJobId: false,
+            seoJobMessage: "",
             contentBusy: false,
             faqBusy: false,
             imageBusy: false,
@@ -136,6 +186,8 @@ class ProductIntelligenceAction extends Component {
 
         this.fileUploadInputRef = useRef("fileUploadInput");
         this.playgroundMessagesRef = useRef("playgroundMessages");
+        this.contentDescriptionEditorRef = useRef("contentDescriptionEditor");
+        this.lastContentDescriptionEditorHtml = "";
 
         onWillStart(async () => {
             const productId = this.resolveProductId();
@@ -151,10 +203,16 @@ class ProductIntelligenceAction extends Component {
         onMounted(() => {
             this._setupScrollListener();
             this._setupKeyboardShortcuts();
+            this.syncContentDescriptionEditor(true);
+        });
+
+        onPatched(() => {
+            this.syncContentDescriptionEditor();
         });
 
         onWillUnmount(() => {
             this.clearDashboardReloadTimer();
+            this.clearSeoJobPollTimer();
             this._cleanupScrollListener();
             this._cleanupKeyboardShortcuts();
         });
@@ -315,6 +373,76 @@ class ProductIntelligenceAction extends Component {
         }, 300);
     }
 
+    clearSeoJobPollTimer() {
+        if (this.seoJobPollTimer) {
+            clearTimeout(this.seoJobPollTimer);
+            this.seoJobPollTimer = null;
+        }
+    }
+
+    scheduleSeoJobPoll(jobId, delay = 5000) {
+        this.clearSeoJobPollTimer();
+        this.seoJobPollTimer = setTimeout(() => {
+            this.pollSeoJob(jobId);
+        }, delay);
+    }
+
+    applySeoJobPayload(job) {
+        const resultPayload = (job && job.resultPayload) || {};
+        if (resultPayload.detailPayload) {
+            this.applyDetailPayload(resultPayload.detailPayload);
+        } else if (resultPayload.seoData) {
+            this.applyDetailPayload({
+                ...this.state.detail,
+                seoData: resultPayload.seoData,
+            });
+        }
+        const seoData = resultPayload.seoData || (resultPayload.detailPayload && resultPayload.detailPayload.seoData);
+        if (seoData && (seoData.aiGeneratedDescriptionHtml || seoData.aiGeneratedDescription)) {
+            this.state.contentForm.description = seoData.aiGeneratedDescriptionHtml || seoData.aiGeneratedDescription;
+            this.syncContentDescriptionEditor(true);
+        }
+    }
+
+    async pollSeoJob(jobId) {
+        if (!jobId || !this.state.productId) {
+            this.state.seoBusy = false;
+            this.state.seoJobId = false;
+            return;
+        }
+        try {
+            const result = await this.rpc("/bader_product_intelligence/ai_job/status", {
+                job_id: jobId,
+            });
+            const job = result.job || {};
+            this.state.seoJobMessage = job.message || "Nancy AI esta trabajando...";
+            if (job.state === "done") {
+                this.clearSeoJobPollTimer();
+                this.applySeoJobPayload(job);
+                this.state.seoBusy = false;
+                this.state.seoJobId = false;
+                this.state.seoJobMessage = "";
+                this.notify("SEO optimizado con Nancy AI.");
+                return;
+            }
+            if (job.state === "failed") {
+                this.clearSeoJobPollTimer();
+                this.state.seoBusy = false;
+                this.state.seoJobId = false;
+                this.state.seoJobMessage = "";
+                this.notify(job.errorMessage || "No se pudo analizar el SEO.", "danger");
+                return;
+            }
+            this.scheduleSeoJobPoll(jobId, 5000);
+        } catch (error) {
+            this.clearSeoJobPollTimer();
+            this.state.seoBusy = false;
+            this.state.seoJobId = false;
+            this.state.seoJobMessage = "";
+            this.notify(this.errorMessage(error, "No se pudo consultar el trabajo de SEO."), "danger");
+        }
+    }
+
     notify(message, type = "success") {
         this.notification.add(message, { type });
     }
@@ -423,7 +551,7 @@ class ProductIntelligenceAction extends Component {
             tone: seoData.aiTone || "profesional",
             audience: seoData.aiTargetAudience || "clinicas",
             name: product.name || "",
-            description: seoData.aiGeneratedDescription || product.description || "",
+            description: seoData.aiGeneratedDescriptionHtml || seoData.aiGeneratedDescription || product.description || "",
             faqs: (seoData.geoFaq || []).map((faq) => ({
                 question: faq.question || "",
                 answer: faq.answer || "",
@@ -441,8 +569,8 @@ class ProductIntelligenceAction extends Component {
         this.state.categoryForm = {
             manualMode: !!product.intelligentCategoryManual,
             niches: product.intelligentNiches || [],
-            type: product.intelligentType || "",
-            subcategory: product.intelligentSubcategory || "",
+            type: this.normalizeChoiceValue(product.intelligentType, TYPE_OPTIONS, TYPE_ALIASES),
+            subcategory: this.normalizeChoiceValue(product.intelligentSubcategory, SUBCATEGORY_OPTIONS, SUBCATEGORY_ALIASES),
             categoryId: product.categoryId ? String(product.categoryId) : "",
         };
         const defaultImage = product.mainImageUrl || (data.images && data.images.length ? data.images[0].imageUrl : "");
@@ -549,8 +677,161 @@ class ProductIntelligenceAction extends Component {
         return String(value);
     }
 
+    normalizeChoiceKey(value) {
+        return this.toInput(value)
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "");
+    }
+
+    normalizeChoiceValue(value, options, aliases = {}) {
+        const key = this.normalizeChoiceKey(value);
+        if (!key) {
+            return "";
+        }
+        const allowed = new Set(options.map((option) => option.value));
+        if (allowed.has(key)) {
+            return key;
+        }
+        return aliases[key] || "";
+    }
+
     templateString(value) {
         return this.toInput(value);
+    }
+
+    escapeHtml(value) {
+        const text = this.toInput(value);
+        return text.replace(/[&<>"']/g, (char) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+        }[char]));
+    }
+
+    looksLikeHtml(value) {
+        return /<\/?[a-z][\s\S]*>/i.test(this.toInput(value));
+    }
+
+    plainTextToHtml(value) {
+        const text = this.toInput(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+        if (!text) {
+            return "";
+        }
+        return text
+            .split(/\n{2,}/)
+            .map((block) => {
+                const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+                return lines.length ? `<p>${lines.map((line) => this.escapeHtml(line)).join("<br/>")}</p>` : "";
+            })
+            .filter(Boolean)
+            .join("");
+    }
+
+    sanitizeDescriptionHtml(value) {
+        const html = this.toInput(value);
+        if (!html || typeof document === "undefined") {
+            return html;
+        }
+        const allowedTags = new Set([
+            "p", "br", "ul", "ol", "li", "strong", "b", "em", "i", "u",
+            "span", "div", "h3", "h4", "h5", "blockquote", "a",
+        ]);
+        const template = document.createElement("template");
+        template.innerHTML = html;
+
+        const cleanNode = (node) => {
+            if (node.nodeType === 3) {
+                return;
+            }
+            if (node.nodeType !== 1) {
+                node.remove();
+                return;
+            }
+            Array.from(node.childNodes).forEach(cleanNode);
+            const tagName = node.tagName.toLowerCase();
+            if (!allowedTags.has(tagName)) {
+                const fragment = document.createDocumentFragment();
+                while (node.firstChild) {
+                    fragment.appendChild(node.firstChild);
+                }
+                node.replaceWith(fragment);
+                return;
+            }
+            Array.from(node.attributes).forEach((attr) => {
+                const attrName = attr.name.toLowerCase();
+                if (tagName === "a" && attrName === "href" && /^https?:\/\//i.test(attr.value || "")) {
+                    node.setAttribute("target", "_blank");
+                    node.setAttribute("rel", "noopener noreferrer");
+                    return;
+                }
+                if (tagName === "a" && ["target", "rel"].includes(attrName)) {
+                    return;
+                }
+                node.removeAttribute(attr.name);
+            });
+        };
+
+        Array.from(template.content.childNodes).forEach(cleanNode);
+        return template.innerHTML.trim();
+    }
+
+    normalizedDescriptionHtml(value = this.state.contentForm.description) {
+        const raw = this.toInput(value);
+        if (!raw.trim()) {
+            return "";
+        }
+        return this.sanitizeDescriptionHtml(this.looksLikeHtml(raw) ? raw : this.plainTextToHtml(raw));
+    }
+
+    descriptionPlainText(value = this.state.contentForm.description) {
+        const raw = this.toInput(value);
+        if (!raw) {
+            return "";
+        }
+        if (typeof document !== "undefined" && this.looksLikeHtml(raw)) {
+            const container = document.createElement("div");
+            container.innerHTML = this.sanitizeDescriptionHtml(raw);
+            return (container.textContent || container.innerText || "").trim();
+        }
+        return raw.trim();
+    }
+
+    syncContentDescriptionEditor(force = false) {
+        const editor = this.contentDescriptionEditorRef && this.contentDescriptionEditorRef.el;
+        if (!editor) {
+            return;
+        }
+        const html = this.normalizedDescriptionHtml();
+        if (!force && document.activeElement === editor) {
+            return;
+        }
+        if (force || this.lastContentDescriptionEditorHtml !== html || editor.innerHTML !== html) {
+            editor.innerHTML = html;
+            this.lastContentDescriptionEditorHtml = html;
+        }
+    }
+
+    onContentDescriptionInput(ev) {
+        const html = this.sanitizeDescriptionHtml(ev.currentTarget.innerHTML || "");
+        this.state.contentForm.description = html;
+        this.lastContentDescriptionEditorHtml = ev.currentTarget.innerHTML || "";
+    }
+
+    normalizeContentDescriptionEditor(ev) {
+        const html = this.normalizedDescriptionHtml(ev.currentTarget.innerHTML || "");
+        ev.currentTarget.innerHTML = html;
+        this.state.contentForm.description = html;
+        this.lastContentDescriptionEditorHtml = html;
+    }
+
+    onContentDescriptionSourceInput(ev) {
+        this.state.contentForm.description = ev.target.value || "";
+        this.syncContentDescriptionEditor(true);
     }
 
     marginBenefitLabel() {
@@ -587,7 +868,7 @@ class ProductIntelligenceAction extends Component {
     }
 
     contentWordCount() {
-        const text = (this.state.contentForm.description || "").trim();
+        const text = this.descriptionPlainText();
         if (!text) {
             return 0;
         }
@@ -919,23 +1200,22 @@ class ProductIntelligenceAction extends Component {
 
     async analyzeSeo() {
         this.state.seoBusy = true;
+        this.state.seoJobMessage = "Iniciando trabajo de Nancy AI...";
         try {
-            const result = await this.rpc("/bader_product_intelligence/analyze_seo", {
+            const result = await this.rpc("/bader_product_intelligence/ai_job/start_seo", {
                 product_tmpl_id: this.state.productId,
                 target_audience: this.state.contentForm.audience || "clinicas",
             });
-            this.applyDetailPayload({
-                ...this.state.detail,
-                seoData: result.seoData,
-            });
-            if (result.seoData && result.seoData.aiGeneratedDescription) {
-                this.state.contentForm.description = result.seoData.aiGeneratedDescription;
-            }
-            this.notify("SEO optimizado con Nancy AI.");
+            const job = result.job || {};
+            this.state.seoJobId = job.id || false;
+            this.state.seoJobMessage = job.message || "Nancy AI esta trabajando en segundo plano...";
+            this.notify("Trabajo SEO iniciado. Nancy AI seguirá procesando en segundo plano.", "info");
+            this.scheduleSeoJobPoll(this.state.seoJobId, 3000);
         } catch (error) {
-            this.notify(this.errorMessage(error, "No se pudo analizar el SEO."), "danger");
-        } finally {
             this.state.seoBusy = false;
+            this.state.seoJobId = false;
+            this.state.seoJobMessage = "";
+            this.notify(this.errorMessage(error, "No se pudo analizar el SEO."), "danger");
         }
     }
 
@@ -961,7 +1241,8 @@ class ProductIntelligenceAction extends Component {
                 audience: this.state.contentForm.audience,
             });
             this.state.contentForm.name = result.name || this.state.contentForm.name;
-            this.state.contentForm.description = result.description || this.state.contentForm.description;
+            this.state.contentForm.description = result.descriptionHtml || result.description || this.state.contentForm.description;
+            this.syncContentDescriptionEditor(true);
             this.notify("Descripcion generada con Nancy AI.");
         } catch (error) {
             this.notify(this.errorMessage(error, "No se pudo generar el contenido."), "danger");
@@ -1380,7 +1661,7 @@ class ProductIntelligenceAction extends Component {
         }
     }
 
-    async addCompetitor(name = "", url = "") {
+    async addCompetitor(name = "", url = "", description = "") {
         const competitorName = name || this.state.competitorForm.competitorName;
         const competitorUrl = url || this.state.competitorForm.competitorUrl;
         if (!competitorUrl) {
@@ -1393,6 +1674,7 @@ class ProductIntelligenceAction extends Component {
                 product_tmpl_id: this.state.productId,
                 competitor_name: competitorName,
                 competitor_url: competitorUrl,
+                competitor_description: description || "",
             });
             this.state.competitorForm.competitorName = "";
             this.state.competitorForm.competitorUrl = "";

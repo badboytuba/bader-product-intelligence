@@ -484,7 +484,20 @@
                                         <label>Nombre del Producto</label>
                                         <input class="bpi-input" t-model="state.contentForm.name"/>
                                         <label>Descripcion Optimizada</label>
-                                        <textarea class="bpi-textarea bpi-textarea--mono" rows="11" t-model="state.contentForm.description"/>
+                                        <div class="bpi-rich-editor"
+                                             contenteditable="true"
+                                             t-ref="contentDescriptionEditor"
+                                             t-on-input="onContentDescriptionInput"
+                                             t-on-blur="normalizeContentDescriptionEditor"
+                                             aria-label="Descripcion Optimizada"
+                                             data-placeholder="La descripcion generada aparecera aqui con formato."/>
+                                        <div class="bpi-editor-help">
+                                            <i class="fa fa-eye"/> Vista renderizada: editá el texto directamente sin ver etiquetas HTML.
+                                        </div>
+                                        <details class="bpi-html-source">
+                                            <summary>Ver/editar HTML fuente</summary>
+                                            <textarea class="bpi-textarea bpi-textarea--mono" rows="7" t-att-value="state.contentForm.description" t-on-input="onContentDescriptionSourceInput"/>
+                                        </details>
                                         <p class="bpi-muted" t-esc="contentWordCountLabel()"/>
                                     </div>
                                     <button type="button" class="bpi-button bpi-button--secondary bpi-button--full" t-on-click="saveContentOnly" t-att-disabled="state.contentBusy">
@@ -720,8 +733,15 @@
                                         <textarea class="bpi-textarea" rows="3" t-model="state.seoForm.geoFeatures"/>
                                     </div>
                                     <div class="bpi-footer-actions">
-                                        <button type="button" class="bpi-button bpi-button--primary bpi-button--grow" t-on-click="analyzeSeo" t-att-disabled="state.seoBusy"><i class="fa fa-magic"/> Optimizar SEO con Nancy AI</button>
+                                        <button type="button" class="bpi-button bpi-button--primary bpi-button--grow" t-on-click="analyzeSeo" t-att-disabled="state.seoBusy">
+                                            <i t-att-class="state.seoBusy ? 'fa fa-spinner fa-spin' : 'fa fa-magic'"/>
+                                            <t t-if="state.seoBusy"> Nancy AI trabajando...</t>
+                                            <t t-else=""> Optimizar SEO con Nancy AI</t>
+                                        </button>
                                         <button type="button" class="bpi-icon-button" t-on-click="saveSeoOnly" t-att-disabled="state.seoBusy"><i class="fa fa-floppy-o"/></button>
+                                    </div>
+                                    <div t-if="state.seoJobMessage" class="bpi-muted bpi-job-status">
+                                        <i class="fa fa-clock-o"/> <t t-esc="state.seoJobMessage"/>
                                     </div>
                                 </div>
                             </t>
@@ -750,13 +770,25 @@
 
                                     <t t-if="state.competitorForm.discoveredCompetitors.length">
                                         <div class="bpi-stack bpi-stack--md">
-                                            <div class="bpi-panel__title"><h3>Competidores Encontrados</h3><p t-if="state.competitorForm.discoveryQuery" t-esc="'Busqueda: ' + state.competitorForm.discoveryQuery"/></div>
-                                            <div class="bpi-list-card" t-foreach="state.competitorForm.discoveredCompetitors" t-as="item" t-key="item.url">
-                                                <div>
-                                                    <strong t-esc="item.name"/>
-                                                    <p t-esc="item.description || item.domain"/>
+                                            <div class="bpi-panel__title">
+                                                <h3>Competidores Encontrados</h3>
+                                                <p t-if="state.competitorForm.discoveryQuery" t-esc="'Busqueda real: ' + state.competitorForm.discoveryQuery"/>
+                                            </div>
+                                            <div class="bpi-list-card bpi-discovery-card" t-foreach="state.competitorForm.discoveredCompetitors" t-as="item" t-key="item.url">
+                                                <div class="bpi-discovery-card__main">
+                                                    <div class="bpi-discovery-card__head">
+                                                        <strong t-esc="item.name"/>
+                                                        <span t-if="item.relevanceScore" class="bpi-inline-badge bpi-inline-badge--green" t-esc="'Compatibilidad ' + item.relevanceScore + '%'"/>
+                                                    </div>
+                                                    <a t-if="item.url" class="bpi-discovery-card__domain bpi-discovery-card__domain-link" t-att-href="item.url" target="_blank" rel="noopener noreferrer" t-att-title="'Abrir ' + (item.domain || item.name || item.url)"><i class="fa fa-external-link"/> <t t-esc="item.domain || item.url"/></a>
+                                                    <p t-if="!item.url" class="bpi-discovery-card__domain" t-esc="item.domain"/>
+                                                    <p t-esc="item.description || item.matchReason || item.domain"/>
+                                                    <p t-if="item.matchReason" class="bpi-discovery-card__reason"><i class="fa fa-check-circle"/> <t t-esc="item.matchReason"/></p>
                                                 </div>
-                                                <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.addCompetitor(item.name, item.url)">Agregar</button>
+                                                <div class="bpi-discovery-card__actions">
+                                                    <a t-if="item.url" class="bpi-button bpi-button--external" t-att-href="item.url" target="_blank" rel="noopener noreferrer" t-att-title="'Abrir pagina encontrada'"><i class="fa fa-external-link"/> Abrir pagina</a>
+                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.addCompetitor(item.name, item.url, item.description || item.matchReason || '')">Agregar</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </t>
@@ -847,6 +879,7 @@
                                                 </t>
 
                                                 <div class="bpi-footer-actions">
+                                                    <a t-if="competitor.competitorUrl" class="bpi-button bpi-button--external" t-att-href="competitor.competitorUrl" target="_blank" rel="noopener noreferrer" t-att-title="'Abrir pagina del competidor'"><i class="fa fa-external-link"/> Abrir pagina</a>
                                                     <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.scrapeCompetitor(competitor.id)">Scrapear</button>
                                                     <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.analyzeCompetitor(competitor.id)">Analizar</button>
                                                     <button type="button" class="bpi-button bpi-button--ghost" t-on-click="() => this.deleteCompetitor(competitor.id)"><i class="fa fa-trash-o"/> Eliminar</button>

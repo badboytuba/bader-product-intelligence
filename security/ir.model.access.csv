@@ -5,3 +5,4 @@ access_bpi_product_image_manager,bpi.product.image manager,model_bpi_product_ima
 access_bpi_product_competitor_manager,bpi.product.competitor manager,model_bpi_product_competitor,base.group_system,1,1,1,1
 access_bpi_product_chat_session_manager,bpi.product.chat.session manager,model_bpi_product_chat_session,base.group_system,1,1,1,1
 access_bpi_product_chat_message_manager,bpi.product.chat.message manager,model_bpi_product_chat_message,base.group_system,1,1,1,1
+access_bpi_ai_job_manager,bpi.ai.job manager,model_bpi_ai_job,base.group_system,1,1,1,1

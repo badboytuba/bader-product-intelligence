@@ -12,13 +12,16 @@
                         <div class="col-12 col-lg-6 o_setting_box">
                             <div class="o_setting_left_pane"/>
                             <div class="o_setting_right_pane">
-                                <label for="bpi_gemini_api_key"/>
-                                <div class="text-muted">Gemini para texto, chat e imágenes.</div>
-                                <div class="text-muted">Fallback por entorno: <code>BPI_GEMINI_API_KEY</code> o <code>GOOGLE_API_KEY</code>.</div>
-                                <field name="bpi_gemini_api_key" password="True"/>
-                                <field name="bpi_gemini_text_model"/>
-                                <field name="bpi_gemini_image_model"/>
-                                <field name="bpi_gemini_image_pro_model"/>
+                                <label for="bpi_openai_api_key"/>
+                                <div class="text-muted">OpenAI para texto, chat, SEO/GEO e imágenes.</div>
+                                <div class="text-muted">Fallback por entorno: <code>BPI_OPENAI_API_KEY</code> o <code>OPENAI_API_KEY</code>.</div>
+                                <field name="bpi_openai_api_key" password="True"/>
+                                <field name="bpi_openai_text_model"/>
+                                <field name="bpi_openai_image_model"/>
+                                <field name="bpi_openai_image_edit_model"/>
+                                <div class="text-muted mt8">Para GPT-5.5, <code>low</code> reduce latencia/costo manteniendo calidad suficiente para JSON de catálogo.</div>
+                                <field name="bpi_openai_reasoning_effort"/>
+                                <field name="bpi_openai_text_verbosity"/>
                             </div>
                         </div>
                         <div class="col-12 col-lg-6 o_setting_box">

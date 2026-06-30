@@ -1,5 +1,6 @@
 $bpi-dark: #003841;
 $bpi-green: #70d44b;
+$bpi-teal: #0f766e;
 $bpi-green-soft: #eafbe3;
 $bpi-mint: #edf5f3;
 $bpi-line: #d6e4df;
@@ -101,6 +102,11 @@ $bpi-orange: #ff8122;
         color: $bpi-muted;
     }
 
+    .bpi-job-status {
+        margin-top: 8px;
+        font-size: 12px;
+    }
+
     .bpi-button,
     .bpi-icon-button,
     .bpi-filter-pill,
@@ -157,6 +163,24 @@ $bpi-orange: #ff8122;
             color: #fff !important;
 
             &, * { color: #fff !important; }
+        }
+
+        &--external {
+            background: $bpi-teal;
+            border-color: $bpi-teal;
+            color: #fff !important;
+            text-decoration: none !important;
+            white-space: nowrap;
+
+            &, * { color: #fff !important; }
+
+            &:hover:not(:disabled) {
+                background: darken($bpi-teal, 7%);
+                border-color: darken($bpi-teal, 7%);
+                color: #fff !important;
+                text-decoration: none !important;
+                transform: translateY(-1px);
+            }
         }
 
         &--danger {
@@ -770,6 +794,76 @@ $bpi-orange: #ff8122;
         padding: 14px;
     }
 
+    .bpi-rich-editor {
+        min-height: 240px;
+        border: 1px solid rgba(0, 56, 65, 0.18);
+        border-radius: 12px;
+        padding: 16px;
+        background: #fff;
+        color: $bpi-dark;
+        line-height: 1.55;
+        outline: none;
+        overflow: auto;
+        transition: border-color 0.16s ease, box-shadow 0.16s ease;
+
+        &:focus {
+            border-color: rgba(0, 82, 92, 0.45);
+            box-shadow: 0 0 0 3px rgba(112, 212, 75, 0.16);
+        }
+
+        &:empty::before {
+            content: attr(data-placeholder);
+            color: $bpi-muted;
+        }
+
+        p {
+            margin: 0 0 12px;
+        }
+
+        ul,
+        ol {
+            margin: 0 0 12px 22px;
+            padding: 0;
+        }
+
+        li {
+            margin: 4px 0;
+        }
+
+        strong,
+        b {
+            color: $bpi-dark;
+            font-weight: 700;
+        }
+    }
+
+    .bpi-editor-help {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: -4px;
+        color: $bpi-muted;
+        font-size: 12px;
+    }
+
+    .bpi-html-source {
+        border: 1px dashed rgba(0, 56, 65, 0.16);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: rgba(0, 56, 65, 0.025);
+
+        summary {
+            cursor: pointer;
+            color: $bpi-teal;
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        textarea {
+            margin-top: 10px;
+        }
+    }
+
     .bpi-inline-switch--spread {
         padding-top: 4px;
         justify-content: space-between;
@@ -1010,6 +1104,62 @@ $bpi-orange: #ff8122;
 
         &:hover i {
             color: $bpi-dark;
+        }
+    }
+
+    .bpi-discovery-card {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        align-items: center;
+    }
+
+    .bpi-discovery-card__main {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .bpi-discovery-card__head,
+    .bpi-discovery-card__actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .bpi-discovery-card__domain {
+        font-size: 12px;
+        color: $bpi-teal !important;
+        word-break: break-word !important;
+    }
+
+    .bpi-discovery-card__domain-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: fit-content;
+        text-decoration: none !important;
+        font-weight: 700;
+
+        &:hover {
+            color: darken($bpi-teal, 10%) !important;
+            text-decoration: underline !important;
+        }
+    }
+
+    .bpi-discovery-card__reason {
+        color: #198754 !important;
+        word-break: normal !important;
+
+        i {
+            margin-right: 4px;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .bpi-discovery-card {
+            grid-template-columns: 1fr;
         }
     }
 

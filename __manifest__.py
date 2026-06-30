@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Producto Intelligence",
-    "version": "16.0.1.0.0",
+    "version": "16.0.1.1.13",
     "summary": "Producto Intelligence para Bader en Odoo 16",
     "description": """
 Producto Intelligence para Bader Argentina.
 
 Replica dentro de Odoo las capacidades principales del módulo Product Intelligence:
 - SEO/GEO con IA
-- Galería e imágenes generadas con Gemini
+- Galería e imágenes generadas con OpenAI
 - Video de producto
 - Descubrimiento y análisis de competidores
 - Estrategia competitiva
@@ -25,10 +25,12 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
     ],
     "data": [
         "security/ir.model.access.csv",
+        "data/ai_job_cron.xml",
         "views/product_views.xml",
         "views/category_views.xml",
         "views/res_config_settings_views.xml",
         "views/product_intelligence_action.xml",
+        "views/website_product_templates.xml",
     ],
     "assets": {
         "web.assets_backend": [

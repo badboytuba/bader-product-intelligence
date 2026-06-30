@@ -33,7 +33,7 @@ Usually this is already present in Odoo environments, but it must exist in the s
 
 ## External Services
 
-- Gemini API
+- OpenAI API
 - Firecrawl API
 
 ## Installation
@@ -66,15 +66,22 @@ Use `Settings > General Settings` and open the `Producto Intelligence` block.
 
 Core parameters:
 
-- `Gemini API Key`
-- `Gemini Modelo Texto`
-- `Gemini Modelo Imagen`
-- `Gemini Modelo Imagen Pro`
+- `OpenAI API Key`
+- `OpenAI Modelo Texto`
+- `OpenAI Modelo Imagen`
+- `OpenAI Modelo Edición Imagen`
 - `Firecrawl API Key`
 - `Firecrawl Base URL`
 - `Tipo de Cambio ARS`
 
-Without Gemini and Firecrawl credentials, the module installs, but AI and competitor-analysis features will not work.
+Without OpenAI and Firecrawl credentials, the module installs, but AI and competitor-analysis features will not work.
+
+Environment fallbacks:
+
+- `BPI_OPENAI_API_KEY` or `OPENAI_API_KEY`
+- `BPI_OPENAI_TEXT_MODEL` (default: `gpt-5.5`)
+- `BPI_OPENAI_IMAGE_MODEL` (default: `gpt-image-2`)
+- `BPI_OPENAI_IMAGE_EDIT_MODEL` (default: `gpt-image-1.5`)
 
 ## Security / Access
 
@@ -86,6 +93,17 @@ Without Gemini and Firecrawl credentials, the module installs, but AI and compet
 - This module is now independent from `bader_website`.
 - If `bader_website` is installed, the website module can optionally render Product Intelligence content on the product page.
 - Backend tests already exist under `tests/test_product_intelligence.py`.
+
+
+## Agent / Codex Handoff
+
+For future Codex or automation agents, read:
+
+- `AGENTS.md` — repo-specific operating rules and safety constraints.
+- `docs/CODEX_5_5_HANDOFF.md` — detailed architecture, current state, validation commands, known issues, and recommended next fixes.
+- `.env.example` — redacted environment variable template. Never commit real `.env` values.
+
+This repository should be cloned/deployed with folder name `bader_product_intelligence`.
 
 ## Validation Notes
 

@@ -6,24 +6,47 @@ from odoo import fields, models
 class ResConfigSettings(models.TransientModel):
     _inherit = "res.config.settings"
 
-    bpi_gemini_api_key = fields.Char(
-        string="Gemini API Key",
-        config_parameter="bader_product_intelligence.gemini_api_key",
+    bpi_openai_api_key = fields.Char(
+        string="OpenAI API Key",
+        config_parameter="bader_product_intelligence.openai_api_key",
     )
-    bpi_gemini_text_model = fields.Char(
-        string="Gemini Modelo Texto",
-        default="gemini-2.5-flash",
-        config_parameter="bader_product_intelligence.gemini_text_model",
+    bpi_openai_text_model = fields.Char(
+        string="OpenAI Modelo Texto",
+        default="gpt-5.5",
+        config_parameter="bader_product_intelligence.openai_text_model",
     )
-    bpi_gemini_image_model = fields.Char(
-        string="Gemini Modelo Imagen",
-        default="gemini-2.5-flash-image",
-        config_parameter="bader_product_intelligence.gemini_image_model",
+    bpi_openai_image_model = fields.Char(
+        string="OpenAI Modelo Imagen",
+        default="gpt-image-2",
+        config_parameter="bader_product_intelligence.openai_image_model",
     )
-    bpi_gemini_image_pro_model = fields.Char(
-        string="Gemini Modelo Imagen Pro",
-        default="gemini-2.5-flash-image",
-        config_parameter="bader_product_intelligence.gemini_image_pro_model",
+    bpi_openai_image_edit_model = fields.Char(
+        string="OpenAI Modelo Edición Imagen",
+        default="gpt-image-1.5",
+        config_parameter="bader_product_intelligence.openai_image_edit_model",
+    )
+    bpi_openai_reasoning_effort = fields.Selection(
+        [
+            ("none", "None"),
+            ("minimal", "Minimal"),
+            ("low", "Low"),
+            ("medium", "Medium"),
+            ("high", "High"),
+            ("xhigh", "XHigh"),
+        ],
+        string="OpenAI Reasoning Effort",
+        default="low",
+        config_parameter="bader_product_intelligence.openai_reasoning_effort",
+    )
+    bpi_openai_text_verbosity = fields.Selection(
+        [
+            ("low", "Low"),
+            ("medium", "Medium"),
+            ("high", "High"),
+        ],
+        string="OpenAI Verbosidad Texto",
+        default="medium",
+        config_parameter="bader_product_intelligence.openai_text_verbosity",
     )
     bpi_firecrawl_api_key = fields.Char(
         string="Firecrawl API Key",
