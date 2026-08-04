@@ -141,7 +141,7 @@ git diff --check
 
 Final QAS certification for the code tree published in the feature PR:
 
-- backend: **20 tests**, 0 failures/errors;
+- backend: **18 tests**, 0 failures/errors;
 - OWL QUnit: **10 tests**, **28 assertions**, 0 failures;
 - live read-only payload check: existing Pack and multi-variant templates returned all required contracts;
 - public `/update_pack` contract: camelCase `packRevision`;
