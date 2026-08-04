@@ -10,13 +10,13 @@ This file is the operational handoff for the Odoo 16 addon. Never print or commi
 - Technical addon directory: `bader_product_intelligence`
 - Odoo app: `Producto Intelligence`
 - Current feature branch: `feature/bpi-pack-variant-control`
-- Release: `16.0.1.2.0`
+- Release: `16.0.1.2.1`
 - Certified base: `16.0.1.1.14`, commit `e359464`
 - License: `LGPL-3`
 - Target: Odoo Community `16.0`
 - Dependencies: `product`, `web`, `website_sale`, `product_pack`, `sale_product_pack`, `stock_product_pack`
 
-Release `1.2.0` is deliberately separate from the certified `1.1.14` stabilization. PROD must remain on its approved version until functional approval for Packs and variants.
+Release `1.2.1` is deliberately separate from the certified `1.1.14` stabilization. It adds the Odoo 16 OWL Enter-key compatibility hotfix to `1.2.0`. PROD must remain on its approved version until functional approval for Packs and variants.
 
 ## Scope
 
@@ -130,7 +130,7 @@ Content, SEO, category, image, competitor strategy and chat prompts receive a bo
 - Competitor analytics uses normalized USD values while preserving original amount/currency.
 - Logs omit raw external bodies, sensitive URLs and raw provider errors.
 
-## Validation status for 16.0.1.2.0
+## Validation status for 16.0.1.2.1
 
 Local static validation:
 
@@ -145,7 +145,7 @@ Final QAS certification for the code tree published in the feature PR:
 - OWL QUnit: **10 tests**, **28 assertions**, 0 failures;
 - live read-only payload check: existing Pack and multi-variant templates returned all required contracts;
 - public `/update_pack` contract: camelCase `packRevision`;
-- installed module version: `16.0.1.2.0`;
+- installed module version: `16.0.1.2.1` after the OWL compatibility hotfix;
 - service restored active, temporary QUnit users removed, and the preexisting view state restored.
 
 ## Safe QAS/PROD deployment
@@ -163,9 +163,9 @@ Rules:
 3. Upgrade only `bader_product_intelligence`.
 4. Keep DB/filestore/addon backups and SHA256 metadata.
 5. Confirm service, cron, module version, logs and tracked-file checksums after update.
-6. Keep PROD untouched until explicit functional approval for `1.2.0`.
+6. Keep PROD untouched until explicit functional approval for `1.2.1`.
 
-QAS has an unrelated preexisting `stock_inventory` mismatch: active view ID `2835` references missing field `stock_inventory_batch_size`. For isolated BPI upgrades/tests only, preserve its original active value, disable it temporarily, and restore it in a trap. Do not commit or deploy a workaround for this unrelated issue as part of BPI.
+The former QAS `stock_inventory` code/view mismatch was remediated separately on 2026-08-04. Do not disable view 2835 during BPI upgrades; validate it normally with the official `stock_inventory` 16.0.3.0.0 runtime.
 
 ## Secrets and external services
 

@@ -126,7 +126,7 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Preserves competitor prices in their source currency while exposing normalized USD values for ARS/USD analytics.
 - Requires product ownership for competitor scrape, analysis and deletion routes, and avoids raw external response data in logs.
 
-## Release 16.0.1.2.0
+## Release 16.0.1.2.1
 
 - Adds explicit OCA Pack dependencies and recognizes products as `simple`, `variants`, `pack` or `pack_variants`.
 - Shows Pack/variant badges plus native effective price, cost and availability ranges in the dashboard and detail workspace.
@@ -137,3 +137,4 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Adds bounded variant/Pack context to content, SEO, categorization, image, strategy and chat prompts without creating per-variant content.
 - Uses effective Pack prices and native variant min–max ranges in analytics.
 - Adds secure variant image upload/reference/removal using the existing 10 MiB PNG/JPEG/WebP validation and product-owned image tokens.
+- Replaces the unsupported Odoo 16 OWL `.enter` event modifier with an explicit Enter-key handler in Pack component search.

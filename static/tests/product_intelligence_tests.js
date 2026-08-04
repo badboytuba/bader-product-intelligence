@@ -231,3 +231,35 @@ QUnit.test("pack save sends all variant compositions with revision", async (asse
         components: [{ lineId: 4, productVariantId: 31, quantity: 2, saleDiscount: 10 }],
     }]);
 });
+
+QUnit.test("pack component search handles Enter without unsupported OWL modifiers", async (assert) => {
+    const action = Object.create(ProductIntelligenceAction.prototype);
+    let searches = 0;
+    let prevented = 0;
+    action.searchPackComponents = async () => {
+        searches += 1;
+        return "searched";
+    };
+
+    action.onPackComponentSearchKeydown({
+        key: "a",
+        isComposing: false,
+        preventDefault: () => { prevented += 1; },
+    });
+    assert.deepEqual([searches, prevented], [0, 0], "other keys are ignored");
+
+    action.onPackComponentSearchKeydown({
+        key: "Enter",
+        isComposing: true,
+        preventDefault: () => { prevented += 1; },
+    });
+    assert.deepEqual([searches, prevented], [0, 0], "IME composition Enter is ignored");
+
+    const result = await action.onPackComponentSearchKeydown({
+        key: "Enter",
+        isComposing: false,
+        preventDefault: () => { prevented += 1; },
+    });
+    assert.deepEqual([searches, prevented], [1, 1], "Enter prevents submit and starts one search");
+    assert.strictEqual(result, "searched", "the search promise is returned");
+});

@@ -548,7 +548,7 @@
 
                                         <div class="bpi-pack-search">
                                             <div class="bpi-inline-field">
-                                                <input class="bpi-input" type="search" placeholder="Buscar por nombre, SKU o codigo de barras" t-model="state.componentSearch.query" t-on-keydown.enter.prevent="searchPackComponents"/>
+                                                <input class="bpi-input" type="search" placeholder="Buscar por nombre, SKU o codigo de barras" t-model="state.componentSearch.query" t-on-keydown="onPackComponentSearchKeydown"/>
                                                 <button type="button" class="bpi-button bpi-button--secondary" t-on-click="searchPackComponents" t-att-disabled="state.componentSearchBusy"><i class="fa fa-search"/> Buscar</button>
                                             </div>
                                             <div class="bpi-pack-search-results" t-if="state.componentSearch.results.length">

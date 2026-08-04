@@ -77,3 +77,11 @@ handshake websocket:
 
 QAS está tecnicamente certificado. A implantação em PROD permanece bloqueada até
 aprovação funcional explícita dos dois ajustes pelo usuário.
+
+## Hotfix OWL 16.0.1.2.1
+
+Após a certificação inicial, a abertura da ação revelou que o compilador OWL do
+Odoo 16 não aceita `t-on-keydown.enter.prevent`. A release `16.0.1.2.1` substitui
+esse modificador por um handler JavaScript que valida `event.key === "Enter"`,
+respeita composição IME e chama `preventDefault()` somente para Enter. A evidência
+de backend, QUnit, abertura real da ação e logs será atualizada após o deploy QAS.

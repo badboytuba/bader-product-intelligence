@@ -1391,6 +1391,14 @@ export class ProductIntelligenceAction extends Component {
         composition.components.splice(index, 1);
     }
 
+    onPackComponentSearchKeydown(ev) {
+        if (ev.key !== "Enter" || ev.isComposing) {
+            return;
+        }
+        ev.preventDefault();
+        return this.searchPackComponents();
+    }
+
     async searchPackComponents() {
         const query = (this.state.componentSearch.query || "").trim();
         this.state.componentSearchBusy = true;
