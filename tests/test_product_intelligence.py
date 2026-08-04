@@ -355,13 +355,18 @@ class TestProductoIntelligence(TransactionCase):
             self.service.update_pack(self.pack_product, current["revision"], invalid_values)
 
     def test_pack_component_search_excludes_current_product_and_archived_candidates(self):
-        result = self.service.search_pack_components(self.pack_product, query="COMP-", limit=20)
+        search_prefix = "BPI-TEST-%s-%s" % (self.pack_product.id, self.pack_component_a.id)
+        component_code = "%s-COMP-A" % search_prefix
+        self.pack_variant.write({"default_code": "%s-PACK" % search_prefix})
+        self.pack_component_a.product_variant_id.write({"default_code": component_code})
+
+        result = self.service.search_pack_components(self.pack_product, query=search_prefix, limit=20)
         result_ids = {item["productVariantId"] for item in result["components"]}
         self.assertIn(self.pack_component_a.product_variant_id.id, result_ids)
         self.assertNotIn(self.pack_variant.id, result_ids)
 
         self.pack_component_a.product_variant_id.write({"active": False})
-        archived = self.service.search_pack_components(self.pack_product, query="COMP-A", limit=20)
+        archived = self.service.search_pack_components(self.pack_product, query=component_code, limit=20)
         self.assertFalse(archived["components"])
         self.pack_component_a.product_variant_id.write({"active": True})
 
