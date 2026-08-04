@@ -97,7 +97,7 @@ Environment fallbacks:
 ## Compatibility Notes
 
 - This module is now independent from `bader_website`.
-- If `bader_website` is installed, the website module can optionally render Product Intelligence content on the product page.
+- The public storefront bridge remains inactive; website Pack rendering is outside this release.
 - Backend tests exist under `tests/test_product_intelligence.py`; OWL tests live in `static/tests/product_intelligence_tests.js`.
 
 

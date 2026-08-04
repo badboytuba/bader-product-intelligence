@@ -139,15 +139,14 @@ python3 ~/.codex/skills/bader-product-intelligence-dev/scripts/validate_addon.py
 git diff --check
 ```
 
-QAS certification at code commit `456ba06` before the final external-RPC naming/docs commit:
+Final QAS certification for the code tree published in the feature PR:
 
 - backend: **20 tests**, 0 failures/errors;
 - OWL QUnit: **10 tests**, **28 assertions**, 0 failures;
 - live read-only payload check: existing Pack and multi-variant templates returned all required contracts;
+- public `/update_pack` contract: camelCase `packRevision`;
 - installed module version: `16.0.1.2.0`;
 - service restored active, temporary QUnit users removed, and the preexisting view state restored.
-
-After any further commit, redeploy the exact archive, upgrade only `bader_product_intelligence`, rerun backend and QUnit, and verify runtime checksums before considering QAS final.
 
 ## Safe QAS/PROD deployment
 
