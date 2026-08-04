@@ -43,9 +43,8 @@ PROD não foi alterado e continua condicionado à aprovação funcional do usuá
 - `git diff --check`: **PASS**.
 - Busca por segredos no conteúdo rastreado: **limpa**.
 - Backend Odoo: **18 testes**, 0 falhas, 0 erros.
-- OWL QUnit: **10 testes**, **28/28 assertions**, 0 falhas.
-- Runtime QAS: 29/29 arquivos do commit original validados por SHA-256 antes
-  desta atualização exclusivamente documental.
+- OWL QUnit após o hotfix: **11 testes**, **32/32 assertions**, 0 falhas.
+- Runtime QAS: **30/30** arquivos do commit final validados por SHA-256.
 
 ## Evidência funcional
 
@@ -83,5 +82,20 @@ aprovação funcional explícita dos dois ajustes pelo usuário.
 Após a certificação inicial, a abertura da ação revelou que o compilador OWL do
 Odoo 16 não aceita `t-on-keydown.enter.prevent`. A release `16.0.1.2.1` substitui
 esse modificador por um handler JavaScript que valida `event.key === "Enter"`,
-respeita composição IME e chama `preventDefault()` somente para Enter. A evidência
-de backend, QUnit, abertura real da ação e logs será atualizada após o deploy QAS.
+respeita composição IME e chama `preventDefault()` somente para Enter.
+
+Certificação final do hotfix:
+
+- commit funcional/testado: `21b3f60e49ecba55e30b15a37d731a35724c3d1e`;
+- árvore funcional runtime: `a134d481a3c82f69e9d82e7263e5edf3bca0500f`, 30/30 checksums
+  antes da publicação exclusivamente documental desta evidência;
+- backup incremental verificado:
+  `/opt/odoo/backups/bpi_owl_enter_16.0.1.2.1_20260804T143500Z`;
+- backend: 18 testes, 0 falhas/erros;
+- QUnit: 11 testes, 32/32 assertions;
+- abertura normal e `debug=assets`: dashboard renderizado, 0 dialogs e 0 exceções;
+- fluxo real do Pack: Enter foi prevenido e retornou 4 componentes;
+- checkpoint UTC `2026-08-04 14:48:58`: 0 ERROR, 0 CRITICAL, 0 WARNING,
+  0 OwlError e 0 `Unknown event modifier`;
+- serviço e cron ativos, 0 jobs BPI abertos;
+- PROD permaneceu intocado.

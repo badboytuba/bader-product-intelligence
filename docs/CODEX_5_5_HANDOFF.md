@@ -142,10 +142,12 @@ git diff --check
 Final QAS certification for the code tree published in the feature PR:
 
 - backend: **18 tests**, 0 failures/errors;
-- OWL QUnit: **10 tests**, **28 assertions**, 0 failures;
+- OWL QUnit: **11 tests**, **32 assertions**, 0 failures;
 - live read-only payload check: existing Pack and multi-variant templates returned all required contracts;
 - public `/update_pack` contract: camelCase `packRevision`;
 - installed module version: `16.0.1.2.1` after the OWL compatibility hotfix;
+- normal and `debug=assets` action openings: dashboard rendered, 0 dialogs/runtime exceptions;
+- real Pack search Enter: default prevented and component results returned;
 - service restored active, temporary QUnit users removed, and the preexisting view state restored.
 
 ## Safe QAS/PROD deployment
