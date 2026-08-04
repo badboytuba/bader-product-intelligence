@@ -559,7 +559,7 @@
                                                  t-att-class="state.imageForm.selectedGalleryUrl === image.imageUrl ? 'bpi-gallery-thumb is-active' : 'bpi-gallery-thumb'"
                                                  t-on-click="() => this.selectGalleryImage(image.imageUrl)">
                                                 <img t-att-src="image.imageUrl" t-att-alt="image.name"/>
-                                                <button type="button" class="bpi-gallery-thumb__delete" t-on-click.stop="() => this.deleteImage(image.id)" t-att-disabled="state.imageBusy" title="Eliminar"><i class="fa fa-trash"/></button>
+                                                <button t-if="image.canDelete" type="button" class="bpi-gallery-thumb__delete" t-on-click.stop="() => this.deleteImage(image)" t-att-disabled="state.imageBusy" title="Eliminar"><i class="fa fa-trash"/></button>
                                             </div>
                                             <div class="bpi-gallery-thumb bpi-gallery-thumb--add" t-on-click="() => this.state.showAddUrlInput = !this.state.showAddUrlInput">
                                                 <i class="fa fa-plus"/>
@@ -605,9 +605,9 @@
                                                 <div>
                                                     <div class="bpi-playground__section-label">Selecciona imagenes del producto</div>
                                                     <div class="bpi-playground__thumb-grid">
-                                                        <div t-foreach="currentImages()" t-as="image" t-key="image.id"
-                                                             t-att-class="state.imageForm.selectedGalleryUrl === image.imageUrl ? 'bpi-pg-thumb bpi-pg-thumb--lg is-selected' : 'bpi-pg-thumb bpi-pg-thumb--lg'"
-                                                             t-on-click="() => this.selectGalleryImage(image.imageUrl)">
+                                                        <div t-foreach="referenceableImages()" t-as="image" t-key="image.referenceToken"
+                                                             t-att-class="state.imageForm.selectedReferences.includes(image.referenceToken) ? 'bpi-pg-thumb bpi-pg-thumb--lg is-selected' : 'bpi-pg-thumb bpi-pg-thumb--lg'"
+                                                             t-on-click="() => this.toggleReference(image.referenceToken)">
                                                             <img t-att-src="image.imageUrl" t-att-alt="image.name"/>
                                                             <div class="bpi-pg-thumb__check"><i class="fa fa-check"/></div>
                                                         </div>
@@ -619,24 +619,11 @@
                                                     <div class="bpi-playground__section-label">Subir imagen de referencia (logo, fondo, etc.)</div>
                                                     <div class="bpi-playground__upload-zone">
                                                         <button type="button" class="bpi-playground__upload-btn" t-on-click="triggerFileUpload"><i class="fa fa-cloud-upload"/> Seleccionar archivo</button>
-                                                        <input type="file" class="d-none" accept="image/*" t-ref="fileUploadInput" t-on-change="handleFileUpload"/>
+                                                        <input type="file" class="d-none" accept="image/png,image/jpeg,image/webp" t-ref="fileUploadInput" t-on-change="handleFileUpload"/>
                                                         <div class="bpi-playground__upload-preview" t-if="state.imageForm.uploadedRefUrl">
                                                             <img t-att-src="state.imageForm.uploadedRefUrl"/>
                                                             <span t-esc="state.imageForm.uploadedRefName"/>
                                                             <button type="button" class="bpi-playground__att-remove" t-on-click="removeUploadedRef"><i class="fa fa-times"/></button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Reference images -->
-                                                <div t-if="(product.referenceImages || []).length">
-                                                    <div class="bpi-playground__section-label">Imagenes de referencia del producto</div>
-                                                    <div class="bpi-playground__thumb-grid">
-                                                        <div t-foreach="product.referenceImages" t-as="reference" t-key="reference.token"
-                                                             t-att-class="state.imageForm.selectedReferences.includes(reference.token) ? 'bpi-pg-thumb bpi-pg-thumb--lg is-selected' : 'bpi-pg-thumb bpi-pg-thumb--lg'"
-                                                             t-on-click="() => this.toggleReference(reference.token)">
-                                                            <img t-att-src="reference.url" t-att-alt="reference.label"/>
-                                                            <div class="bpi-pg-thumb__check"><i class="fa fa-check"/></div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -806,7 +793,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="bpi-competitor-row__metrics">
-                                                    <div><span>Precio</span><strong t-esc="competitor.competitorPrice ? formatARS(competitor.competitorPrice) : 'Sin precio'"/></div>
+                                                    <div><span>Precio</span><strong t-esc="(competitor.competitorOfferPrice || competitor.competitorPrice) ? formatCompetitorPrice(competitor.competitorOfferPrice || competitor.competitorPrice, competitor.competitorCurrency) : 'Sin precio'"/></div>
                                                     <div><span>SEO</span><strong t-esc="(competitor.seoScore || 0) + '/100'"/></div>
                                                     <div><span>Status</span><strong t-esc="competitor.scrapeStatus || 'pending'"/></div>
                                                 </div>
@@ -1022,7 +1009,7 @@
                                             </t>
                                         </div>
                                         <div class="bpi-chat-input-bar">
-                                            <input class="bpi-input" type="text" placeholder="Escribe tu mensaje..." t-model="state.chatInput" t-on-keydown="onChatKeydown" t-att-disabled="state.chatBusy"/>
+                                            <input class="bpi-input" type="text" maxlength="4000" placeholder="Escribe tu mensaje..." t-model="state.chatInput" t-on-keydown="onChatKeydown" t-att-disabled="state.chatBusy"/>
                                             <button type="button" class="bpi-button bpi-button--primary" t-on-click="() => this.sendChatMessage()" t-att-disabled="state.chatBusy || !state.chatInput.trim()">
                                                 <i class="fa fa-paper-plane"/>
                                             </button>

@@ -1,49 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!--
+        These are primary derivatives, not global default views.  Keeping their
+        priority above the native website_sale views prevents the Intelligence
+        screen from hijacking the standard eCommerce Categories action.
+    -->
     <record id="view_bpi_category_tree" model="ir.ui.view">
         <field name="name">product.public.category.bpi.tree</field>
         <field name="model">product.public.category</field>
+        <field name="inherit_id" ref="website_sale.product_public_category_tree_view"/>
+        <field name="mode">primary</field>
+        <field name="priority">90</field>
         <field name="arch" type="xml">
-            <tree string="Inteligencia de Categorías">
-                <field name="name"/>
-                <field name="bpi_local_name"/>
-                <field name="bpi_search_volume"/>
-                <field name="bpi_competitiveness"/>
-                <field name="bpi_trend_direction"/>
-                <field name="bpi_last_analyzed_at"/>
-            </tree>
+            <xpath expr="//tree" position="attributes">
+                <attribute name="string">Inteligencia de Categorías</attribute>
+            </xpath>
+            <xpath expr="//tree/field[@name='display_name']" position="after">
+                <field name="parent_id" optional="show"/>
+                <field name="bpi_local_name" optional="show"/>
+                <field name="bpi_search_volume" optional="show"/>
+                <field name="bpi_competitiveness" optional="show"/>
+                <field name="bpi_trend_direction" optional="show"/>
+                <field name="bpi_last_analyzed_at" optional="show"/>
+            </xpath>
         </field>
     </record>
 
     <record id="view_bpi_category_form" model="ir.ui.view">
         <field name="name">product.public.category.bpi.form</field>
         <field name="model">product.public.category</field>
+        <field name="inherit_id" ref="website_sale.product_public_category_form_view"/>
+        <field name="mode">primary</field>
+        <field name="priority">90</field>
         <field name="arch" type="xml">
-            <form string="Inteligencia de Categoría">
-                <sheet>
+            <xpath expr="//form" position="attributes">
+                <attribute name="string">Inteligencia de Categoría</attribute>
+            </xpath>
+            <xpath expr="//sheet" position="inside">
+                <group string="Producto Intelligence">
                     <group>
-                        <group>
-                            <field name="name"/>
-                            <field name="bpi_local_name"/>
-                            <field name="bpi_search_volume"/>
-                            <field name="bpi_competitiveness"/>
-                            <field name="bpi_trend_direction"/>
-                            <field name="bpi_seasonality"/>
-                        </group>
-                        <group>
-                            <field name="bpi_local_aliases"/>
-                            <field name="bpi_target_audiences"/>
-                            <field name="bpi_seo_keywords"/>
-                            <field name="bpi_geo_keywords"/>
-                            <field name="bpi_last_analyzed_at"/>
-                        </group>
+                        <field name="bpi_local_name"/>
+                        <field name="bpi_search_volume"/>
+                        <field name="bpi_competitiveness"/>
+                        <field name="bpi_trend_direction"/>
+                        <field name="bpi_seasonality"/>
                     </group>
                     <group>
-                        <field name="bpi_meta_description"/>
-                        <field name="bpi_audience_descriptions"/>
+                        <field name="bpi_local_aliases"/>
+                        <field name="bpi_target_audiences"/>
+                        <field name="bpi_seo_keywords"/>
+                        <field name="bpi_geo_keywords"/>
+                        <field name="bpi_last_analyzed_at"/>
                     </group>
-                </sheet>
-            </form>
+                </group>
+                <group string="Contenido de Inteligencia">
+                    <field name="bpi_meta_description"/>
+                    <field name="bpi_audience_descriptions"/>
+                </group>
+            </xpath>
         </field>
     </record>
 </odoo>

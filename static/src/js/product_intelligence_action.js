@@ -5,6 +5,18 @@ import { useService } from "@web/core/utils/hooks";
 import { Component, onWillStart, onWillUnmount, onMounted, onPatched, useState, useRef } from "@odoo/owl";
 
 const DASHBOARD_PAGE_SIZE = 40;
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const MAX_CHAT_MESSAGE_LENGTH = 4000;
+
+export function competitorComparablePriceUsd(competitor) {
+    const value = Number(competitor?.competitorOfferPriceUsd || competitor?.competitorPriceUsd || 0);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+export function canDeleteGalleryImage(image) {
+    return !!(image?.canDelete && /^bpi:[1-9][0-9]*$/.test(image?.referenceToken || ""));
+}
 
 const DETAIL_TABS = [
     { id: "overview", label: "Overview", icon: "fa-bar-chart" },
@@ -106,7 +118,7 @@ const SUBCATEGORY_ALIASES = {
     restauraciones: "restauracion",
 };
 
-class ProductIntelligenceAction extends Component {
+export class ProductIntelligenceAction extends Component {
     setup() {
         this.rpc = useService("rpc");
         this.notification = useService("notification");
@@ -119,6 +131,8 @@ class ProductIntelligenceAction extends Component {
         this.chatQuickActions = CHAT_QUICK_ACTIONS;
         this.dashboardReloadTimer = null;
         this.seoJobPollTimer = null;
+        this.detailLoadSequence = 0;
+        this.chatRequestSequence = 0;
 
         this.state = useState({
             loading: true,
@@ -589,6 +603,13 @@ class ProductIntelligenceAction extends Component {
             discoveredCompetitors: [],
             discoveryQuery: "",
         };
+        this.state.chatMessages = (data.chatHistory || []).slice(-100).map((message) => ({
+            role: message.role,
+            content: message.content || "",
+        }));
+        this.state.chatSessionKey = data.chatSessionId || "";
+        this.state.chatInput = "";
+        this.state.chatBusy = false;
         this.state.exchangeRate = data.exchangeRate || this.state.exchangeRate || 1650;
         this.state.exchangeRateInput = String(this.state.exchangeRate || 1650);
     }
@@ -599,19 +620,37 @@ class ProductIntelligenceAction extends Component {
             await this.loadDashboard();
             return;
         }
+        const loadSequence = ++this.detailLoadSequence;
+        if (String(currentId) !== String(this.state.productId || "")) {
+            ++this.chatRequestSequence;
+            this.state.productId = currentId;
+            this.state.detail = null;
+            this.state.chatMessages = [];
+            this.state.chatSessionKey = "";
+            this.state.chatInput = "";
+            this.state.chatBusy = false;
+        }
         this.state.loading = true;
         this.state.error = "";
         try {
             const data = await this.rpc("/bader_product_intelligence/data", {
                 product_tmpl_id: currentId,
             });
+            if (loadSequence !== this.detailLoadSequence) {
+                return;
+            }
             this.state.productId = currentId;
             this.state.viewMode = "detail";
             this.applyDetailPayload(data);
         } catch (error) {
+            if (loadSequence !== this.detailLoadSequence) {
+                return;
+            }
             this.state.error = this.errorMessage(error, "No se pudo cargar el detalle del producto.");
         } finally {
-            this.state.loading = false;
+            if (loadSequence === this.detailLoadSequence) {
+                this.state.loading = false;
+            }
         }
     }
 
@@ -625,6 +664,10 @@ class ProductIntelligenceAction extends Component {
 
     currentImages() {
         return (this.state.detail && this.state.detail.images) || [];
+    }
+
+    referenceableImages() {
+        return this.currentImages().filter((image) => image.canReference && image.referenceToken);
     }
 
     currentCompetitors() {
@@ -859,6 +902,30 @@ class ProductIntelligenceAction extends Component {
         return `USD $${Number(value || 0).toFixed(2)}`;
     }
 
+    formatCompetitorPrice(value, currency) {
+        const numericValue = Number(value || 0);
+        const rawCurrency = String(currency || "").trim();
+        const currencyCode = rawCurrency.toUpperCase();
+        if (currencyCode === "ARS" || currencyCode === "AR$" || currencyCode === "$") {
+            return this.formatARS(numericValue);
+        }
+        if (currencyCode === "USD" || currencyCode === "US$" || currencyCode === "U$S") {
+            return this.formatUSD(numericValue);
+        }
+        if (/^[A-Z]{3}$/.test(currencyCode)) {
+            try {
+                return new Intl.NumberFormat("es-AR", {
+                    style: "currency",
+                    currency: currencyCode,
+                    maximumFractionDigits: 2,
+                }).format(numericValue);
+            } catch (_error) {
+                // Fall back to the raw code without pretending it is ARS or USD.
+            }
+        }
+        return `${rawCurrency || "MONEDA"} ${numericValue.toFixed(2)}`;
+    }
+
     formatNumber(value) {
         return new Intl.NumberFormat("es-AR").format(Number(value || 0));
     }
@@ -965,12 +1032,13 @@ class ProductIntelligenceAction extends Component {
     }
 
     averageCompetitorPrice() {
-        const competitors = this.currentCompetitors().filter((item) => item.competitorPrice);
-        if (!competitors.length) {
+        const prices = this.currentCompetitors()
+            .map((item) => competitorComparablePriceUsd(item))
+            .filter((price) => price > 0);
+        if (!prices.length) {
             return 0;
         }
-        const total = competitors.reduce((sum, item) => sum + Number(item.competitorPrice || 0), 0);
-        return total / competitors.length;
+        return prices.reduce((sum, price) => sum + price, 0) / prices.length;
     }
 
     priceVsCompetition() {
@@ -984,8 +1052,8 @@ class ProductIntelligenceAction extends Component {
 
     competitorPriceRange() {
         const prices = this.currentCompetitors()
-            .filter((item) => item.competitorPrice)
-            .map((item) => Number(item.competitorPrice || 0))
+            .map((item) => competitorComparablePriceUsd(item))
+            .filter((price) => price > 0)
             .sort((left, right) => left - right);
         return {
             min: prices.length ? prices[0] : 0,
@@ -1035,9 +1103,6 @@ class ProductIntelligenceAction extends Component {
 
     selectTab(tabId) {
         this.state.activeTab = tabId;
-        if (tabId === "chat") {
-            this.loadChatHistory();
-        }
     }
 
     updateProductField(field, value) {
@@ -1397,6 +1462,16 @@ class ProductIntelligenceAction extends Component {
     handleFileUpload(ev) {
         const file = ev.target.files && ev.target.files[0];
         if (!file) return;
+        if (!ALLOWED_IMAGE_UPLOAD_TYPES.has(file.type)) {
+            this.notify("Solo se permiten imágenes PNG, JPEG o WebP.", "warning");
+            ev.target.value = "";
+            return;
+        }
+        if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+            this.notify("La imagen supera el tamaño máximo permitido de 10 MiB.", "warning");
+            ev.target.value = "";
+            return;
+        }
         const reader = new FileReader();
         reader.onload = (e) => {
             this.state.imageForm.uploadedRefUrl = e.target.result;
@@ -1553,9 +1628,6 @@ class ProductIntelligenceAction extends Component {
             if (this.state.imageForm.uploadedRefUrl) {
                 payload.uploaded_ref = this.state.imageForm.uploadedRefUrl;
             }
-            if (this.state.imageForm.selectedGalleryUrl) {
-                payload.selected_image_url = this.state.imageForm.selectedGalleryUrl;
-            }
             const result = await this.rpc("/bader_product_intelligence/generate_image", payload);
             const previewUrl = result.previewUrl || "";
 
@@ -1610,14 +1682,15 @@ class ProductIntelligenceAction extends Component {
         }
     }
 
-    async deleteImage(imageId) {
-        if (imageId === "main") {
+    async deleteImage(image) {
+        if (!canDeleteGalleryImage(image)) {
             return;
         }
         this.state.imageBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/delete_image", {
-                image_id: imageId,
+                product_tmpl_id: this.state.productId,
+                image_token: image.referenceToken,
             });
             await this.loadDetail(this.state.productId);
             this.notify("Imagen eliminada.");
@@ -1691,6 +1764,7 @@ class ProductIntelligenceAction extends Component {
         this.state.competitorBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/scrape_competitor", {
+                product_tmpl_id: this.state.productId,
                 competitor_id: competitorId,
             });
             await this.loadDetail(this.state.productId);
@@ -1706,6 +1780,7 @@ class ProductIntelligenceAction extends Component {
         this.state.competitorBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/analyze_competitor", {
+                product_tmpl_id: this.state.productId,
                 competitor_id: competitorId,
             });
             await this.loadDetail(this.state.productId);
@@ -1721,6 +1796,7 @@ class ProductIntelligenceAction extends Component {
         this.state.competitorBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/delete_competitor", {
+                product_tmpl_id: this.state.productId,
                 competitor_id: competitorId,
             });
             await this.loadDetail(this.state.productId);
@@ -1799,6 +1875,12 @@ class ProductIntelligenceAction extends Component {
         if (!msg || this.state.chatBusy) {
             return;
         }
+        if (msg.length > MAX_CHAT_MESSAGE_LENGTH) {
+            this.notify("El mensaje supera el límite de 4000 caracteres.", "warning");
+            return;
+        }
+        const requestProductId = this.state.productId;
+        const requestSequence = ++this.chatRequestSequence;
         this.state.chatMessages.push({ role: "user", content: msg });
         this.state.chatInput = "";
         this.state.chatBusy = true;
@@ -1808,12 +1890,20 @@ class ProductIntelligenceAction extends Component {
                 message: msg,
                 session_id: this.state.chatSessionKey || false,
             });
+            if (requestSequence !== this.chatRequestSequence || String(requestProductId) !== String(this.state.productId)) {
+                return;
+            }
             this.state.chatMessages.push({ role: "assistant", content: result.response });
             this.state.chatSessionKey = result.sessionId || this.state.chatSessionKey;
         } catch (error) {
+            if (requestSequence !== this.chatRequestSequence || String(requestProductId) !== String(this.state.productId)) {
+                return;
+            }
             this.state.chatMessages.push({ role: "assistant", content: "Error: " + this.errorMessage(error, "No se pudo obtener respuesta.") });
         } finally {
-            this.state.chatBusy = false;
+            if (requestSequence === this.chatRequestSequence && String(requestProductId) === String(this.state.productId)) {
+                this.state.chatBusy = false;
+            }
         }
     }
 
@@ -1825,29 +1915,7 @@ class ProductIntelligenceAction extends Component {
     }
 
     useChatQuickAction(action) {
-        this.state.chatMessages.push({ role: "user", content: action });
         this.sendChatMessage(action);
-    }
-
-    async loadChatHistory() {
-        if (this.state.chatMessages.length || !this.state.productId) {
-            return;
-        }
-        try {
-            const data = await this.rpc("/bader_product_intelligence/data", {
-                product_tmpl_id: this.state.productId,
-            });
-            const messages = (data && data.chatHistory) || [];
-            if (messages.length) {
-                this.state.chatSessionKey = data.chatSessionId || "";
-                this.state.chatMessages = messages.map((m) => ({
-                    role: m.role,
-                    content: m.content,
-                }));
-            }
-        } catch (_e) {
-            // Silent fail
-        }
     }
 
     detailScoreCards() {

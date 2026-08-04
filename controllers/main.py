@@ -17,17 +17,25 @@ class BaderProductIntelligenceController(http.Controller):
             raise MissingError("Producto no encontrado.")
         return product
 
-    def _competitor(self, competitor_id):
+    def _competitor(self, product, competitor_id):
         self._ensure_manager()
-        competitor = request.env["bpi.product.competitor"].browse(int(competitor_id)).exists()
-        if not competitor:
+        try:
+            record_id = int(competitor_id)
+        except (TypeError, ValueError) as error:
+            raise MissingError("Competidor no encontrado.") from error
+        competitor = request.env["bpi.product.competitor"].browse(record_id).exists()
+        if not competitor or competitor.product_tmpl_id != product:
             raise MissingError("Competidor no encontrado.")
         return competitor
 
-    def _image(self, image_id):
+    def _image(self, product, image_token):
         self._ensure_manager()
-        image = request.env["bpi.product.image"].browse(int(image_id)).exists()
-        if not image:
+        token = image_token if isinstance(image_token, str) else ""
+        token_parts = token.split(":")
+        if len(token_parts) != 2 or token_parts[0] != "bpi" or not token_parts[1].isdigit() or int(token_parts[1]) <= 0:
+            raise MissingError("Imagen no encontrada.")
+        image = request.env["bpi.product.image"].browse(int(token_parts[1])).exists()
+        if not image or image.product_tmpl_id != product:
             raise MissingError("Imagen no encontrada.")
         return image
 
@@ -151,8 +159,9 @@ class BaderProductIntelligenceController(http.Controller):
         return {"success": True, "image": image}
 
     @http.route("/bader_product_intelligence/delete_image", type="json", auth="user")
-    def delete_image(self, image_id, **kwargs):
-        image = self._image(image_id)
+    def delete_image(self, product_tmpl_id, image_token, **kwargs):
+        product = self._product(product_tmpl_id)
+        image = self._image(product, image_token)
         request.env["bpi.service"].delete_image(image)
         return {"success": True}
 
@@ -168,20 +177,23 @@ class BaderProductIntelligenceController(http.Controller):
         return {"success": True, "competitor": competitor}
 
     @http.route("/bader_product_intelligence/scrape_competitor", type="json", auth="user")
-    def scrape_competitor(self, competitor_id, **kwargs):
-        competitor = self._competitor(competitor_id)
+    def scrape_competitor(self, product_tmpl_id, competitor_id, **kwargs):
+        product = self._product(product_tmpl_id)
+        competitor = self._competitor(product, competitor_id)
         payload = request.env["bpi.service"].scrape_competitor(competitor)
         return {"success": True, "competitor": payload}
 
     @http.route("/bader_product_intelligence/analyze_competitor", type="json", auth="user")
-    def analyze_competitor(self, competitor_id, **kwargs):
-        competitor = self._competitor(competitor_id)
+    def analyze_competitor(self, product_tmpl_id, competitor_id, **kwargs):
+        product = self._product(product_tmpl_id)
+        competitor = self._competitor(product, competitor_id)
         payload = request.env["bpi.service"].analyze_competitor(competitor)
         return {"success": True, "competitor": payload}
 
     @http.route("/bader_product_intelligence/delete_competitor", type="json", auth="user")
-    def delete_competitor(self, competitor_id, **kwargs):
-        competitor = self._competitor(competitor_id)
+    def delete_competitor(self, product_tmpl_id, competitor_id, **kwargs):
+        product = self._product(product_tmpl_id)
+        competitor = self._competitor(product, competitor_id)
         competitor.unlink()
         return {"success": True}
 

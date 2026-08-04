@@ -135,6 +135,19 @@ class BPIProductCompetitor(models.Model):
 
     def bpi_to_payload(self):
         self.ensure_one()
+        exchange_rate = self.product_tmpl_id._bpi_exchange_rate()
+        service = self.env["bpi.service"]
+        price_usd = service._competitor_price_to_usd(
+            self.competitor_price,
+            self.competitor_currency,
+            exchange_rate,
+        )
+        offer_price_usd = service._competitor_price_to_usd(
+            self.competitor_offer_price,
+            self.competitor_currency,
+            exchange_rate,
+        )
+        comparison_price_usd = offer_price_usd or price_usd
         return {
             "id": self.id,
             "competitorName": self.competitor_name,
@@ -142,6 +155,9 @@ class BPIProductCompetitor(models.Model):
             "competitorPrice": self.competitor_price,
             "competitorOfferPrice": self.competitor_offer_price,
             "competitorCurrency": self.competitor_currency,
+            "competitorPriceUsd": price_usd,
+            "competitorOfferPriceUsd": offer_price_usd,
+            "priceComparisonAvailable": bool(comparison_price_usd and self.product_tmpl_id.list_price),
             "competitorTitle": self.competitor_title or "",
             "competitorDescription": self.competitor_description or "",
             "competitorFeatures": self.competitor_features or [],
@@ -203,6 +219,12 @@ class BPIProductChatMessage(models.Model):
 class BPIService(models.AbstractModel):
     _name = "bpi.service"
     _description = "Producto Intelligence Service"
+
+    _MAX_IMAGE_BYTES = 10 * 1024 * 1024
+    _MAX_IMAGE_REDIRECTS = 5
+    _ALLOWED_IMAGE_MIMES = frozenset(("image/png", "image/jpeg", "image/webp"))
+    _MAX_CHAT_MESSAGE_LENGTH = 4000
+    _MAX_CHAT_CONTEXT_MESSAGES = 12
 
     _CATEGORY_NICHE_ALIASES = {
         "clinica": "clinica",
@@ -437,41 +459,75 @@ class BPIService(models.AbstractModel):
                 error_type = openai_error.get("type") or ""
                 error_code = openai_error.get("code") or ""
                 error_label = error_code or error_type or "unknown"
+                if not isinstance(error_label, str) or not re.fullmatch(r"[a-zA-Z0-9_.-]{1,64}", error_label):
+                    error_label = "unknown"
 
                 if status in (401, 403):
-                    _logger.warning("OpenAI authentication/permission error for %s: %s", path, error_label)
+                    _logger.warning(
+                        "OpenAI request failed operation=%s status=%s code=%s",
+                        path,
+                        status,
+                        error_label,
+                    )
                     raise UserError(
                         _("La API Key de OpenAI no es valida o no tiene permisos para este proyecto. Configura una API Key activa en Ajustes.")
                     ) from error
 
                 if status == 400 and error_label in ("model_not_found", "invalid_request_error"):
-                    _logger.warning("OpenAI request/configuration error for %s: %s", path, error_label)
+                    _logger.warning(
+                        "OpenAI request failed operation=%s status=%s code=%s",
+                        path,
+                        status,
+                        error_label,
+                    )
                     raise UserError(
                         _("El modelo/configuracion de OpenAI no esta disponible para esta API Key. Revisa el modelo configurado en Ajustes.")
                     ) from error
 
                 if status == 429 and error_label in ("billing_not_active", "insufficient_quota", "quota_exceeded"):
-                    _logger.error("OpenAI billing/quota error for %s: %s", path, error_label)
+                    _logger.error(
+                        "OpenAI request failed operation=%s status=%s code=%s",
+                        path,
+                        status,
+                        error_label,
+                    )
                     raise UserError(
                         _("La cuenta/proyecto de OpenAI no tiene billing o creditos activos. Activa billing/creditos en OpenAI o configura una API Key de un proyecto activo.")
                     ) from error
 
                 if status == 429 and attempt < max_retries - 1:
                     wait = 3 * (2 ** attempt)  # 3, 6, 12, 24, 48
-                    _logger.warning("OpenAI 429 rate-limited (%s), retrying in %ss (attempt %s/%s)", error_label, wait, attempt + 1, max_retries)
+                    _logger.warning(
+                        "OpenAI request retry operation=%s status=429 code=%s wait_seconds=%s attempt=%s max_attempts=%s",
+                        path,
+                        error_label,
+                        wait,
+                        attempt + 1,
+                        max_retries,
+                    )
                     _time.sleep(wait)
                     continue
                 if status == 429:
-                    _logger.error("OpenAI rate limit exhausted after %s retries (%s)", max_retries, error_label)
+                    _logger.error(
+                        "OpenAI request failed operation=%s status=429 code=%s attempts=%s",
+                        path,
+                        error_label,
+                        max_retries,
+                    )
                     raise UserError(
                         _("Límite de uso de OpenAI alcanzado. Espera 1-2 minutos e intenta de nuevo.")
                     ) from error
-                _logger.exception("OpenAI request failed for %s (%s)", path, error_label)
+                _logger.warning(
+                    "OpenAI request failed operation=%s status=%s code=%s",
+                    path,
+                    status or 0,
+                    error_label,
+                )
                 raise UserError(
                     _("No se pudo completar la solicitud a OpenAI. Revisa la configuracion e intenta de nuevo.")
                 ) from error
             except ValueError as error:
-                _logger.exception("OpenAI returned a non-JSON response for %s", path)
+                _logger.warning("OpenAI returned non-JSON operation=%s code=invalid_json", path)
                 raise UserError(_("OpenAI devolvio una respuesta invalida.")) from error
 
     @api.model
@@ -509,39 +565,70 @@ class BPIService(models.AbstractModel):
         try:
             return json.loads(text)
         except ValueError as error:
-            _logger.exception("OpenAI returned invalid JSON: %s", text[:500])
+            _logger.warning("OpenAI returned invalid JSON operation=json_decode")
             raise UserError(_("OpenAI devolvio JSON invalido para esta accion.")) from error
 
     @api.model
-    def _image_mime_from_base64(self, encoded):
-        try:
-            raw = base64.b64decode(encoded)
-        except Exception:
+    def _image_mime_from_raw(self, raw):
+        if raw.startswith(b"\x89PNG\r\n\x1a\n"):
             return "image/png"
-        signatures = (
-            (b"\x89PNG\r\n\x1a\n", "image/png"),
-            (b"\xff\xd8\xff", "image/jpeg"),
-            (b"GIF87a", "image/gif"),
-            (b"GIF89a", "image/gif"),
-            (b"RIFF", "image/webp"),
-        )
-        for signature, mime_type in signatures:
-            if raw.startswith(signature):
-                if mime_type == "image/webp" and raw[8:12] != b"WEBP":
-                    continue
-                return mime_type
-        return "image/png"
+        if raw.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        if len(raw) >= 12 and raw.startswith(b"RIFF") and raw[8:12] == b"WEBP":
+            return "image/webp"
+        return False
+
+    @api.model
+    def _decode_image_base64(self, encoded, claimed_mime=False):
+        if isinstance(encoded, bytes):
+            try:
+                encoded = encoded.decode("ascii")
+            except UnicodeDecodeError as error:
+                raise UserError(_("La imagen no contiene base64 válido.")) from error
+        if not isinstance(encoded, str) or not encoded.strip():
+            raise UserError(_("La imagen no contiene base64 válido."))
+
+        normalized = re.sub(r"\s+", "", encoded)
+        max_encoded_length = ((self._MAX_IMAGE_BYTES + 2) // 3) * 4
+        if len(normalized) > max_encoded_length:
+            raise UserError(_("La imagen supera el tamaño máximo permitido de 10 MiB."))
+        try:
+            raw = base64.b64decode(normalized, validate=True)
+        except Exception as error:
+            raise UserError(_("La imagen no contiene base64 válido.")) from error
+        if len(raw) > self._MAX_IMAGE_BYTES:
+            raise UserError(_("La imagen supera el tamaño máximo permitido de 10 MiB."))
+
+        detected_mime = self._image_mime_from_raw(raw)
+        if detected_mime not in self._ALLOWED_IMAGE_MIMES:
+            raise UserError(_("Solo se permiten imágenes PNG, JPEG o WebP."))
+        normalized_claim = (claimed_mime or "").split(";", 1)[0].strip().lower()
+        if normalized_claim and normalized_claim not in self._ALLOWED_IMAGE_MIMES:
+            raise UserError(_("Solo se permiten imágenes PNG, JPEG o WebP."))
+        if normalized_claim and normalized_claim != detected_mime:
+            raise UserError(_("El tipo MIME no coincide con el contenido de la imagen."))
+        return raw, detected_mime
+
+    @api.model
+    def _parse_image_data_url(self, data_url):
+        if not isinstance(data_url, str):
+            raise UserError(_("No llegó una imagen válida para guardar."))
+        match = re.match(r"^data:([^;,]+);base64,(.+)$", data_url.strip(), re.I | re.S)
+        if not match:
+            raise UserError(_("No llegó una imagen válida para guardar."))
+        claimed_mime = match.group(1).strip().lower()
+        encoded = re.sub(r"\s+", "", match.group(2))
+        raw, detected_mime = self._decode_image_base64(encoded, claimed_mime=claimed_mime)
+        return raw, detected_mime, encoded
 
     @api.model
     def _binary_to_openai_image(self, binary_value, filename="reference.png"):
         if not binary_value:
             return False
-        encoded = binary_value.decode() if isinstance(binary_value, bytes) else binary_value
         try:
-            raw = base64.b64decode(encoded)
-        except Exception:
+            raw, mime_type = self._decode_image_base64(binary_value)
+        except UserError:
             return False
-        mime_type = self._image_mime_from_base64(encoded)
         return {
             "filename": filename,
             "mime_type": mime_type,
@@ -550,16 +637,9 @@ class BPIService(models.AbstractModel):
 
     @api.model
     def _data_url_to_openai_image(self, data_url, filename="uploaded-reference.png"):
-        if not data_url or "," not in data_url:
+        if not data_url:
             return False
-        meta, encoded = data_url.split(",", 1)
-        mime_type = "image/png"
-        if ":" in meta and ";" in meta:
-            mime_type = meta.split(":", 1)[1].split(";", 1)[0] or "image/png"
-        try:
-            raw = base64.b64decode(encoded)
-        except Exception:
-            return False
+        raw, mime_type, _encoded = self._parse_image_data_url(data_url)
         return {
             "filename": filename,
             "mime_type": mime_type,
@@ -568,42 +648,62 @@ class BPIService(models.AbstractModel):
 
     @api.model
     def _reference_images(self, product, reference_tokens):
+        product.ensure_one()
+        if reference_tokens is None:
+            reference_tokens = []
+        if not isinstance(reference_tokens, (list, tuple)):
+            raise UserError(_("Las referencias de imagen no son válidas."))
+        if len(reference_tokens) > 8:
+            raise UserError(_("Selecciona como máximo 8 imágenes de referencia."))
+
         images = []
         for token in reference_tokens or []:
             if token == "main" and product.image_1920:
                 image = self._binary_to_openai_image(product.image_1920, "product-main.png")
-                if image:
-                    images.append(image)
+                if not image:
+                    raise UserError(_("La imagen principal no tiene un formato compatible."))
+                images.append(image)
                 continue
 
-            if token.startswith("bpi:"):
-                image_id = int(token.split(":")[1])
+            match = re.fullmatch(r"(bpi|odoo|variant):([1-9][0-9]*)", token if isinstance(token, str) else "")
+            if not match:
+                raise UserError(_("La referencia de imagen no es válida."))
+            reference_type, reference_id = match.groups()
+
+            if reference_type == "bpi":
+                image_id = int(reference_id)
                 image = self.env["bpi.product.image"].browse(image_id).exists()
-                if image and image.product_tmpl_id == product:
-                    image_payload = self._binary_to_openai_image(image.image_1920, "bpi-%s.png" % image.id)
-                    if image_payload:
-                        images.append(image_payload)
+                if not image or image.product_tmpl_id != product or image.state != "approved":
+                    raise UserError(_("La imagen de referencia no pertenece al producto."))
+                image_payload = self._binary_to_openai_image(image.image_1920, "bpi-%s.png" % image.id)
+                if not image_payload:
+                    raise UserError(_("La imagen de referencia no tiene un formato compatible."))
+                images.append(image_payload)
                 continue
 
-            if token.startswith("odoo:"):
-                image_id = int(token.split(":")[1])
+            if reference_type == "odoo":
+                image_id = int(reference_id)
                 image = self.env["product.image"].browse(image_id).exists()
-                if image and image.product_tmpl_id == product:
-                    image_payload = self._binary_to_openai_image(image.image_1920, "odoo-%s.png" % image.id)
-                    if image_payload:
-                        images.append(image_payload)
+                if not image or image.product_tmpl_id != product:
+                    raise UserError(_("La imagen de referencia no pertenece al producto."))
+                image_payload = self._binary_to_openai_image(image.image_1920, "odoo-%s.png" % image.id)
+                if not image_payload:
+                    raise UserError(_("La imagen de referencia no tiene un formato compatible."))
+                images.append(image_payload)
                 continue
 
-            if token.startswith("variant:"):
-                variant_id = int(token.split(":")[1])
+            if reference_type == "variant":
+                variant_id = int(reference_id)
                 variant = self.env["product.product"].browse(variant_id).exists()
-                if variant and variant.product_tmpl_id == product:
-                    image_payload = self._binary_to_openai_image(
-                        variant.image_1920 or getattr(variant, "image_variant_1920", False),
-                        "variant-%s.png" % variant.id,
-                    )
-                    if image_payload:
-                        images.append(image_payload)
+                if not variant or variant.product_tmpl_id != product:
+                    raise UserError(_("La imagen de referencia no pertenece al producto."))
+                image_payload = self._binary_to_openai_image(
+                    variant.image_1920 or getattr(variant, "image_variant_1920", False),
+                    "variant-%s.png" % variant.id,
+                )
+                if not image_payload:
+                    raise UserError(_("La imagen de referencia no tiene un formato compatible."))
+                images.append(image_payload)
         return images
 
     @api.model
@@ -626,6 +726,26 @@ class BPIService(models.AbstractModel):
         if diff < -0.10:
             return "cheaper"
         return "similar"
+
+    @api.model
+    def _competitor_price_to_usd(self, price, currency, exchange_rate):
+        try:
+            numeric_price = float(price or 0.0)
+        except (TypeError, ValueError):
+            return False
+        if numeric_price <= 0:
+            return False
+
+        currency_code = re.sub(r"\s+", "", str(currency or "").upper())
+        if currency_code in ("USD", "US$", "U$S"):
+            return numeric_price
+        if currency_code in ("ARS", "AR$", "$"):
+            try:
+                numeric_rate = float(exchange_rate or 0.0)
+            except (TypeError, ValueError):
+                return False
+            return numeric_price / numeric_rate if numeric_rate > 0 else False
+        return False
 
     @api.model
     def _extract_meta_tag(self, html, tag_name):
@@ -1605,12 +1725,7 @@ Reglas:
     @api.model
     def save_generated_image(self, product, data_url, prompt):
         product.ensure_one()
-        if not data_url or "," not in data_url:
-            raise UserError(_("No llegó una imagen válida para guardar."))
-        meta, encoded = data_url.split(",", 1)
-        mime_type = "image/png"
-        if ";" in meta and ":" in meta:
-            mime_type = meta.split(":", 1)[1].split(";", 1)[0]
+        _raw, mime_type, encoded = self._parse_image_data_url(data_url)
         image = self.env["bpi.product.image"].create(
             {
                 "product_tmpl_id": product.id,
@@ -1625,30 +1740,93 @@ Reglas:
         )
         return {
             "id": image.id,
+            "referenceToken": "bpi:%s" % image.id,
+            "canReference": True,
+            "canDelete": True,
             "imageUrl": "/web/image/bpi.product.image/%s/image_1920" % image.id,
         }
 
     @api.model
+    def _download_external_image(self, image_url):
+        current_url = self._validate_external_url(image_url)
+        headers = {
+            "User-Agent": "BaderProductIntelligence/1.0",
+            "Accept": "image/png,image/jpeg,image/webp",
+        }
+        response = None
+        for redirect_count in range(self._MAX_IMAGE_REDIRECTS + 1):
+            current_url = self._validate_external_url(current_url)
+            host = (urlparse(current_url).hostname or "unknown").lower()
+            try:
+                response = requests.get(
+                    current_url,
+                    headers=headers,
+                    timeout=90,
+                    allow_redirects=False,
+                    stream=True,
+                )
+            except requests.RequestException as error:
+                _logger.warning("External image download failed operation=download host=%s code=request_error", host)
+                raise UserError(_("No se pudo descargar la imagen externa.")) from error
+
+            if response.status_code in (301, 302, 303, 307, 308):
+                location = response.headers.get("Location")
+                response.close()
+                response = None
+                if not location or redirect_count >= self._MAX_IMAGE_REDIRECTS:
+                    raise UserError(_("La imagen externa superó el límite de redirecciones."))
+                current_url = urljoin(current_url, location)
+                continue
+            break
+
+        if response is None:
+            raise UserError(_("No se pudo descargar la imagen externa."))
+
+        host = (urlparse(current_url).hostname or "unknown").lower()
+        try:
+            response.raise_for_status()
+            claimed_mime = (response.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+            if claimed_mime not in self._ALLOWED_IMAGE_MIMES:
+                raise UserError(_("Solo se permiten imágenes PNG, JPEG o WebP."))
+
+            try:
+                content_length = int(response.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                content_length = 0
+            if content_length > self._MAX_IMAGE_BYTES:
+                raise UserError(_("La imagen supera el tamaño máximo permitido de 10 MiB."))
+
+            chunks = []
+            total_bytes = 0
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                total_bytes += len(chunk)
+                if total_bytes > self._MAX_IMAGE_BYTES:
+                    raise UserError(_("La imagen supera el tamaño máximo permitido de 10 MiB."))
+                chunks.append(chunk)
+            raw = b"".join(chunks)
+            detected_mime = self._image_mime_from_raw(raw)
+            if detected_mime not in self._ALLOWED_IMAGE_MIMES:
+                raise UserError(_("Solo se permiten imágenes PNG, JPEG o WebP."))
+            if claimed_mime != detected_mime:
+                raise UserError(_("El tipo MIME no coincide con el contenido de la imagen."))
+            return raw, detected_mime
+        except requests.RequestException as error:
+            _logger.warning(
+                "External image download failed operation=download host=%s status=%s code=http_error",
+                host,
+                getattr(response, "status_code", 0),
+            )
+            raise UserError(_("No se pudo descargar la imagen externa.")) from error
+        finally:
+            response.close()
+
+    @api.model
     def add_image_from_url(self, product, image_url):
         product.ensure_one()
-        clean_url = self._validate_external_url(image_url)
-        try:
-            response = requests.get(clean_url, timeout=90)
-            response.raise_for_status()
-        except requests.RequestException as error:
-            _logger.exception("Unable to download image from %s", clean_url)
-            raise UserError(_("No se pudo descargar la imagen externa.")) from error
-
-        mime_type = (response.headers.get("Content-Type") or "image/png").split(";", 1)[0]
-        if not mime_type.startswith("image/"):
-            raise UserError(_("La URL indicada no devolvió una imagen válida."))
-        content_length = int(response.headers.get("Content-Length") or 0)
-        if content_length and content_length > 10 * 1024 * 1024:
-            raise UserError(_("La imagen supera el tamaño máximo permitido de 10 MB."))
-        if len(response.content or b"") > 10 * 1024 * 1024:
-            raise UserError(_("La imagen supera el tamaño máximo permitido de 10 MB."))
-
-        encoded = base64.b64encode(response.content).decode()
+        raw, mime_type = self._download_external_image(image_url)
+        encoded = base64.b64encode(raw).decode()
         image = self.env["bpi.product.image"].create(
             {
                 "product_tmpl_id": product.id,
@@ -1663,6 +1841,9 @@ Reglas:
         )
         return {
             "id": image.id,
+            "referenceToken": "bpi:%s" % image.id,
+            "canReference": True,
+            "canDelete": True,
             "imageUrl": "/web/image/bpi.product.image/%s/image_1920" % image.id,
         }
 
@@ -1817,8 +1998,8 @@ Reglas:
                     timeout=15,
                 )
             response.raise_for_status()
-        except requests.RequestException as error:
-            _logger.warning("Competitor search failed for query %s: %s", query, error)
+        except requests.RequestException:
+            _logger.warning("Competitor search failed operation=duckduckgo code=request_error")
             return []
 
         html_text = response.text or ""
@@ -2227,6 +2408,11 @@ CANDIDATOS:
             h2_tags,
         )
         compared_price = offer_price or price
+        compared_price_usd = self._competitor_price_to_usd(
+            compared_price,
+            currency,
+            competitor.product_tmpl_id._bpi_exchange_rate(),
+        )
         competitor.write(
             {
                 "competitor_title": meta_title or competitor.competitor_title or competitor.competitor_name,
@@ -2235,7 +2421,10 @@ CANDIDATOS:
                 "competitor_offer_price": offer_price or False,
                 "competitor_currency": currency or "ARS",
                 "competitor_features": features,
-                "price_comparison": self._detect_price_comparison(competitor.product_tmpl_id.list_price, compared_price),
+                "price_comparison": self._detect_price_comparison(
+                    competitor.product_tmpl_id.list_price,
+                    compared_price_usd,
+                ),
                 "meta_title": meta_title or "",
                 "meta_description": meta_description or "",
                 "meta_keywords": meta_keywords,
@@ -2291,9 +2480,12 @@ CANDIDATOS:
                 response.raise_for_status()
                 payload = response.json()
                 return self._apply_competitor_scrape_data(competitor, payload.get("data") or payload, source="firecrawl")
-            except (requests.RequestException, ValueError, UserError) as error:
-                firecrawl_error = str(error)
-                _logger.warning("Firecrawl scrape failed for competitor %s; falling back to direct HTTP.", competitor.id, exc_info=True)
+            except (requests.RequestException, ValueError, UserError):
+                firecrawl_error = True
+                _logger.warning(
+                    "Firecrawl scrape failed operation=scrape competitor_id=%s code=request_error fallback=direct_http",
+                    competitor.id,
+                )
 
         try:
             direct_data = self._fetch_competitor_direct(safe_url)
@@ -2482,23 +2674,36 @@ Competidores:
     @api.model
     def chat_with_product(self, product, message, session_key=False):
         product.ensure_one()
-        session = self.env["bpi.product.chat.session"].search(
-            [("product_tmpl_id", "=", product.id), ("session_key", "=", session_key)],
-            limit=1,
-        )
+        clean_message = (message or "").strip() if isinstance(message, str) else ""
+        if not clean_message:
+            raise UserError(_("Escribe un mensaje para Nancy AI."))
+        if len(clean_message) > self._MAX_CHAT_MESSAGE_LENGTH:
+            raise UserError(_("El mensaje supera el límite de 4000 caracteres."))
+
+        clean_session_key = session_key.strip() if isinstance(session_key, str) else ""
+        session = self.env["bpi.product.chat.session"]
+        if clean_session_key:
+            session = session.search(
+                [("product_tmpl_id", "=", product.id), ("session_key", "=", clean_session_key)],
+                limit=1,
+            )
         if not session:
             session = self.env["bpi.product.chat.session"].create(
                 {
                     "product_tmpl_id": product.id,
                     "name": _("Sesión %s") % product.name,
-                    "session_key": session_key or str(uuid.uuid4()),
+                    # Never reuse a client-provided key that was not found for
+                    # this product; it may belong to another product.
+                    "session_key": str(uuid.uuid4()),
                 }
             )
-        self.env["bpi.product.chat.message"].create({"session_id": session.id, "role": "user", "content": message})
+        self.env["bpi.product.chat.message"].create(
+            {"session_id": session.id, "role": "user", "content": clean_message}
+        )
         history = session.message_ids.sorted("id")
         history_lines = []
-        for item in history[-12:]:
-            history_lines.append("%s: %s" % (item.role, item.content))
+        for item in history[-self._MAX_CHAT_CONTEXT_MESSAGES:]:
+            history_lines.append("%s: %s" % (item.role, (item.content or "")[:self._MAX_CHAT_MESSAGE_LENGTH]))
         prompt = """Sos Nancy AI, agente de producto para Bader Argentina.
 
 Producto:
@@ -2516,8 +2721,7 @@ Objetivo:
 Historial:
 %(history)s
 
-Respondé al último mensaje del usuario:
-%(message)s
+Respondé al último mensaje del historial.
 """ % {
             "name": product.name,
             "sku": product.default_code or "",
@@ -2525,7 +2729,6 @@ Respondé al último mensaje del usuario:
             "price": product.list_price,
             "description": product.description_sale or product.description or "",
             "history": "\n".join(history_lines),
-            "message": message,
         }
         model_name = self._get_config("bader_product_intelligence.openai_text_model", "gpt-5.5")
         reply = self._openai_response(prompt, model_name=model_name)
