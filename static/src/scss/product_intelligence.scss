@@ -1565,6 +1565,141 @@ $bpi-orange: #ff8122;
     }
 }
 
+.o_action.bpi-app {
+    .bpi-product-kind-badges {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .bpi-variant-selector {
+        display: flex;
+        gap: 10px;
+        overflow-x: auto;
+        padding: 4px 2px 14px;
+        margin-bottom: 12px;
+    }
+
+    .bpi-variant-chip {
+        min-width: 160px;
+        border: 1px solid $bpi-line;
+        border-radius: 12px;
+        background: #fff;
+        color: $bpi-text;
+        padding: 10px 12px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 2px 10px;
+        text-align: left;
+
+        small {
+            color: $bpi-muted;
+        }
+
+        i {
+            grid-row: 1 / span 2;
+            grid-column: 2;
+            align-self: center;
+        }
+
+        &.is-active {
+            border-color: $bpi-green;
+            box-shadow: 0 0 0 2px rgba($bpi-green, .12);
+        }
+    }
+
+    .bpi-variant-image-preview {
+        min-height: 190px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 18px;
+        border: 1px dashed $bpi-line;
+        border-radius: 12px;
+        background: $bpi-mint;
+
+        img {
+            width: 150px;
+            height: 150px;
+            object-fit: contain;
+        }
+    }
+
+    .bpi-pack-panel {
+        margin-top: 20px;
+    }
+
+    .bpi-alert-list {
+        display: grid;
+        gap: 8px;
+        margin: 12px 0 18px;
+    }
+
+    .bpi-alert {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: #fff7e6;
+        color: #8a5a00;
+        border: 1px solid #f0d59a;
+    }
+
+    .bpi-pack-composition {
+        margin-top: 20px;
+    }
+
+    .bpi-pack-table {
+        .bpi-input--compact {
+            min-width: 90px;
+            max-width: 120px;
+        }
+    }
+
+    .bpi-pack-search {
+        margin-top: 18px;
+    }
+
+    .bpi-pack-search-results {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .bpi-pack-search-result {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border: 1px solid $bpi-line;
+        border-radius: 10px;
+        background: #fff;
+        color: $bpi-text;
+        padding: 10px 12px;
+        text-align: left;
+
+        span:first-child {
+            display: flex;
+            flex-direction: column;
+        }
+
+        small {
+            color: $bpi-muted;
+        }
+
+        &:hover {
+            border-color: $bpi-green;
+            background: rgba($bpi-green, .04);
+        }
+    }
+}
+
 .bpi-website-shell {
     margin: 32px 0;
     padding: 28px;

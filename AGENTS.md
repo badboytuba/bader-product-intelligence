@@ -67,3 +67,13 @@ Release `16.0.1.1.14` addresses the previously documented backend stabilization 
 - the Product Intelligence category action no longer replaces the native eCommerce category views.
 
 The website bridge view remains intentionally inactive; storefront rendering is outside this release.
+
+Release `16.0.1.2.1` is developed on `feature/bpi-pack-variant-control` as the Pack/variant release plus its Odoo 16 OWL compatibility hotfix:
+
+- explicit OCA dependencies: `product_pack`, `sale_product_pack`, `stock_product_pack`;
+- content/SEO/chat remain on `product.template`, while operational controls use `product.product`;
+- Pack composition updates require the external RPC key `packRevision` and are saved atomically;
+- Pack component search handles Enter in JavaScript because Odoo 16 OWL does not support the `.enter` event modifier;
+- ordinary products can only become Packs through the standard Odoo form;
+- public website Pack rendering and MRP Kits remain outside scope;
+- PROD stays untouched until QAS functional approval specific to `1.2.0`.

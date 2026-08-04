@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import hashlib
+import json
+import math
 import re
 import unicodedata
 
@@ -187,6 +190,277 @@ class ProductTemplate(models.Model):
     def _bpi_image_url(self, model_name, record_id, field_name="image_1920"):
         return "/web/image/%s/%s/%s" % (model_name, record_id, field_name)
 
+    def _bpi_all_variants(self):
+        self.ensure_one()
+        return self.with_context(active_test=False).product_variant_ids.sorted("id")
+
+    def _bpi_variant_attribute_payload(self, variant):
+        values = variant.product_template_variant_value_ids.sorted(
+            key=lambda value: (
+                value.attribute_id.sequence,
+                value.attribute_id.id,
+                value.product_attribute_value_id.sequence,
+                value.product_attribute_value_id.id,
+            )
+        )
+        return [
+            {
+                "attributeId": value.attribute_id.id,
+                "attributeName": value.attribute_id.name or "",
+                "valueId": value.product_attribute_value_id.id,
+                "valueName": value.product_attribute_value_id.name or "",
+            }
+            for value in values
+        ]
+
+    def _bpi_effective_variant_price(self, variant):
+        """Return the full amount represented by one sold variant/pack."""
+        self.ensure_one()
+        price = float(variant.lst_price or 0.0)
+        if not self.pack_ok:
+            return price
+        if self.pack_type == "detailed" and self.pack_component_price == "detailed":
+            for line in variant.pack_line_ids:
+                discount_factor = 1.0 - (float(line.sale_discount or 0.0) / 100.0)
+                price += float(line.product_id.lst_price or 0.0) * float(line.quantity or 0.0) * discount_factor
+        return price
+
+    def _bpi_variant_component_cost(self, variant, visited=None):
+        """Compute component cost recursively without creating stored data."""
+        visited = set(visited or ())
+        if variant.id in visited:
+            return float(variant.standard_price or 0.0)
+        visited.add(variant.id)
+        if not variant.pack_ok or not variant.pack_line_ids:
+            return float(variant.standard_price or 0.0)
+        return sum(
+            line.product_id.product_tmpl_id._bpi_variant_component_cost(
+                line.product_id,
+                visited=visited,
+            )
+            * float(line.quantity or 0.0)
+            for line in variant.pack_line_ids
+        )
+
+    def _bpi_variant_payload(self, variant):
+        self.ensure_one()
+        attributes = self._bpi_variant_attribute_payload(variant)
+        has_own_image = bool(variant.image_variant_1920)
+        image_url = False
+        if has_own_image:
+            image_url = self._bpi_image_url(variant._name, variant.id, "image_variant_1920")
+        elif self.image_1920:
+            image_url = self._bpi_image_url(self._name, self.id, "image_1920")
+        return {
+            "id": variant.id,
+            "productTemplateId": self.id,
+            "name": variant.display_name or self.name or "",
+            "attributeValues": attributes,
+            "attributeLabel": " / ".join(value["valueName"] for value in attributes),
+            "sku": variant.default_code or "",
+            "barcode": variant.barcode or "",
+            "active": bool(variant.active),
+            "priceExtraUsd": float(variant.price_extra or 0.0),
+            "effectivePriceUsd": self._bpi_effective_variant_price(variant),
+            "costUsd": float(variant.standard_price or 0.0),
+            "qtyAvailable": float(variant.qty_available or 0.0),
+            "freeQty": float(variant.free_qty or 0.0),
+            "virtualAvailable": float(variant.virtual_available or 0.0),
+            "incomingQty": float(variant.incoming_qty or 0.0),
+            "outgoingQty": float(variant.outgoing_qty or 0.0),
+            "inStock": bool((variant.qty_available or 0.0) > 0),
+            "hasOwnImage": has_own_image,
+            "imageUrl": image_url,
+            "imageToken": "variant:%s" % variant.id if has_own_image else False,
+        }
+
+    def _bpi_variant_summary(self, variant_payloads=None):
+        self.ensure_one()
+        variants = variant_payloads
+        if variants is None:
+            variants = [self._bpi_variant_payload(variant) for variant in self._bpi_all_variants()]
+        active_variants = [variant for variant in variants if variant["active"]]
+        range_variants = active_variants or variants
+        prices = [variant["effectivePriceUsd"] for variant in range_variants]
+        costs = [variant["costUsd"] for variant in range_variants]
+        return {
+            "count": len(variants),
+            "activeCount": len(active_variants),
+            "availableCount": len([variant for variant in active_variants if variant["inStock"]]),
+            "hasVariants": len(variants) > 1,
+            "effectivePriceMinUsd": min(prices) if prices else 0.0,
+            "effectivePriceMaxUsd": max(prices) if prices else 0.0,
+            "costMinUsd": min(costs) if costs else 0.0,
+            "costMaxUsd": max(costs) if costs else 0.0,
+        }
+
+    def _bpi_product_kind(self, variant_summary=None):
+        self.ensure_one()
+        summary = variant_summary or self._bpi_variant_summary()
+        if self.pack_ok and summary["hasVariants"]:
+            return "pack_variants"
+        if self.pack_ok:
+            return "pack"
+        if summary["hasVariants"]:
+            return "variants"
+        return "simple"
+
+    def _bpi_pack_revision(self):
+        self.ensure_one()
+        composition = []
+        for variant in self._bpi_all_variants():
+            composition.append(
+                {
+                    "variantId": variant.id,
+                    "lines": [
+                        {
+                            "id": line.id,
+                            "productId": line.product_id.id,
+                            "quantity": float(line.quantity or 0.0),
+                            "saleDiscount": float(line.sale_discount or 0.0),
+                        }
+                        for line in variant.pack_line_ids.sorted("id")
+                    ],
+                }
+            )
+        raw = json.dumps(
+            {
+                "packType": self.pack_type or "",
+                "componentPriceMode": self.pack_component_price or "",
+                "modifiable": bool(self.pack_modifiable),
+                "composition": composition,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _bpi_pack_payload(self):
+        self.ensure_one()
+        variants = self._bpi_all_variants()
+        if not self.pack_ok:
+            return {
+                "isPack": False,
+                "packType": False,
+                "componentPriceMode": False,
+                "modifiable": False,
+                "revision": False,
+                "componentCount": 0,
+                "effectivePriceMinUsd": 0.0,
+                "effectivePriceMaxUsd": 0.0,
+                "componentCostMinUsd": 0.0,
+                "componentCostMaxUsd": 0.0,
+                "marginMinPercent": 0.0,
+                "marginMaxPercent": 0.0,
+                "warnings": [],
+                "compositions": [],
+            }
+
+        warnings = []
+        compositions = []
+        effective_prices = []
+        component_costs = []
+        margins = []
+        for variant in variants:
+            components = []
+            for line in variant.pack_line_ids.sorted("id"):
+                component = line.product_id.with_context(active_test=False)
+                quantity = float(line.quantity or 0.0)
+                unit_price = float(component.lst_price or 0.0)
+                sale_discount = float(line.sale_discount or 0.0)
+                line_price = unit_price * quantity * (1.0 - sale_discount / 100.0)
+                unit_cost = component.product_tmpl_id._bpi_variant_component_cost(component)
+                possible_pack_qty = math.floor(max(float(component.free_qty or 0.0), 0.0) / quantity) if quantity else 0
+                if not component.active:
+                    warnings.append(
+                        _("El componente %s está archivado y debe revisarse.")
+                        % (component.display_name or component.id)
+                    )
+                components.append(
+                    {
+                        "lineId": line.id,
+                        "productVariantId": component.id,
+                        "productTemplateId": component.product_tmpl_id.id,
+                        "name": component.display_name or "",
+                        "sku": component.default_code or "",
+                        "active": bool(component.active),
+                        "isPack": bool(component.pack_ok),
+                        "quantity": quantity,
+                        "saleDiscount": sale_discount,
+                        "unitPriceUsd": unit_price,
+                        "linePriceUsd": line_price,
+                        "unitCostUsd": unit_cost,
+                        "lineCostUsd": unit_cost * quantity,
+                        "qtyAvailable": float(component.qty_available or 0.0),
+                        "freeQty": float(component.free_qty or 0.0),
+                        "possiblePackQty": possible_pack_qty,
+                        "imageUrl": component.product_tmpl_id._bpi_primary_image_url(),
+                    }
+                )
+            if not components:
+                warnings.append(
+                    _("La variante %s no tiene componentes configurados.")
+                    % (variant.display_name or variant.id)
+                )
+            effective_price = self._bpi_effective_variant_price(variant)
+            component_cost = self._bpi_variant_component_cost(variant)
+            margin = ((effective_price - component_cost) / effective_price * 100.0) if effective_price else 0.0
+            effective_prices.append(effective_price)
+            component_costs.append(component_cost)
+            margins.append(margin)
+            compositions.append(
+                {
+                    "variantId": variant.id,
+                    "variantName": variant.display_name or self.name or "",
+                    "qtyAvailable": float(variant.qty_available or 0.0),
+                    "freeQty": float(variant.free_qty or 0.0),
+                    "effectivePriceUsd": effective_price,
+                    "componentCostUsd": component_cost,
+                    "marginPercent": margin,
+                    "components": components,
+                }
+            )
+        return {
+            "isPack": True,
+            "packType": self.pack_type or "detailed",
+            "componentPriceMode": self.pack_component_price or "ignored",
+            "modifiable": bool(self.pack_modifiable),
+            "revision": self._bpi_pack_revision(),
+            "componentCount": sum(len(composition["components"]) for composition in compositions),
+            "effectivePriceMinUsd": min(effective_prices) if effective_prices else 0.0,
+            "effectivePriceMaxUsd": max(effective_prices) if effective_prices else 0.0,
+            "componentCostMinUsd": min(component_costs) if component_costs else 0.0,
+            "componentCostMaxUsd": max(component_costs) if component_costs else 0.0,
+            "marginMinPercent": min(margins) if margins else 0.0,
+            "marginMaxPercent": max(margins) if margins else 0.0,
+            "warnings": list(dict.fromkeys(warnings)),
+            "compositions": compositions,
+        }
+
+    def _bpi_ai_catalog_context(self):
+        self.ensure_one()
+        variants = self._bpi_all_variants()
+        lines = []
+        if len(variants) > 1:
+            lines.append(_("Variantes disponibles:"))
+            for variant in variants[:30]:
+                attributes = ", ".join(
+                    value["valueName"] for value in self._bpi_variant_attribute_payload(variant)
+                )
+                lines.append(
+                    "- %s | SKU %s | %s"
+                    % (attributes or variant.display_name, variant.default_code or "-", _("activa") if variant.active else _("archivada"))
+                )
+        if self.pack_ok:
+            lines.append(_("Composición del Pack:"))
+            for variant in variants[:20]:
+                for line in variant.pack_line_ids[:60]:
+                    lines.append(
+                        "- %s x %s"
+                        % (line.quantity, line.product_id.display_name or line.product_id.default_code or line.product_id.id)
+                    )
+        return "\n".join(lines)[:6000]
+
     def _bpi_append_image_entry(self, payload, seen_urls, image_url, **values):
         if not image_url or image_url in seen_urls:
             return
@@ -240,19 +514,14 @@ class ProductTemplate(models.Model):
                     canReference=True,
                 )
 
-        variant_records = self.product_variant_ids.sorted("id")
+        variant_records = self._bpi_all_variants()
         for index, variant in enumerate(variant_records, start=1):
-            field_name = ""
-            if variant.image_1920:
-                field_name = "image_1920"
-            elif getattr(variant, "image_variant_1920", False):
-                field_name = "image_variant_1920"
-            if not field_name:
+            if not variant.image_variant_1920:
                 continue
             self._bpi_append_image_entry(
                 payload,
                 seen_urls,
-                self._bpi_image_url(variant._name, variant.id, field_name),
+                self._bpi_image_url(variant._name, variant.id, "image_variant_1920"),
                 id="variant:%s" % variant.id,
                 name=variant.display_name or (_("Imagen variante %s") % index),
                 imageType="odoo_variant",
@@ -395,8 +664,17 @@ class ProductTemplate(models.Model):
         self.ensure_one()
         exchange_rate = exchange_rate or self._bpi_exchange_rate()
         category = self._bpi_main_category()
+        variant_payloads = [self._bpi_variant_payload(variant) for variant in self._bpi_all_variants()]
+        variant_summary = self._bpi_variant_summary(variant_payloads)
+        pack_payload = self._bpi_pack_payload()
+        effective_price = variant_summary["effectivePriceMinUsd"]
+        effective_cost = (
+            pack_payload["componentCostMinUsd"]
+            if pack_payload["isPack"]
+            else variant_summary["costMinUsd"]
+        )
         price = float(self.list_price or 0.0)
-        local_price = price * exchange_rate
+        local_price = effective_price * exchange_rate
         return {
             "id": self.id,
             "name": self.name or "",
@@ -405,21 +683,28 @@ class ProductTemplate(models.Model):
             "category": category.name if category else "",
             "categoryPath": self._bpi_category_display_name(category),
             "priceUsd": price,
+            "effectivePriceMinUsd": variant_summary["effectivePriceMinUsd"],
+            "effectivePriceMaxUsd": variant_summary["effectivePriceMaxUsd"],
             "previousPriceUsd": float(self.bpi_previous_price or 0.0),
             "costUsd": float(self.standard_price or 0.0),
+            "effectiveCostUsd": effective_cost,
             "localExchangeRate": exchange_rate,
             "priceLocal": local_price,
             "mainImageUrl": self._bpi_primary_image_url(),
             "qtyAvailable": float(self.qty_available or 0.0),
             "inStock": bool((self.qty_available or 0.0) > 0),
+            "productKind": self._bpi_product_kind(variant_summary),
+            "variantCount": variant_summary["count"],
+            "availableVariantCount": variant_summary["availableCount"],
+            "packComponentCount": pack_payload["componentCount"],
             "isPublished": bool(self.website_published),
             "featured": bool(self.bpi_featured),
             "isArchived": not bool(self.active),
             "isDiscontinued": not bool(self.sale_ok),
             "seoScore": int(self.bpi_seo_score or 0),
             "margin": (
-                ((float(self.list_price or 0.0) - float(self.standard_price or 0.0)) / float(self.list_price or 1.0) * 100.0)
-                if self.list_price and self.standard_price
+                ((effective_price - effective_cost) / effective_price * 100.0)
+                if effective_price and effective_cost
                 else 0.0
             ),
         }
@@ -431,6 +716,9 @@ class ProductTemplate(models.Model):
         description_payload = self._bpi_description_payload()
         native_gallery_payload = self._bpi_native_gallery_payload()
         gallery_payload = self._bpi_gallery_payload()
+        variant_payloads = [self._bpi_variant_payload(variant) for variant in self._bpi_all_variants()]
+        variant_summary = self._bpi_variant_summary(variant_payloads)
+        pack_payload = self._bpi_pack_payload()
         primary_image_url = gallery_payload[0]["imageUrl"] if gallery_payload else False
         native_primary_image_url = native_gallery_payload[0]["imageUrl"] if native_gallery_payload else primary_image_url
         latest_session = self.bpi_chat_session_ids.sorted(lambda rec: rec.write_date or rec.create_date, reverse=True)[:1]
@@ -491,12 +779,27 @@ class ProductTemplate(models.Model):
                 "categoryPath": self._bpi_category_display_name(category),
                 "categoryId": category.id if category else False,
                 "priceUsd": float(self.list_price or 0.0),
+                "effectivePriceMinUsd": variant_summary["effectivePriceMinUsd"],
+                "effectivePriceMaxUsd": variant_summary["effectivePriceMaxUsd"],
                 "previousPriceUsd": float(self.bpi_previous_price or 0.0),
                 "costUsd": float(self.standard_price or 0.0),
+                "effectiveCostMinUsd": (
+                    pack_payload["componentCostMinUsd"]
+                    if pack_payload["isPack"]
+                    else variant_summary["costMinUsd"]
+                ),
+                "effectiveCostMaxUsd": (
+                    pack_payload["componentCostMaxUsd"]
+                    if pack_payload["isPack"]
+                    else variant_summary["costMaxUsd"]
+                ),
                 "localExchangeRate": exchange_rate,
                 "priceLocal": float(self.list_price or 0.0) * exchange_rate,
                 "qtyAvailable": float(self.qty_available or 0.0),
                 "inStock": bool((self.qty_available or 0.0) > 0),
+                "productKind": self._bpi_product_kind(variant_summary),
+                "variantCount": variant_summary["count"],
+                "isPack": bool(self.pack_ok),
                 "isPublished": bool(self.website_published),
                 "featured": bool(self.bpi_featured),
                 "dataLabel": _("Producto Bader: SKU origen %s") % (self.default_code or "-"),
@@ -517,6 +820,9 @@ class ProductTemplate(models.Model):
                 "websiteUrl": self.website_url or "",
             },
             "seoData": seo_data,
+            "variantSummary": variant_summary,
+            "variants": variant_payloads,
+            "pack": pack_payload,
             "images": gallery_payload,
             "competitors": [competitor.bpi_to_payload() for competitor in self.bpi_competitor_ids.sorted(lambda rec: rec.id, reverse=True)],
             "categoryIntelligence": category.bpi_to_payload() if category else False,

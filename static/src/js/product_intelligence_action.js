@@ -18,9 +18,20 @@ export function canDeleteGalleryImage(image) {
     return !!(image?.canDelete && /^bpi:[1-9][0-9]*$/.test(image?.referenceToken || ""));
 }
 
+export function productEffectivePriceRange(product) {
+    const fallback = Number(product?.priceUsd || 0);
+    const min = Number(product?.effectivePriceMinUsd ?? fallback);
+    const max = Number(product?.effectivePriceMaxUsd ?? min);
+    return {
+        min: Number.isFinite(min) ? min : 0,
+        max: Number.isFinite(max) ? max : 0,
+    };
+}
+
 const DETAIL_TABS = [
     { id: "overview", label: "Overview", icon: "fa-bar-chart" },
     { id: "datos", label: "Datos", icon: "fa-cog" },
+    { id: "variants_pack", label: "Variantes y Pack", icon: "fa-cubes" },
     { id: "categorization", label: "Categorization", icon: "fa-sitemap" },
     { id: "content", label: "Content", icon: "fa-pencil" },
     { id: "images", label: "Images", icon: "fa-picture-o" },
@@ -179,6 +190,9 @@ export class ProductIntelligenceAction extends Component {
             strategyBusy: false,
             categoryBusy: false,
             chatBusy: false,
+            variantBusy: false,
+            packBusy: false,
+            componentSearchBusy: false,
             chatMessages: [],
             chatSessionKey: "",
             chatInput: "",
@@ -191,6 +205,13 @@ export class ProductIntelligenceAction extends Component {
             categoryForm: this.emptyCategoryForm(),
             imageForm: this.emptyImageForm(),
             competitorForm: this.emptyCompetitorForm(),
+            selectedVariantId: null,
+            variantDrafts: [],
+            packForm: this.emptyPackForm(),
+            componentSearch: {
+                query: "",
+                results: [],
+            },
             playground: {
                 messages: [],
                 canvasUrl: "",
@@ -359,6 +380,18 @@ export class ProductIntelligenceAction extends Component {
             competitorUrl: "",
             discoveredCompetitors: [],
             discoveryQuery: "",
+        };
+    }
+
+    emptyPackForm() {
+        return {
+            isPack: false,
+            packType: "detailed",
+            componentPriceMode: "ignored",
+            modifiable: false,
+            revision: false,
+            warnings: [],
+            compositions: [],
         };
     }
 
@@ -546,6 +579,8 @@ export class ProductIntelligenceAction extends Component {
     applyDetailPayload(data) {
         const product = data.product || {};
         const seoData = data.seoData || {};
+        const variants = data.variants || [];
+        const pack = data.pack || this.emptyPackForm();
 
         this.state.detail = data;
         this.state.productForm = {
@@ -603,6 +638,38 @@ export class ProductIntelligenceAction extends Component {
             discoveredCompetitors: [],
             discoveryQuery: "",
         };
+        this.state.variantDrafts = variants.map((variant) => ({
+            ...variant,
+            sku: variant.sku || "",
+            barcode: variant.barcode || "",
+            costUsdInput: this.toInput(variant.costUsd),
+            imageReferenceToken: "",
+            imageUploadDataUrl: "",
+            imageUploadName: "",
+        }));
+        const selectedVariantExists = this.state.variantDrafts.some(
+            (variant) => String(variant.id) === String(this.state.selectedVariantId || "")
+        );
+        if (!selectedVariantExists) {
+            const preferredVariant = this.state.variantDrafts.find((variant) => variant.active) || this.state.variantDrafts[0];
+            this.state.selectedVariantId = preferredVariant ? preferredVariant.id : null;
+        }
+        this.state.packForm = {
+            ...this.emptyPackForm(),
+            ...pack,
+            compositions: (pack.compositions || []).map((composition) => ({
+                ...composition,
+                components: (composition.components || []).map((component) => ({
+                    ...component,
+                    quantityInput: this.toInput(component.quantity),
+                    saleDiscountInput: this.toInput(component.saleDiscount),
+                })),
+            })),
+        };
+        this.state.componentSearch = { query: "", results: [] };
+        this.state.variantBusy = false;
+        this.state.packBusy = false;
+        this.state.componentSearchBusy = false;
         this.state.chatMessages = (data.chatHistory || []).slice(-100).map((message) => ({
             role: message.role,
             content: message.content || "",
@@ -629,6 +696,10 @@ export class ProductIntelligenceAction extends Component {
             this.state.chatSessionKey = "";
             this.state.chatInput = "";
             this.state.chatBusy = false;
+            this.state.selectedVariantId = null;
+            this.state.variantDrafts = [];
+            this.state.packForm = this.emptyPackForm();
+            this.state.componentSearch = { query: "", results: [] };
         }
         this.state.loading = true;
         this.state.error = "";
@@ -684,6 +755,41 @@ export class ProductIntelligenceAction extends Component {
 
     currentStrategy() {
         return (this.state.detail && this.state.detail.competitiveStrategy) || {};
+    }
+
+    currentVariants() {
+        return this.state.variantDrafts || [];
+    }
+
+    currentPack() {
+        return this.state.packForm || this.emptyPackForm();
+    }
+
+    hasVariantPackTab() {
+        const product = this.currentProduct();
+        return !!(product.isPack || Number(product.variantCount || 0) > 1);
+    }
+
+    visibleDetailTabs() {
+        return this.detailTabs.filter((tab) => tab.id !== "variants_pack" || this.hasVariantPackTab());
+    }
+
+    selectedVariant() {
+        return this.currentVariants().find(
+            (variant) => String(variant.id) === String(this.state.selectedVariantId || "")
+        ) || this.currentVariants()[0] || null;
+    }
+
+    selectVariant(variantId) {
+        this.state.selectedVariantId = variantId;
+        this.state.componentSearch = { query: "", results: [] };
+    }
+
+    currentPackComposition() {
+        const compositions = this.currentPack().compositions || [];
+        return compositions.find(
+            (composition) => String(composition.variantId) === String(this.state.selectedVariantId || "")
+        ) || compositions[0] || null;
     }
 
     detailHeaderSubtitle() {
@@ -879,7 +985,9 @@ export class ProductIntelligenceAction extends Component {
 
     marginBenefitLabel() {
         const product = this.currentProduct();
-        const benefit = (this.parseNumber(product.priceUsd) - this.parseNumber(product.costUsd));
+        const price = this.productComparisonPrice(product);
+        const cost = this.parseNumber(product.effectiveCostMaxUsd ?? product.costUsd);
+        const benefit = price - cost;
         return `Beneficio: ${this.formatUSD(benefit)}`;
     }
 
@@ -1021,10 +1129,62 @@ export class ProductIntelligenceAction extends Component {
         });
     }
 
+    openVariantForm(variantId) {
+        if (!variantId) {
+            return;
+        }
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "product.product",
+            res_id: variantId,
+            views: [[false, "form"]],
+            target: "current",
+        });
+    }
+
+    effectivePriceRange(product = this.currentProduct()) {
+        return productEffectivePriceRange(product);
+    }
+
+    productComparisonPrice(product = this.currentProduct()) {
+        const range = this.effectivePriceRange(product);
+        return range.max ? (range.min + range.max) / 2 : 0;
+    }
+
+    formatProductPrice(product = this.currentProduct()) {
+        const range = this.effectivePriceRange(product);
+        if (Math.abs(range.max - range.min) < 0.00001) {
+            return this.formatUSD(range.min);
+        }
+        return `${this.formatUSD(range.min)} - ${this.formatUSD(range.max)}`;
+    }
+
+    formatProductPriceLocal(product = this.currentProduct()) {
+        const range = this.effectivePriceRange(product);
+        const exchangeRate = Number(product.localExchangeRate || this.state.exchangeRate || 0);
+        const min = range.min * exchangeRate;
+        const max = range.max * exchangeRate;
+        if (Math.abs(max - min) < 0.00001) {
+            return this.formatARS(min);
+        }
+        return `${this.formatARS(min)} - ${this.formatARS(max)}`;
+    }
+
+    formatProductCost(product = this.currentProduct()) {
+        const min = Number(product.effectiveCostMinUsd ?? product.costUsd ?? 0);
+        const max = Number(product.effectiveCostMaxUsd ?? min);
+        if (Math.abs(max - min) < 0.00001) {
+            return this.formatUSD(min);
+        }
+        return `${this.formatUSD(min)} - ${this.formatUSD(max)}`;
+    }
+
     detailMargin() {
         const product = this.currentProduct();
-        const price = Number(product.priceUsd || 0);
-        const cost = Number(product.costUsd || 0);
+        const price = this.productComparisonPrice(product);
+        const minCost = Number(product.effectiveCostMinUsd ?? product.costUsd ?? 0);
+        const maxCost = Number(product.effectiveCostMaxUsd ?? minCost);
+        const cost = maxCost ? (minCost + maxCost) / 2 : 0;
         if (!price || !cost) {
             return 0;
         }
@@ -1044,10 +1204,11 @@ export class ProductIntelligenceAction extends Component {
     priceVsCompetition() {
         const average = this.averageCompetitorPrice();
         const product = this.currentProduct();
-        if (!average || !product.priceUsd) {
+        const price = this.productComparisonPrice(product);
+        if (!average || !price) {
             return null;
         }
-        return ((Number(product.priceUsd) - average) / average) * 100;
+        return ((price - average) / average) * 100;
     }
 
     competitorPriceRange() {
@@ -1109,6 +1270,217 @@ export class ProductIntelligenceAction extends Component {
         this.state.productForm[field] = value;
         if (field === "name" && !this.state.productForm.slug) {
             this.state.productForm.slug = this.generateSlug(value);
+        }
+    }
+
+    updateVariantDraft(variantId, field, value) {
+        const variant = this.currentVariants().find((item) => String(item.id) === String(variantId));
+        if (variant) {
+            variant[field] = value;
+        }
+    }
+
+    async saveVariant(variant) {
+        if (!variant || this.state.variantBusy) {
+            return;
+        }
+        this.state.variantBusy = true;
+        try {
+            const payload = await this.rpc("/bader_product_intelligence/update_variant", {
+                product_tmpl_id: this.state.productId,
+                product_variant_id: variant.id,
+                values: {
+                    sku: variant.sku || "",
+                    barcode: variant.barcode || "",
+                    costUsd: this.parseNumber(variant.costUsdInput),
+                    active: !!variant.active,
+                },
+            });
+            this.applyDetailPayload(payload);
+            this.state.activeTab = "variants_pack";
+            this.state.selectedVariantId = variant.id;
+            this.notify("Variante actualizada.");
+        } catch (error) {
+            this.notify(this.errorMessage(error, "No se pudo actualizar la variante."), "danger");
+        } finally {
+            this.state.variantBusy = false;
+        }
+    }
+
+    async setVariantImage(variant, operation) {
+        if (!variant || this.state.variantBusy) {
+            return;
+        }
+        const payload = {
+            product_tmpl_id: this.state.productId,
+            product_variant_id: variant.id,
+        };
+        if (operation === "remove") {
+            payload.remove = true;
+        } else if (operation === "upload") {
+            if (!variant.imageUploadDataUrl) {
+                this.notify("Selecciona una imagen para la variante.", "warning");
+                return;
+            }
+            payload.image_data_url = variant.imageUploadDataUrl;
+        } else {
+            if (!variant.imageReferenceToken) {
+                this.notify("Selecciona una imagen de la galería.", "warning");
+                return;
+            }
+            payload.image_token = variant.imageReferenceToken;
+        }
+        this.state.variantBusy = true;
+        try {
+            const result = await this.rpc("/bader_product_intelligence/set_variant_image", payload);
+            this.applyDetailPayload(result);
+            this.state.activeTab = "variants_pack";
+            this.state.selectedVariantId = variant.id;
+            this.notify(operation === "remove" ? "Imagen propia eliminada." : "Imagen de variante actualizada.");
+        } catch (error) {
+            this.notify(this.errorMessage(error, "No se pudo actualizar la imagen de la variante."), "danger");
+        } finally {
+            this.state.variantBusy = false;
+        }
+    }
+
+    handleVariantImageUpload(variantId, ev) {
+        const file = ev.target.files && ev.target.files[0];
+        const variant = this.currentVariants().find((item) => String(item.id) === String(variantId));
+        if (!file || !variant) {
+            return;
+        }
+        if (!ALLOWED_IMAGE_UPLOAD_TYPES.has(file.type)) {
+            this.notify("Solo se permiten imágenes PNG, JPEG o WebP.", "warning");
+            ev.target.value = "";
+            return;
+        }
+        if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+            this.notify("La imagen supera el tamaño máximo permitido de 10 MiB.", "warning");
+            ev.target.value = "";
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            variant.imageUploadDataUrl = event.target.result;
+            variant.imageUploadName = file.name;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    updatePackField(field, value) {
+        this.state.packForm[field] = value;
+        if (
+            (field === "packType" || field === "componentPriceMode") &&
+            (this.state.packForm.packType !== "detailed" || this.state.packForm.componentPriceMode !== "detailed")
+        ) {
+            this.state.packForm.modifiable = false;
+        }
+    }
+
+    updatePackComponent(component, field, value) {
+        if (component) {
+            component[field] = value;
+        }
+    }
+
+    removePackComponent(composition, index) {
+        if (!composition) {
+            return;
+        }
+        composition.components.splice(index, 1);
+    }
+
+    onPackComponentSearchKeydown(ev) {
+        if (ev.key !== "Enter" || ev.isComposing) {
+            return;
+        }
+        ev.preventDefault();
+        return this.searchPackComponents();
+    }
+
+    async searchPackComponents() {
+        const query = (this.state.componentSearch.query || "").trim();
+        this.state.componentSearchBusy = true;
+        try {
+            const result = await this.rpc("/bader_product_intelligence/search_pack_components", {
+                product_tmpl_id: this.state.productId,
+                query,
+                limit: 20,
+            });
+            this.state.componentSearch.results = result.components || [];
+        } catch (error) {
+            this.notify(this.errorMessage(error, "No se pudieron buscar componentes."), "danger");
+        } finally {
+            this.state.componentSearchBusy = false;
+        }
+    }
+
+    addPackComponent(candidate) {
+        const composition = this.currentPackComposition();
+        if (!composition || !candidate) {
+            return;
+        }
+        if (composition.components.some((component) => component.productVariantId === candidate.productVariantId)) {
+            this.notify("El componente ya está incluido en esta composición.", "warning");
+            return;
+        }
+        composition.components.push({
+            lineId: false,
+            productVariantId: candidate.productVariantId,
+            productTemplateId: candidate.productTemplateId,
+            name: candidate.name,
+            sku: candidate.sku || "",
+            active: true,
+            isPack: !!candidate.isPack,
+            quantity: 1,
+            quantityInput: "1",
+            saleDiscount: 0,
+            saleDiscountInput: "0",
+            unitPriceUsd: candidate.effectivePriceUsd || 0,
+            linePriceUsd: candidate.effectivePriceUsd || 0,
+            unitCostUsd: candidate.costUsd || 0,
+            lineCostUsd: candidate.costUsd || 0,
+            qtyAvailable: candidate.qtyAvailable || 0,
+            possiblePackQty: Number(candidate.qtyAvailable || 0),
+        });
+        this.state.componentSearch.results = [];
+        this.state.componentSearch.query = "";
+    }
+
+    async savePack() {
+        const pack = this.currentPack();
+        if (!pack.isPack || this.state.packBusy) {
+            return;
+        }
+        this.state.packBusy = true;
+        try {
+            const values = {
+                packType: pack.packType,
+                componentPriceMode: pack.componentPriceMode,
+                modifiable: !!pack.modifiable,
+                compositions: (pack.compositions || []).map((composition) => ({
+                    variantId: composition.variantId,
+                    components: (composition.components || []).map((component) => ({
+                        lineId: component.lineId || false,
+                        productVariantId: component.productVariantId,
+                        quantity: this.parseNumber(component.quantityInput),
+                        saleDiscount: this.parseNumber(component.saleDiscountInput),
+                    })),
+                })),
+            };
+            const result = await this.rpc("/bader_product_intelligence/update_pack", {
+                product_tmpl_id: this.state.productId,
+                packRevision: pack.revision,
+                values,
+            });
+            this.applyDetailPayload(result);
+            this.state.activeTab = "variants_pack";
+            this.notify("Pack actualizado.");
+        } catch (error) {
+            this.notify(this.errorMessage(error, "No se pudo actualizar el Pack."), "danger");
+        } finally {
+            this.state.packBusy = false;
         }
     }
 
@@ -1853,7 +2225,7 @@ export class ProductIntelligenceAction extends Component {
 
     priceMarkerStyle() {
         const range = this.competitorPriceRange();
-        const price = Number(this.currentProduct().priceUsd || 0);
+        const price = this.productComparisonPrice();
         if (!range.max || range.max === range.min) {
             return "left: 50%;";
         }

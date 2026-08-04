@@ -94,14 +94,97 @@ class TestProductoIntelligence(TransactionCase):
             }
         )
 
+        cls.variant_attribute = cls.env["product.attribute"].create(
+            {"name": "Color BPI", "create_variant": "always"}
+        )
+        cls.variant_value_red = cls.env["product.attribute.value"].create(
+            {"name": "Rojo", "attribute_id": cls.variant_attribute.id}
+        )
+        cls.variant_value_blue = cls.env["product.attribute.value"].create(
+            {"name": "Azul", "attribute_id": cls.variant_attribute.id}
+        )
+        cls.product_with_variants = cls.env["product.template"].create(
+            {
+                "name": "Producto con Variantes BPI",
+                "list_price": 30.0,
+                "sale_ok": True,
+                "attribute_line_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "attribute_id": cls.variant_attribute.id,
+                            "value_ids": [
+                                (6, 0, [cls.variant_value_red.id, cls.variant_value_blue.id])
+                            ],
+                        },
+                    )
+                ],
+            }
+        )
+        cls.multi_variants = cls.product_with_variants.product_variant_ids.sorted("id")
+        cls.multi_variants[0].write(
+            {"default_code": "VAR-RED", "barcode": "BPI-VAR-RED", "standard_price": 11.0}
+        )
+        cls.multi_variants[1].write(
+            {"default_code": "VAR-BLUE", "barcode": "BPI-VAR-BLUE", "standard_price": 13.0}
+        )
+        blue_template_value = cls.product_with_variants.valid_product_template_attribute_line_ids.product_template_value_ids.filtered(
+            lambda value: value.product_attribute_value_id == cls.variant_value_blue
+        )
+        blue_template_value.write({"price_extra": 5.0})
+
+        cls.pack_component_a = cls.env["product.template"].create(
+            {"name": "Componente A BPI", "default_code": "COMP-A", "list_price": 10.0, "standard_price": 4.0}
+        )
+        cls.pack_component_b = cls.env["product.template"].create(
+            {"name": "Componente B BPI", "default_code": "COMP-B", "list_price": 20.0, "standard_price": 7.0}
+        )
+        cls.pack_product = cls.env["product.template"].create(
+            {
+                "name": "Pack BPI",
+                "default_code": "PACK-BPI",
+                "list_price": 50.0,
+                "standard_price": 1.0,
+                "pack_ok": True,
+                "pack_type": "detailed",
+                "pack_component_price": "ignored",
+            }
+        )
+        cls.pack_variant = cls.pack_product.product_variant_id
+        cls.pack_variant.write(
+            {
+                "pack_line_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "product_id": cls.pack_component_a.product_variant_id.id,
+                            "quantity": 2.0,
+                            "sale_discount": 10.0,
+                        },
+                    ),
+                    (
+                        0,
+                        0,
+                        {
+                            "product_id": cls.pack_component_b.product_variant_id.id,
+                            "quantity": 1.0,
+                            "sale_discount": 0.0,
+                        },
+                    ),
+                ]
+            }
+        )
+
     def test_dashboard_payload_is_paginated(self):
         payload = self.service.dashboard_payload(tab="all", search="", page=1, limit=1)
 
-        self.assertEqual(payload["stats"]["total"], self.dashboard_baseline_stats["total"] + 3)
+        self.assertEqual(payload["stats"]["total"], self.dashboard_baseline_stats["total"] + 7)
         self.assertEqual(payload["stats"]["published"], self.dashboard_baseline_stats["published"] + 1)
         self.assertEqual(payload["stats"]["featured"], self.dashboard_baseline_stats["featured"] + 1)
-        self.assertEqual(payload["tabCounts"]["all"], self.dashboard_baseline_tab_counts["all"] + 2)
-        self.assertEqual(payload["tabCounts"]["new"], self.dashboard_baseline_tab_counts["new"] + 1)
+        self.assertEqual(payload["tabCounts"]["all"], self.dashboard_baseline_tab_counts["all"] + 6)
+        self.assertEqual(payload["tabCounts"]["new"], self.dashboard_baseline_tab_counts["new"] + 5)
         self.assertEqual(
             payload["tabCounts"]["discontinued"],
             self.dashboard_baseline_tab_counts["discontinued"] + 2,
@@ -129,6 +212,163 @@ class TestProductoIntelligence(TransactionCase):
         self.assertEqual(self.product_new.bpi_slug, "producto-inteligente-premium")
         self.assertTrue(self.product_new.bpi_featured)
         self.assertEqual(payload["product"]["slug"], "producto-inteligente-premium")
+
+    def test_variant_payload_exposes_native_operational_data_and_price_range(self):
+        payload = self.product_with_variants.bpi_build_payload()
+
+        self.assertEqual(payload["product"]["productKind"], "variants")
+        self.assertEqual(payload["variantSummary"]["count"], 2)
+        self.assertTrue(payload["variantSummary"]["hasVariants"])
+        self.assertEqual(payload["variantSummary"]["effectivePriceMinUsd"], 30.0)
+        self.assertEqual(payload["variantSummary"]["effectivePriceMaxUsd"], 35.0)
+        self.assertEqual({item["sku"] for item in payload["variants"]}, {"VAR-RED", "VAR-BLUE"})
+        blue = next(item for item in payload["variants"] if item["sku"] == "VAR-BLUE")
+        self.assertEqual(blue["barcode"], "BPI-VAR-BLUE")
+        self.assertEqual(blue["costUsd"], 13.0)
+        self.assertEqual(blue["attributeValues"][0]["valueName"], "Azul")
+
+        dashboard = self.product_with_variants.bpi_dashboard_payload(exchange_rate=1000)
+        self.assertEqual(dashboard["productKind"], "variants")
+        self.assertEqual(dashboard["variantCount"], 2)
+        self.assertEqual(dashboard["effectivePriceMaxUsd"], 35.0)
+
+    def test_update_variant_is_owned_and_does_not_accept_price_or_stock(self):
+        variant = self.multi_variants[0]
+        payload = self.service.update_variant(
+            self.product_with_variants,
+            variant,
+            {"sku": "VAR-UPDATED", "barcode": "BPI-VAR-UPDATED", "costUsd": 12.5, "active": True},
+        )
+        self.assertEqual(variant.default_code, "VAR-UPDATED")
+        self.assertEqual(variant.barcode, "BPI-VAR-UPDATED")
+        self.assertEqual(variant.standard_price, 12.5)
+        self.assertEqual(payload["variantSummary"]["count"], 2)
+
+        with self.assertRaises(UserError):
+            self.service.update_variant(self.product_new, variant, {"sku": "CROSS"})
+        with self.assertRaises(UserError):
+            self.service.update_variant(self.product_with_variants, variant, {"priceUsd": 99})
+        with self.assertRaises(UserError):
+            self.service.update_variant(self.product_with_variants, variant, {"qtyAvailable": 99})
+
+    def test_variant_image_accepts_valid_product_owned_sources_only(self):
+        variant = self.multi_variants[0]
+        encoded_png = base64.b64encode(PNG_1X1).decode()
+        payload = self.service.set_variant_image(
+            self.product_with_variants,
+            variant,
+            image_data_url="data:image/png;base64,%s" % encoded_png,
+        )
+        item = next(value for value in payload["variants"] if value["id"] == variant.id)
+        self.assertTrue(item["hasOwnImage"])
+        self.assertEqual(item["imageToken"], "variant:%s" % variant.id)
+
+        with self.assertRaises(UserError):
+            self.service.set_variant_image(
+                self.product_with_variants,
+                variant,
+                image_token="main",
+                remove=True,
+            )
+        with self.assertRaises(UserError):
+            self.service.set_variant_image(self.product_new, variant, remove=True)
+
+        removed = self.service.set_variant_image(self.product_with_variants, variant, remove=True)
+        removed_item = next(value for value in removed["variants"] if value["id"] == variant.id)
+        self.assertFalse(removed_item["hasOwnImage"])
+
+    def test_pack_payload_calculates_modes_component_cost_and_warnings(self):
+        payload = self.pack_product.bpi_build_payload()
+        pack = payload["pack"]
+        self.assertTrue(pack["isPack"])
+        self.assertEqual(payload["product"]["productKind"], "pack")
+        self.assertEqual(pack["componentCount"], 2)
+        self.assertEqual(pack["componentCostMinUsd"], 15.0)
+        self.assertEqual(pack["effectivePriceMinUsd"], 50.0)
+        self.assertAlmostEqual(pack["marginMinPercent"], 70.0)
+        self.assertTrue(pack["revision"])
+
+        self.pack_product.write(
+            {"pack_type": "detailed", "pack_component_price": "detailed"}
+        )
+        detailed_price = self.pack_product._bpi_effective_variant_price(self.pack_variant)
+        self.assertAlmostEqual(detailed_price, 88.0)
+
+        self.pack_component_b.product_variant_id.write({"active": False})
+        warning_payload = self.pack_product.bpi_build_payload()["pack"]
+        self.assertTrue(any("archivado" in warning for warning in warning_payload["warnings"]))
+        self.pack_component_b.product_variant_id.write({"active": True})
+
+    def test_update_pack_is_atomic_validated_and_revision_guarded(self):
+        pack = self.pack_product.bpi_build_payload()["pack"]
+        composition = pack["compositions"][0]
+        values = {
+            "packType": "detailed",
+            "componentPriceMode": "ignored",
+            "modifiable": True,
+            "compositions": [
+                {
+                    "variantId": composition["variantId"],
+                    "components": [
+                        {
+                            "lineId": component["lineId"],
+                            "productVariantId": component["productVariantId"],
+                            "quantity": 3 if component["sku"] == "COMP-A" else component["quantity"],
+                            "saleDiscount": component["saleDiscount"],
+                        }
+                        for component in composition["components"]
+                    ],
+                }
+            ],
+        }
+        updated = self.service.update_pack(self.pack_product, pack["revision"], values)
+        component_a = self.pack_variant.pack_line_ids.filtered(
+            lambda line: line.product_id == self.pack_component_a.product_variant_id
+        )
+        self.assertEqual(component_a.quantity, 3)
+        self.assertFalse(self.pack_product.pack_modifiable)
+        self.assertNotEqual(updated["pack"]["revision"], pack["revision"])
+
+        with self.assertRaises(UserError):
+            self.service.update_pack(self.pack_product, pack["revision"], values)
+
+        current = self.pack_product.bpi_build_payload()["pack"]
+        invalid_values = {
+            "packType": "detailed",
+            "componentPriceMode": "ignored",
+            "modifiable": False,
+            "compositions": [
+                {
+                    "variantId": self.pack_variant.id,
+                    "components": [
+                        {
+                            "lineId": False,
+                            "productVariantId": self.pack_variant.id,
+                            "quantity": 1,
+                            "saleDiscount": 0,
+                        }
+                    ],
+                }
+            ],
+        }
+        with self.assertRaises(UserError):
+            self.service.update_pack(self.pack_product, current["revision"], invalid_values)
+
+    def test_pack_component_search_excludes_current_product_and_archived_candidates(self):
+        search_prefix = "BPI-TEST-%s-%s" % (self.pack_product.id, self.pack_component_a.id)
+        component_code = "%s-COMP-A" % search_prefix
+        self.pack_variant.write({"default_code": "%s-PACK" % search_prefix})
+        self.pack_component_a.product_variant_id.write({"default_code": component_code})
+
+        result = self.service.search_pack_components(self.pack_product, query=search_prefix, limit=20)
+        result_ids = {item["productVariantId"] for item in result["components"]}
+        self.assertIn(self.pack_component_a.product_variant_id.id, result_ids)
+        self.assertNotIn(self.pack_variant.id, result_ids)
+
+        self.pack_component_a.product_variant_id.write({"active": False})
+        archived = self.service.search_pack_components(self.pack_product, query=component_code, limit=20)
+        self.assertFalse(archived["components"])
+        self.pack_component_a.product_variant_id.write({"active": True})
 
     def test_save_category_normalizes_free_text_ai_values(self):
         self.service.save_category(
@@ -435,9 +675,20 @@ class TestProductoIntelligence(TransactionCase):
                 controller._image(self.product_published, "bpi:%s" % image.id)
             with self.assertRaises(MissingError):
                 controller._competitor(self.product_published, competitor.id)
+            self.assertEqual(
+                controller._variant(self.product_with_variants, self.multi_variants[0].id),
+                self.multi_variants[0],
+            )
+            with self.assertRaises(MissingError):
+                controller._variant(self.product_new, self.multi_variants[0].id)
 
         delete_signature = inspect.signature(controller.delete_image)
         self.assertIn("product_tmpl_id", delete_signature.parameters)
         self.assertIn("image_token", delete_signature.parameters)
         for method_name in ("scrape_competitor", "analyze_competitor", "delete_competitor"):
             self.assertIn("product_tmpl_id", inspect.signature(getattr(controller, method_name)).parameters)
+        for method_name in ("update_variant", "set_variant_image"):
+            signature = inspect.signature(getattr(controller, method_name))
+            self.assertIn("product_tmpl_id", signature.parameters)
+            self.assertIn("product_variant_id", signature.parameters)
+        self.assertIn("packRevision", inspect.signature(controller.update_pack).parameters)

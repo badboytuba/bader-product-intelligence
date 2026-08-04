@@ -28,6 +28,17 @@ class BaderProductIntelligenceController(http.Controller):
             raise MissingError("Competidor no encontrado.")
         return competitor
 
+    def _variant(self, product, product_variant_id):
+        self._ensure_manager()
+        try:
+            variant_id = int(product_variant_id)
+        except (TypeError, ValueError) as error:
+            raise MissingError("Variante no encontrada.") from error
+        variant = request.env["product.product"].with_context(active_test=False).browse(variant_id).exists()
+        if not variant or variant.product_tmpl_id != product:
+            raise MissingError("Variante no encontrada.")
+        return variant
+
     def _image(self, product, image_token):
         self._ensure_manager()
         token = image_token if isinstance(image_token, str) else ""
@@ -70,6 +81,49 @@ class BaderProductIntelligenceController(http.Controller):
     def update_product(self, product_tmpl_id, values=None, **kwargs):
         product = self._product(product_tmpl_id)
         payload = request.env["bpi.service"].update_product(product, values or {})
+        return {"success": True, **payload}
+
+    @http.route("/bader_product_intelligence/update_variant", type="json", auth="user")
+    def update_variant(self, product_tmpl_id, product_variant_id, values=None, **kwargs):
+        product = self._product(product_tmpl_id)
+        variant = self._variant(product, product_variant_id)
+        payload = request.env["bpi.service"].update_variant(product, variant, values or {})
+        return {"success": True, **payload}
+
+    @http.route("/bader_product_intelligence/set_variant_image", type="json", auth="user")
+    def set_variant_image(
+        self,
+        product_tmpl_id,
+        product_variant_id,
+        image_token=False,
+        image_data_url=False,
+        remove=False,
+        **kwargs
+    ):
+        product = self._product(product_tmpl_id)
+        variant = self._variant(product, product_variant_id)
+        payload = request.env["bpi.service"].set_variant_image(
+            product,
+            variant,
+            image_token=image_token,
+            image_data_url=image_data_url,
+            remove=remove,
+        )
+        return {"success": True, **payload}
+
+    @http.route("/bader_product_intelligence/search_pack_components", type="json", auth="user")
+    def search_pack_components(self, product_tmpl_id, query="", limit=20, **kwargs):
+        product = self._product(product_tmpl_id)
+        return request.env["bpi.service"].search_pack_components(product, query=query, limit=limit)
+
+    @http.route("/bader_product_intelligence/update_pack", type="json", auth="user")
+    def update_pack(self, product_tmpl_id, packRevision, values=None, **kwargs):
+        product = self._product(product_tmpl_id)
+        payload = request.env["bpi.service"].update_pack(
+            product,
+            pack_revision=packRevision,
+            values=values or {},
+        )
         return {"success": True, **payload}
 
     @http.route("/bader_product_intelligence/generate_content", type="json", auth="user")
