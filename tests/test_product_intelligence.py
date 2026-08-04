@@ -45,6 +45,9 @@ class TestProductoIntelligence(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.service = cls.env["bpi.service"]
+        baseline_payload = cls.service.dashboard_payload(tab="all", search="", page=1, limit=1)
+        cls.dashboard_baseline_stats = baseline_payload["stats"]
+        cls.dashboard_baseline_tab_counts = baseline_payload["tabCounts"]
         cls.category = cls.env["product.public.category"].create({"name": "Fresas"})
 
         cls.product_published = cls.env["product.template"].create(
@@ -94,15 +97,18 @@ class TestProductoIntelligence(TransactionCase):
     def test_dashboard_payload_is_paginated(self):
         payload = self.service.dashboard_payload(tab="all", search="", page=1, limit=1)
 
-        self.assertEqual(payload["stats"]["total"], 3)
-        self.assertEqual(payload["stats"]["published"], 1)
-        self.assertEqual(payload["stats"]["featured"], 1)
-        self.assertEqual(payload["tabCounts"]["all"], 2)
-        self.assertEqual(payload["tabCounts"]["new"], 1)
-        self.assertEqual(payload["tabCounts"]["discontinued"], 2)
+        self.assertEqual(payload["stats"]["total"], self.dashboard_baseline_stats["total"] + 3)
+        self.assertEqual(payload["stats"]["published"], self.dashboard_baseline_stats["published"] + 1)
+        self.assertEqual(payload["stats"]["featured"], self.dashboard_baseline_stats["featured"] + 1)
+        self.assertEqual(payload["tabCounts"]["all"], self.dashboard_baseline_tab_counts["all"] + 2)
+        self.assertEqual(payload["tabCounts"]["new"], self.dashboard_baseline_tab_counts["new"] + 1)
+        self.assertEqual(
+            payload["tabCounts"]["discontinued"],
+            self.dashboard_baseline_tab_counts["discontinued"] + 2,
+        )
         self.assertEqual(len(payload["products"]), 1)
         self.assertEqual(payload["pager"]["page"], 1)
-        self.assertEqual(payload["pager"]["pageCount"], 2)
+        self.assertEqual(payload["pager"]["pageCount"], payload["tabCounts"]["all"])
         self.assertTrue(payload["pager"]["hasNext"])
         self.assertFalse(payload["pager"]["hasPrevious"])
 
