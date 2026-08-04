@@ -3,6 +3,7 @@
 import logging
 
 from odoo import _, api, fields, models
+from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -98,7 +99,11 @@ class BPIAIJob(models.Model):
             try:
                 job._process_job()
             except Exception:
-                _logger.exception("BPI AI job %s failed", job.id)
+                _logger.error(
+                    "BPI AI job failed operation=process job_id=%s job_type=%s code=processing_error",
+                    job.id,
+                    job.job_type,
+                )
         return True
 
     def _process_job(self):
@@ -123,12 +128,13 @@ class BPIAIJob(models.Model):
             else:
                 raise ValueError("Unsupported BPI AI job type: %s" % self.job_type)
         except Exception as error:
+            safe_error = str(error) if isinstance(error, UserError) else _("Error interno al procesar el trabajo IA.")
             self.write(
                 {
                     "state": "failed",
                     "progress": 100,
                     "message": _("No se pudo completar el trabajo IA"),
-                    "error_message": str(error),
+                    "error_message": safe_error,
                     "finished_at": fields.Datetime.now(),
                 }
             )

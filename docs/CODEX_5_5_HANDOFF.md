@@ -54,7 +54,7 @@ Environment fallback keys currently supported by backend code:
 ### Manifest / bootstrapping
 
 - `__manifest__.py`
-  - version currently `16.0.1.1.13` at handoff time;
+  - version currently `16.0.1.1.14` after the category/gallery/chat/security stabilization;
   - data files include ACLs, AI job cron, product/category/settings/action views, inactive website bridge stub;
   - assets include backend SCSS/JS/XML, QWeb template, and frontend SCSS.
 - `__init__.py`

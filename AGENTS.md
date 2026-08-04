@@ -56,14 +56,14 @@ Read these files before changing code:
 5. `models/product_intelligence.py` and `models/product_template.py` — core backend behavior and payload contract.
 6. `static/src/js/product_intelligence_action.js` and `static/src/xml/product_intelligence_templates.xml` — OWL UI and RPC contract.
 
-## High-priority known issues
+## Stabilization status
 
-Before adding big new features, consider fixing these known issues documented in detail in `docs/CODEX_5_5_HANDOFF.md`:
+Release `16.0.1.1.14` addresses the previously documented backend stabilization issues:
 
-- gallery delete sends token strings like `bpi:12` / `odoo:5` to a backend endpoint expecting an integer;
-- gallery delete button appears for native Odoo images that should not be deleted by BPI;
-- image Studio sends `selected_image_url` but backend currently ignores it;
-- chat quick actions duplicate the user message and chat state can survive product switches;
-- competitor price comparison may mix product USD with scraped ARS/USD;
-- external image URL downloads follow redirects without validating each redirected URL;
-- website bridge view is inactive, so storefront rendering is not active from this addon alone.
+- gallery/Studio references and deletion use product-owned tokens;
+- chat state is isolated per product;
+- competitor analytics uses normalized ARS/USD values;
+- image uploads/imports have strict format, size and redirect/SSRF validation;
+- the Product Intelligence category action no longer replaces the native eCommerce category views.
+
+The website bridge view remains intentionally inactive; storefront rendering is outside this release.

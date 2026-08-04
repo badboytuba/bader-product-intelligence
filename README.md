@@ -110,3 +110,12 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Manifest dependencies are clean for standalone installation.
 - The module no longer inherits templates from `bader_website`.
 - A real `odoo-bin -i/-u` run in the target environment is still recommended before production use.
+
+## Release 16.0.1.1.14
+
+- Restores the native eCommerce category view (including Parent Category) and binds separate enriched tree/form views to the Product Intelligence menu.
+- Uses product-owned `bpi:<id>` tokens for Studio references and image deletion.
+- Restricts image uploads/imports to PNG, JPEG or WebP up to 10 MiB, with strict base64, MIME/signature, redirect and SSRF validation.
+- Isolates chat state and sessions per product and ignores stale frontend responses.
+- Preserves competitor prices in their source currency while exposing normalized USD values for ARS/USD analytics.
+- Requires product ownership for competitor scrape, analysis and deletion routes, and avoids raw external response data in logs.

@@ -212,6 +212,8 @@ class ProductTemplate(models.Model):
                 state="approved",
                 sequence=0,
                 canDelete=False,
+                referenceToken="main",
+                canReference=True,
             )
 
         if "product_template_image_ids" in self._fields:
@@ -234,6 +236,8 @@ class ProductTemplate(models.Model):
                     state="approved",
                     sequence=getattr(image, "sequence", index * 10),
                     canDelete=False,
+                    referenceToken="odoo:%s" % image.id,
+                    canReference=True,
                 )
 
         variant_records = self.product_variant_ids.sorted("id")
@@ -258,6 +262,8 @@ class ProductTemplate(models.Model):
                 state="approved",
                 sequence=1000 + index,
                 canDelete=False,
+                referenceToken="variant:%s" % variant.id,
+                canReference=True,
             )
         return payload
 
@@ -368,6 +374,8 @@ class ProductTemplate(models.Model):
                     "state": image.state,
                     "sequence": image.sequence,
                     "canDelete": True,
+                    "referenceToken": "bpi:%s" % image.id,
+                    "canReference": True,
                 }
             )
         return payload
@@ -435,7 +443,7 @@ class ProductTemplate(models.Model):
                     "content": msg.content,
                     "createdAt": msg.create_date.isoformat() if msg.create_date else False,
                 }
-                for msg in latest_session.message_ids.sorted("id")
+                for msg in latest_session.message_ids.sorted("id")[-100:]
             ]
 
         current_slug = self.bpi_slug or self._bpi_generate_slug_value()
