@@ -120,12 +120,20 @@
                                                         <div>
                                                             <strong t-esc="row.name"/>
                                                             <p t-esc="row.sku || row.category || 'Sin codigo'"/>
+                                                            <div class="bpi-product-kind-badges">
+                                                                <span t-if="row.productKind === 'pack' || row.productKind === 'pack_variants'" class="bpi-inline-badge bpi-inline-badge--green">
+                                                                    <i class="fa fa-cubes"/> Pack
+                                                                </span>
+                                                                <span t-if="row.variantCount &gt; 1" class="bpi-inline-badge">
+                                                                    <i class="fa fa-tags"/> <t t-esc="row.variantCount"/> variantes
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <strong t-esc="formatARS(row.priceLocal)"/>
-                                                    <p t-esc="formatUSD(row.priceUsd)"/>
+                                                    <strong t-esc="formatProductPriceLocal(row)"/>
+                                                    <p t-esc="formatProductPrice(row)"/>
                                                 </td>
                                                 <td>
                                                     <span class="bpi-inline-badge bpi-inline-badge--green" t-esc="formatPercent(row.margin)"/>
@@ -235,7 +243,7 @@
                         </div>
 
                         <div class="bpi-tab-strip">
-                            <button t-foreach="detailTabs" t-as="tab" t-key="tab.id" type="button" t-att-class="'bpi-tab-pill ' + (state.activeTab === tab.id ? 'is-active' : '')" t-on-click="() => this.selectTab(tab.id)">
+                            <button t-foreach="visibleDetailTabs()" t-as="tab" t-key="tab.id" type="button" t-att-class="'bpi-tab-pill ' + (state.activeTab === tab.id ? 'is-active' : '')" t-on-click="() => this.selectTab(tab.id)">
                                 <i t-att-class="'fa ' + tab.icon"/>
                                 <span t-esc="tab.label"/>
                             </button>
@@ -247,8 +255,8 @@
                                     <div class="bpi-kpi-card">
                                         <div class="bpi-kpi-card__copy">
                                             <span>Precio</span>
-                                            <strong t-esc="formatARS(product.priceLocal || 0)"/>
-                                            <small t-esc="formatUSD(product.priceUsd || 0)"/>
+                                            <strong t-esc="formatProductPriceLocal(product)"/>
+                                            <small t-esc="formatProductPrice(product)"/>
                                         </div>
                                         <div class="bpi-kpi-card__icon bpi-kpi-card__icon--dark"><i class="fa fa-usd"/></div>
                                     </div>
@@ -379,7 +387,177 @@
                                         </div>
                                         <div class="bpi-margin-card__aside">
                                             <p t-esc="marginBenefitLabel()"/>
-                                            <p t-esc="'PVP: ' + formatUSD(product.priceUsd || 0) + ' / Costo: ' + formatUSD(product.costUsd || 0)"/>
+                                            <p t-esc="'PVP efectivo: ' + formatProductPrice(product) + ' / Costo: ' + formatProductCost(product)"/>
+                                        </div>
+                                    </div>
+                                </div>
+                            </t>
+
+                            <t t-if="state.activeTab === 'variants_pack'">
+                                <div class="bpi-section-head bpi-section-head--between">
+                                    <div>
+                                        <h3><i class="fa fa-cubes"/> Variantes y Pack</h3>
+                                        <p>Datos operativos nativos de Odoo. El precio de venta base se edita en la pestaña Datos.</p>
+                                    </div>
+                                    <div class="bpi-product-kind-badges">
+                                        <span t-if="product.isPack" class="bpi-inline-badge bpi-inline-badge--green"><i class="fa fa-cubes"/> Pack</span>
+                                        <span t-if="product.variantCount &gt; 1" class="bpi-inline-badge"><i class="fa fa-tags"/> <t t-esc="product.variantCount"/> variantes</span>
+                                    </div>
+                                </div>
+
+                                <div class="bpi-variant-selector" t-if="currentVariants().length &gt; 1">
+                                    <button type="button" t-foreach="currentVariants()" t-as="variant" t-key="variant.id"
+                                            t-att-class="'bpi-variant-chip ' + (state.selectedVariantId === variant.id ? 'is-active' : '')"
+                                            t-on-click="() => this.selectVariant(variant.id)">
+                                        <span t-esc="variant.attributeLabel || variant.sku || variant.name"/>
+                                        <small t-esc="variant.sku || 'Sin SKU'"/>
+                                        <i t-att-class="'fa ' + (variant.active ? 'fa-check-circle' : 'fa-archive')"/>
+                                    </button>
+                                </div>
+
+                                <t t-set="variant" t-value="selectedVariant()"/>
+                                <div class="bpi-grid bpi-grid--2" t-if="variant">
+                                    <div class="bpi-panel">
+                                        <div class="bpi-panel__title bpi-panel__title--between">
+                                            <div>
+                                                <h3><i class="fa fa-tag"/> <t t-esc="variant.attributeLabel || variant.name"/></h3>
+                                                <p t-esc="'Precio efectivo: ' + formatUSD(variant.effectivePriceUsd) + ' · Stock: ' + formatNumber(variant.qtyAvailable)"/>
+                                            </div>
+                                            <button type="button" class="bpi-icon-button" t-on-click="() => this.openVariantForm(variant.id)" title="Abrir variante en Odoo"><i class="fa fa-external-link"/></button>
+                                        </div>
+                                        <div class="bpi-form-grid">
+                                            <label>SKU</label>
+                                            <input class="bpi-input" t-att-value="variant.sku" t-on-input="(ev) => this.updateVariantDraft(variant.id, 'sku', ev.target.value)"/>
+                                            <label>Codigo de barras</label>
+                                            <input class="bpi-input" t-att-value="variant.barcode" t-on-input="(ev) => this.updateVariantDraft(variant.id, 'barcode', ev.target.value)"/>
+                                            <label>Costo (USD)</label>
+                                            <input class="bpi-input" type="number" min="0" step="0.01" t-att-value="variant.costUsdInput" t-on-input="(ev) => this.updateVariantDraft(variant.id, 'costUsdInput', ev.target.value)"/>
+                                            <label>Precio adicional</label>
+                                            <input class="bpi-input" type="text" t-att-value="formatUSD(variant.priceExtraUsd)" disabled="disabled"/>
+                                            <label>Stock disponible</label>
+                                            <input class="bpi-input" type="text" t-att-value="formatNumber(variant.qtyAvailable)" disabled="disabled"/>
+                                            <div class="bpi-inline-switch bpi-inline-switch--spread">
+                                                <span>Variante activa</span>
+                                                <label class="bpi-toggle">
+                                                    <input type="checkbox" t-att-checked="variant.active" t-on-change="(ev) => this.updateVariantDraft(variant.id, 'active', ev.target.checked)"/>
+                                                    <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="bpi-footer-actions">
+                                            <button type="button" class="bpi-button bpi-button--success" t-on-click="() => this.saveVariant(variant)" t-att-disabled="state.variantBusy">
+                                                <i class="fa fa-floppy-o"/> Guardar variante
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="bpi-panel">
+                                        <div class="bpi-panel__title">
+                                            <h3><i class="fa fa-picture-o"/> Imagen propia de variante</h3>
+                                            <p>Si no hay imagen propia, Odoo utiliza la imagen principal del producto.</p>
+                                        </div>
+                                        <div class="bpi-variant-image-preview">
+                                            <img t-if="variant.imageUrl" t-att-src="variant.imageUrl" t-att-alt="variant.name"/>
+                                            <div t-else="" class="bpi-row-product__image bpi-row-product__image--empty"><i class="fa fa-picture-o"/></div>
+                                            <span t-att-class="'bpi-inline-badge ' + (variant.hasOwnImage ? 'bpi-inline-badge--green' : '')" t-esc="variant.hasOwnImage ? 'Imagen propia' : 'Imagen heredada'"/>
+                                        </div>
+                                        <div class="bpi-form-grid">
+                                            <label>Copiar desde galeria</label>
+                                            <select class="bpi-input" t-att-value="variant.imageReferenceToken" t-on-change="(ev) => this.updateVariantDraft(variant.id, 'imageReferenceToken', ev.target.value)">
+                                                <option value="">Seleccionar imagen</option>
+                                                <option t-foreach="referenceableImages()" t-as="image" t-key="image.referenceToken" t-att-value="image.referenceToken" t-esc="image.name"/>
+                                            </select>
+                                            <div class="bpi-footer-actions">
+                                                <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.setVariantImage(variant, 'reference')" t-att-disabled="state.variantBusy">Copiar</button>
+                                            </div>
+                                            <label>Subir PNG/JPEG/WebP</label>
+                                            <input class="bpi-input" type="file" accept="image/png,image/jpeg,image/webp" t-on-change="(ev) => this.handleVariantImageUpload(variant.id, ev)"/>
+                                            <small t-if="variant.imageUploadName" t-esc="variant.imageUploadName"/>
+                                            <div class="bpi-footer-actions">
+                                                <button type="button" class="bpi-button bpi-button--success" t-on-click="() => this.setVariantImage(variant, 'upload')" t-att-disabled="state.variantBusy || !variant.imageUploadDataUrl">Subir imagen</button>
+                                                <button type="button" class="bpi-button bpi-button--danger" t-if="variant.hasOwnImage" t-on-click="() => this.setVariantImage(variant, 'remove')" t-att-disabled="state.variantBusy">Eliminar propia</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="bpi-panel bpi-pack-panel" t-if="currentPack().isPack">
+                                    <div class="bpi-panel__title bpi-panel__title--between">
+                                        <div>
+                                            <h3><i class="fa fa-cubes"/> Configuracion del Pack</h3>
+                                            <p t-esc="currentPack().componentCount + ' componentes · Costo ' + formatUSD(currentPack().componentCostMinUsd) + ' · Margen ' + formatPercent(currentPack().marginMinPercent)"/>
+                                        </div>
+                                        <button type="button" class="bpi-button bpi-button--success" t-on-click="savePack" t-att-disabled="state.packBusy"><i class="fa fa-floppy-o"/> Guardar Pack</button>
+                                    </div>
+
+                                    <div class="bpi-alert-list" t-if="currentPack().warnings.length">
+                                        <div class="bpi-alert bpi-alert--warning" t-foreach="currentPack().warnings" t-as="warning" t-key="warning"><i class="fa fa-exclamation-triangle"/> <span t-esc="warning"/></div>
+                                    </div>
+
+                                    <div class="bpi-grid bpi-grid--3">
+                                        <div>
+                                            <label>Tipo de Pack</label>
+                                            <select class="bpi-input" t-att-value="currentPack().packType" t-on-change="(ev) => this.updatePackField('packType', ev.target.value)">
+                                                <option value="detailed">Detallado</option>
+                                                <option value="non_detailed">No detallado</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label>Precio de componentes</label>
+                                            <select class="bpi-input" t-att-value="currentPack().componentPriceMode" t-on-change="(ev) => this.updatePackField('componentPriceMode', ev.target.value)">
+                                                <option value="ignored">Ignorado: precio del Pack</option>
+                                                <option value="totalized">Totalizado en el Pack</option>
+                                                <option value="detailed">Detallado por componente</option>
+                                            </select>
+                                        </div>
+                                        <div class="bpi-inline-switch bpi-inline-switch--spread">
+                                            <span>Componentes modificables</span>
+                                            <label class="bpi-toggle">
+                                                <input type="checkbox" t-att-checked="currentPack().modifiable" t-att-disabled="currentPack().packType !== 'detailed' || currentPack().componentPriceMode !== 'detailed'" t-on-change="(ev) => this.updatePackField('modifiable', ev.target.checked)"/>
+                                                <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <t t-set="composition" t-value="currentPackComposition()"/>
+                                    <div class="bpi-pack-composition" t-if="composition">
+                                        <div class="bpi-panel__title">
+                                            <h3 t-esc="'Composicion: ' + composition.variantName"/>
+                                            <p t-esc="'Disponibilidad del Pack: ' + formatNumber(composition.qtyAvailable) + ' · Precio efectivo: ' + formatUSD(composition.effectivePriceUsd)"/>
+                                        </div>
+                                        <div class="bpi-table-wrap" t-if="composition.components.length">
+                                            <table class="bpi-table bpi-pack-table">
+                                                <thead><tr><th>Componente</th><th>Cantidad</th><th>Descuento</th><th>Stock</th><th>Costo</th><th/></tr></thead>
+                                                <tbody>
+                                                    <tr t-foreach="composition.components" t-as="component" t-key="component.lineId || ('new-' + component.productVariantId)">
+                                                        <td>
+                                                            <strong t-esc="component.name"/>
+                                                            <p t-esc="component.sku || 'Sin SKU'"/>
+                                                            <span t-if="!component.active" class="bpi-status-pill">Archivado</span>
+                                                        </td>
+                                                        <td><input class="bpi-input bpi-input--compact" type="number" min="0.0001" step="0.01" t-att-value="component.quantityInput" t-on-input="(ev) => this.updatePackComponent(component, 'quantityInput', ev.target.value)"/></td>
+                                                        <td><input class="bpi-input bpi-input--compact" type="number" min="0" max="100" step="0.01" t-att-value="component.saleDiscountInput" t-on-input="(ev) => this.updatePackComponent(component, 'saleDiscountInput', ev.target.value)"/></td>
+                                                        <td><span t-esc="formatNumber(component.qtyAvailable)"/><p t-esc="'Hasta ' + formatNumber(component.possiblePackQty) + ' Packs'"/></td>
+                                                        <td><span t-esc="formatUSD(component.lineCostUsd)"/></td>
+                                                        <td><button type="button" class="bpi-icon-button bpi-icon-button--danger" t-on-click="() => this.removePackComponent(composition, component_index)"><i class="fa fa-trash"/></button></td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="bpi-empty-state" t-else=""><i class="fa fa-cubes"/><p>Este Pack no tiene componentes.</p></div>
+
+                                        <div class="bpi-pack-search">
+                                            <div class="bpi-inline-field">
+                                                <input class="bpi-input" type="search" placeholder="Buscar por nombre, SKU o codigo de barras" t-model="state.componentSearch.query" t-on-keydown.enter.prevent="searchPackComponents"/>
+                                                <button type="button" class="bpi-button bpi-button--secondary" t-on-click="searchPackComponents" t-att-disabled="state.componentSearchBusy"><i class="fa fa-search"/> Buscar</button>
+                                            </div>
+                                            <div class="bpi-pack-search-results" t-if="state.componentSearch.results.length">
+                                                <button type="button" class="bpi-pack-search-result" t-foreach="state.componentSearch.results" t-as="candidate" t-key="candidate.productVariantId" t-on-click="() => this.addPackComponent(candidate)">
+                                                    <span><strong t-esc="candidate.name"/><small t-esc="candidate.sku || 'Sin SKU'"/></span>
+                                                    <span t-esc="formatUSD(candidate.effectivePriceUsd)"/>
+                                                    <i class="fa fa-plus-circle"/>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -913,14 +1091,14 @@
                                     <div class="bpi-kpi-card">
                                         <div class="bpi-kpi-card__copy">
                                             <span>Precio (USD)</span>
-                                            <strong t-esc="formatUSD(product.priceUsd || 0)"/>
+                                            <strong t-esc="formatProductPrice(product)"/>
                                         </div>
                                     </div>
                                     <div class="bpi-kpi-card bpi-kpi-card--success">
                                         <div class="bpi-kpi-card__copy">
                                             <span>Margen</span>
                                             <strong t-esc="formatPercent(detailMargin())"/>
-                                            <small t-esc="'Costo: ' + formatUSD(product.costUsd || 0)"/>
+                                            <small t-esc="'Costo: ' + formatProductCost(product)"/>
                                         </div>
                                     </div>
                                     <div class="bpi-kpi-card">
@@ -942,7 +1120,7 @@
                                 <div class="bpi-panel" t-if="currentCompetitors().length">
                                     <div class="bpi-panel__title"><h3><i class="fa fa-bullseye"/> Analisis Competitivo</h3></div>
                                     <div class="bpi-grid bpi-grid--4">
-                                        <div class="bpi-metric-box"><span>Tu Precio</span><strong t-esc="formatUSD(product.priceUsd || 0)"/></div>
+                                        <div class="bpi-metric-box"><span>Tu Precio</span><strong t-esc="formatProductPrice(product)"/></div>
                                         <div class="bpi-metric-box"><span>Media Comp.</span><strong t-esc="formatUSD(averageCompetitorPrice())"/></div>
                                         <div class="bpi-metric-box"><span>vs Media</span><strong t-esc="priceVsCompetition() !== null ? formatPercent(priceVsCompetition()) : '-'"/></div>
                                         <div class="bpi-metric-box"><span>Rango</span><strong t-esc="formatUSD(competitorPriceRange().min) + ' - ' + formatUSD(competitorPriceRange().max)"/></div>

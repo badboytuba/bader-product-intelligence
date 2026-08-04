@@ -136,6 +136,9 @@ class BPIProductCompetitor(models.Model):
     def bpi_to_payload(self):
         self.ensure_one()
         exchange_rate = self.product_tmpl_id._bpi_exchange_rate()
+        variant_summary = self.product_tmpl_id._bpi_variant_summary()
+        product_price_min = variant_summary["effectivePriceMinUsd"]
+        product_price_max = variant_summary["effectivePriceMaxUsd"]
         service = self.env["bpi.service"]
         price_usd = service._competitor_price_to_usd(
             self.competitor_price,
@@ -148,6 +151,14 @@ class BPIProductCompetitor(models.Model):
             exchange_rate,
         )
         comparison_price_usd = offer_price_usd or price_usd
+        price_position = False
+        if comparison_price_usd and product_price_max:
+            if comparison_price_usd < product_price_min:
+                price_position = "below"
+            elif comparison_price_usd > product_price_max:
+                price_position = "above"
+            else:
+                price_position = "within"
         return {
             "id": self.id,
             "competitorName": self.competitor_name,
@@ -157,7 +168,10 @@ class BPIProductCompetitor(models.Model):
             "competitorCurrency": self.competitor_currency,
             "competitorPriceUsd": price_usd,
             "competitorOfferPriceUsd": offer_price_usd,
-            "priceComparisonAvailable": bool(comparison_price_usd and self.product_tmpl_id.list_price),
+            "priceComparisonAvailable": bool(comparison_price_usd and product_price_max),
+            "productPriceMinUsd": product_price_min,
+            "productPriceMaxUsd": product_price_max,
+            "pricePosition": price_position,
             "competitorTitle": self.competitor_title or "",
             "competitorDescription": self.competitor_description or "",
             "competitorFeatures": self.competitor_features or [],
@@ -1186,6 +1200,8 @@ Devolvé exclusivamente un JSON válido con esta estructura:
 - Precio: %(price)s
 - Descripción actual: %(description)s
 - Audiencia objetivo: %(audience)s
+- Contexto de variantes/Pack:
+%(catalog_context)s
 
 ━━━ REGLAS SEO (Google Search) ━━━
 1. **seoTitle** (máx 60 chars): Incluir nombre del producto + keyword principal + marca si aplica. Formato: "[Producto] [Uso/Beneficio] | Bader Argentina". Priorizar intent transaccional (comprar, precio, envío).
@@ -1231,6 +1247,7 @@ Devolvé exclusivamente un JSON válido con esta estructura:
             "price": product.list_price,
             "description": product.description_sale or product.description or "Sin descripción",
             "audience": target_audience or "clinicas",
+            "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
         }
         analysis = self._openai_json(prompt)
         analysis.setdefault("aiTargetAudience", target_audience or "clinicas")
@@ -1413,6 +1430,232 @@ Devolvé exclusivamente un JSON válido con esta estructura:
         return product.bpi_build_payload()
 
     @api.model
+    def update_variant(self, product, variant, values):
+        product.ensure_one()
+        variant.ensure_one()
+        if variant.product_tmpl_id != product:
+            raise UserError(_("La variante no pertenece al producto."))
+        values = values or {}
+        allowed_fields = {"sku", "barcode", "costUsd", "active"}
+        unexpected = set(values) - allowed_fields
+        if unexpected:
+            raise UserError(_("Se intentaron modificar campos de variante no permitidos."))
+        write_values = {}
+        if "sku" in values:
+            write_values["default_code"] = (values.get("sku") or "").strip() or False
+        if "barcode" in values:
+            write_values["barcode"] = (values.get("barcode") or "").strip() or False
+        if "costUsd" in values:
+            try:
+                cost = float(values.get("costUsd") or 0.0)
+            except (TypeError, ValueError):
+                raise UserError(_("El costo de la variante no es válido."))
+            if not math.isfinite(cost) or cost < 0:
+                raise UserError(_("El costo de la variante debe ser un número positivo."))
+            write_values["standard_price"] = cost
+        if "active" in values:
+            if not isinstance(values.get("active"), bool):
+                raise UserError(_("El estado de la variante no es válido."))
+            write_values["active"] = values["active"]
+        if write_values:
+            variant.write(write_values)
+        return product.bpi_build_payload()
+
+    @api.model
+    def set_variant_image(
+        self,
+        product,
+        variant,
+        image_token=False,
+        image_data_url=False,
+        remove=False,
+    ):
+        product.ensure_one()
+        variant.ensure_one()
+        if variant.product_tmpl_id != product:
+            raise UserError(_("La variante no pertenece al producto."))
+        operations = int(bool(image_token)) + int(bool(image_data_url)) + int(bool(remove))
+        if operations != 1:
+            raise UserError(_("Selecciona exactamente una operación de imagen para la variante."))
+        if remove:
+            variant.write({"image_variant_1920": False})
+            return product.bpi_build_payload()
+        if image_data_url:
+            raw, _mime_type, _encoded = self._parse_image_data_url(image_data_url)
+        else:
+            references = self._reference_images(product, [image_token])
+            if len(references) != 1:
+                raise UserError(_("La referencia de imagen no es válida."))
+            raw = references[0]["raw"]
+        variant.write({"image_variant_1920": base64.b64encode(raw)})
+        return product.bpi_build_payload()
+
+    @api.model
+    def search_pack_components(self, product, query="", limit=20):
+        product.ensure_one()
+        try:
+            safe_limit = min(max(int(limit or 20), 1), 20)
+        except (TypeError, ValueError):
+            safe_limit = 20
+        clean_query = (query or "").strip()[:120]
+        domain = [
+            ("active", "=", True),
+            ("sale_ok", "=", True),
+            ("product_tmpl_id", "!=", product.id),
+        ]
+        if clean_query:
+            domain = expression.AND(
+                [
+                    domain,
+                    expression.OR(
+                        [
+                            [("name", "ilike", clean_query)],
+                            [("default_code", "ilike", clean_query)],
+                            [("barcode", "ilike", clean_query)],
+                        ]
+                    ),
+                ]
+            )
+        variants = self.env["product.product"].search(
+            domain,
+            order="default_code asc, name asc, id asc",
+            limit=safe_limit,
+        )
+        return {
+            "components": [
+                {
+                    "productVariantId": variant.id,
+                    "productTemplateId": variant.product_tmpl_id.id,
+                    "name": variant.display_name or "",
+                    "sku": variant.default_code or "",
+                    "barcode": variant.barcode or "",
+                    "active": bool(variant.active),
+                    "isPack": bool(variant.pack_ok),
+                    "effectivePriceUsd": variant.product_tmpl_id._bpi_effective_variant_price(variant),
+                    "costUsd": variant.product_tmpl_id._bpi_variant_component_cost(variant),
+                    "qtyAvailable": float(variant.qty_available or 0.0),
+                }
+                for variant in variants
+            ]
+        }
+
+    @api.model
+    def update_pack(self, product, pack_revision, values):
+        product.ensure_one()
+        if not product.pack_ok:
+            raise UserError(_("El producto no está configurado como Pack en Odoo."))
+        if not pack_revision or pack_revision != product._bpi_pack_revision():
+            raise UserError(_("La composición del Pack cambió. Recarga el producto antes de guardar."))
+        values = values or {}
+        allowed_fields = {"packType", "componentPriceMode", "modifiable", "compositions"}
+        if set(values) - allowed_fields:
+            raise UserError(_("Se intentaron modificar campos de Pack no permitidos."))
+
+        pack_type = values.get("packType", product.pack_type or "detailed")
+        component_price_mode = values.get(
+            "componentPriceMode",
+            product.pack_component_price or "ignored",
+        )
+        if pack_type not in {"detailed", "non_detailed"}:
+            raise UserError(_("El tipo de Pack no es válido."))
+        if component_price_mode not in {"detailed", "totalized", "ignored"}:
+            raise UserError(_("El modo de precio del Pack no es válido."))
+        modifiable = values.get("modifiable", product.pack_modifiable)
+        if not isinstance(modifiable, bool):
+            raise UserError(_("El estado modificable del Pack no es válido."))
+        if pack_type != "detailed" or component_price_mode != "detailed":
+            modifiable = False
+
+        compositions = values.get("compositions")
+        if not isinstance(compositions, list):
+            raise UserError(_("La composición del Pack no es válida."))
+        variants = product._bpi_all_variants()
+        variant_by_id = {variant.id: variant for variant in variants}
+        received_variant_ids = set()
+        prepared_commands = {}
+        component_model = self.env["product.product"].with_context(active_test=False)
+
+        for composition in compositions:
+            if not isinstance(composition, dict):
+                raise UserError(_("La composición del Pack no es válida."))
+            try:
+                variant_id = int(composition.get("variantId"))
+            except (TypeError, ValueError):
+                raise UserError(_("La variante principal del Pack no es válida."))
+            variant = variant_by_id.get(variant_id)
+            if not variant or variant_id in received_variant_ids:
+                raise UserError(_("La variante principal del Pack no pertenece al producto o está duplicada."))
+            received_variant_ids.add(variant_id)
+            components = composition.get("components")
+            if not isinstance(components, list):
+                raise UserError(_("Los componentes del Pack no son válidos."))
+
+            existing_lines = {line.id: line for line in variant.pack_line_ids}
+            used_line_ids = set()
+            used_component_ids = set()
+            commands = []
+            for component_values in components:
+                if not isinstance(component_values, dict):
+                    raise UserError(_("Un componente del Pack no es válido."))
+                try:
+                    component_id = int(component_values.get("productVariantId"))
+                    quantity = float(component_values.get("quantity"))
+                    sale_discount = float(component_values.get("saleDiscount") or 0.0)
+                except (TypeError, ValueError):
+                    raise UserError(_("La cantidad o descuento del componente no es válido."))
+                if not math.isfinite(quantity) or quantity <= 0:
+                    raise UserError(_("La cantidad del componente debe ser mayor que cero."))
+                if not math.isfinite(sale_discount) or not 0 <= sale_discount <= 100:
+                    raise UserError(_("El descuento del componente debe estar entre 0 y 100."))
+                if component_id in used_component_ids:
+                    raise UserError(_("Un producto solo puede aparecer una vez en cada composición."))
+                used_component_ids.add(component_id)
+                component = component_model.browse(component_id).exists()
+                if not component or component.product_tmpl_id == product:
+                    raise UserError(_("El componente no existe o pertenece al mismo producto."))
+                if (
+                    component.company_id
+                    and product.company_id
+                    and component.company_id != product.company_id
+                ):
+                    raise UserError(_("Todos los componentes deben pertenecer a la misma empresa del Pack."))
+
+                line_id = component_values.get("lineId")
+                line = False
+                if line_id not in (False, None, ""):
+                    try:
+                        line = existing_lines.get(int(line_id))
+                    except (TypeError, ValueError):
+                        line = False
+                    if not line or line.id in used_line_ids:
+                        raise UserError(_("La línea del componente no pertenece al Pack o está duplicada."))
+                    used_line_ids.add(line.id)
+                if not component.active and (not line or line.product_id != component):
+                    raise UserError(_("No se pueden agregar componentes archivados al Pack."))
+                line_values = {
+                    "product_id": component.id,
+                    "quantity": quantity,
+                    "sale_discount": sale_discount,
+                }
+                commands.append((1, line.id, line_values) if line else (0, 0, line_values))
+            commands.extend((2, line_id, 0) for line_id in existing_lines if line_id not in used_line_ids)
+            prepared_commands[variant.id] = commands
+
+        if received_variant_ids != set(variant_by_id):
+            raise UserError(_("Debes enviar la composición de todas las variantes del Pack."))
+
+        product.write(
+            {
+                "pack_type": pack_type,
+                "pack_component_price": component_price_mode,
+                "pack_modifiable": modifiable,
+            }
+        )
+        for variant in variants:
+            variant.write({"pack_line_ids": prepared_commands[variant.id]})
+        return product.bpi_build_payload()
+
+    @api.model
     def generate_content(self, product, tone="profesional", audience="clinicas"):
         product.ensure_one()
         prompt = """Sos Nancy AI, copywriter experta en e-commerce dental para Bader Argentina — importador líder de equipamiento e insumos odontológicos en Argentina.
@@ -1433,6 +1676,8 @@ Devolvé solo JSON válido:
 - Descripción actual: %(description)s
 - Tono: %(tone)s
 - Audiencia: %(audience)s
+- Contexto de variantes/Pack:
+%(catalog_context)s
 
 ━━━ REGLAS PARA "name" ━━━
 - Mantener el nombre original si ya es claro y descriptivo.
@@ -1477,6 +1722,7 @@ Generar descripción en HTML válido. Extensión: 180-280 palabras. Estructura o
             "description": product.description_sale or product.description or "Sin descripción",
             "tone": tone or "profesional",
             "audience": audience or "clinicas",
+            "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
         }
         response = self._openai_json(prompt)
         description_html = response.get("description") or product.bpi_ai_generated_description or product.description_sale or product.description or ""
@@ -1623,6 +1869,8 @@ Producto:
 - Nombre: %(name)s
 - Categoria actual: %(category)s
 - Descripcion: %(description)s
+- Contexto de variantes/Pack:
+%(catalog_context)s
 
 Reglas:
 - niches debe contener solo estos valores exactos: clinica, laboratorio, estudiantes.
@@ -1634,6 +1882,7 @@ Reglas:
             "name": product.name,
             "category": self._public_category_label(product, "Sin categoria"),
             "description": product.description_sale or product.description or "Sin descripcion",
+            "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
         }
         response = self._openai_json(prompt)
         values = {
@@ -1672,6 +1921,8 @@ Reglas:
 
         full_prompt = """Generá una imagen publicitaria para Bader Argentina.
 Producto: %(name)s
+Contexto de variantes/Pack:
+%(catalog_context)s
 Pedido: %(prompt)s
 Estilo: %(style)s
 Reglas:
@@ -1682,6 +1933,7 @@ Reglas:
 - Fondo limpio y look comercial.
 """ % {
             "name": product.name,
+            "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
             "prompt": prompt,
             "style": style_map.get(style, style_map["professional"]),
         }
@@ -2166,6 +2418,8 @@ Producto Bader:
 - Tipo: %(type)s
 - Subcategoría: %(subcategory)s
 - Descripción: %(description)s
+- Contexto de variantes/Pack:
+%(catalog_context)s
 
 CANDIDATOS:
 %(candidates)s
@@ -2657,6 +2911,7 @@ Competidores:
             "name": product.name,
             "price": product.list_price,
             "description": product.description_sale or product.description or "",
+            "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
             "seo_title": product.website_meta_title or "",
             "seo_description": product.website_meta_description or "",
             "seo_keywords": ", ".join(product._bpi_keyword_values("seo")),
@@ -2712,6 +2967,8 @@ Producto:
 - Categoría: %(category)s
 - Precio: %(price)s
 - Descripción: %(description)s
+- Contexto de variantes/Pack:
+%(catalog_context)s
 
 Objetivo:
 - Ayudar al administrador a mejorar contenido, SEO, GEO, pricing, marketing e imágenes.
@@ -2728,6 +2985,7 @@ Respondé al último mensaje del historial.
             "category": product.public_categ_ids[:1].name if product.public_categ_ids else "",
             "price": product.list_price,
             "description": product.description_sale or product.description or "",
+            "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
             "history": "\n".join(history_lines),
         }
         model_name = self._get_config("bader_product_intelligence.openai_text_model", "gpt-5.5")

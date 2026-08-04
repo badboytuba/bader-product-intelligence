@@ -15,6 +15,8 @@ Installable Odoo 16 Community product operations module with SEO, GEO, image gen
 - Product image workflows
 - Competitor discovery and analysis
 - Product chat assistant
+- Operational control of native product variants
+- OCA Pack configuration and component composition
 - Website product detail extensions for the Bader storefront
 
 ## Odoo Dependencies
@@ -22,8 +24,11 @@ Installable Odoo 16 Community product operations module with SEO, GEO, image gen
 - `product`
 - `web`
 - `website_sale`
+- `product_pack`
+- `sale_product_pack`
+- `stock_product_pack`
 
-These modules must be available in the target Odoo database before installation.
+These modules must be available in the target Odoo database before installation. Pack behavior follows the official OCA Product Pack modules; the addon does not create a parallel Pack model.
 
 ## Python Dependencies
 
@@ -87,12 +92,13 @@ Environment fallbacks:
 
 - Backend usage is intended for administrators.
 - Main backend routes validate `base.group_system`.
+- Variant and Pack mutations validate template ownership, company, allowed fields, component eligibility and concurrent Pack revisions.
 
 ## Compatibility Notes
 
 - This module is now independent from `bader_website`.
 - If `bader_website` is installed, the website module can optionally render Product Intelligence content on the product page.
-- Backend tests already exist under `tests/test_product_intelligence.py`.
+- Backend tests exist under `tests/test_product_intelligence.py`; OWL tests live in `static/tests/product_intelligence_tests.js`.
 
 
 ## Agent / Codex Handoff
@@ -109,7 +115,7 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 
 - Manifest dependencies are clean for standalone installation.
 - The module no longer inherits templates from `bader_website`.
-- A real `odoo-bin -i/-u` run in the target environment is still recommended before production use.
+- Every release must be upgraded and tested in QAS before production approval.
 
 ## Release 16.0.1.1.14
 
@@ -119,3 +125,15 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Isolates chat state and sessions per product and ignores stale frontend responses.
 - Preserves competitor prices in their source currency while exposing normalized USD values for ARS/USD analytics.
 - Requires product ownership for competitor scrape, analysis and deletion routes, and avoids raw external response data in logs.
+
+## Release 16.0.1.2.0
+
+- Adds explicit OCA Pack dependencies and recognizes products as `simple`, `variants`, `pack` or `pack_variants`.
+- Shows Pack/variant badges plus native effective price, cost and availability ranges in the dashboard and detail workspace.
+- Adds the conditional **Variantes y Pack** tab for SKU, barcode, cost, active state and per-variant image overrides; Odoo continues to calculate stock and effective prices.
+- Allows existing Packs to edit type, price mode, modifiable flag and per-variant compositions without converting ordinary products into Packs.
+- Searches eligible components by product variant with a 20-result limit and rejects inactive additions, duplicates, self-reference, cross-company records and recursive Packs.
+- Saves complete Pack compositions atomically and requires `packRevision` to prevent stale overwrites.
+- Adds bounded variant/Pack context to content, SEO, categorization, image, strategy and chat prompts without creating per-variant content.
+- Uses effective Pack prices and native variant min–max ranges in analytics.
+- Adds secure variant image upload/reference/removal using the existing 10 MiB PNG/JPEG/WebP validation and product-owned image tokens.

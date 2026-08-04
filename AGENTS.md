@@ -67,3 +67,12 @@ Release `16.0.1.1.14` addresses the previously documented backend stabilization 
 - the Product Intelligence category action no longer replaces the native eCommerce category views.
 
 The website bridge view remains intentionally inactive; storefront rendering is outside this release.
+
+Release `16.0.1.2.0` is developed on `feature/bpi-pack-variant-control` as a separate Pack/variant feature release:
+
+- explicit OCA dependencies: `product_pack`, `sale_product_pack`, `stock_product_pack`;
+- content/SEO/chat remain on `product.template`, while operational controls use `product.product`;
+- Pack composition updates require the external RPC key `packRevision` and are saved atomically;
+- ordinary products can only become Packs through the standard Odoo form;
+- public website Pack rendering and MRP Kits remain outside scope;
+- PROD stays untouched until QAS functional approval specific to `1.2.0`.
