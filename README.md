@@ -146,4 +146,5 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Preserves formatted HTML in `bpi_ai_generated_description` while continuing to copy plain text into Odoo's commercial description.
 - Sanitizes tags, links and inline styles using a strict client allowlist plus Odoo's `fields.Html` sanitizer.
 - Activates the product-page bridge so the sanitized formatted description is rendered in `website_sale.product`, with the native `description_sale` as fallback.
-- This release must pass Odoo backend and QUnit validation in QAS before production deployment.
+- Synchronizes the bridge to website-specific primary copies of `website_sale.product`, which Odoo may create without an XML ID.
+- Certified in QAS with 20 backend tests and 12 QUnit tests/45 assertions, then deployed to PROD on 2026-08-10.
