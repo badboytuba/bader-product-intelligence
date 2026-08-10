@@ -166,3 +166,4 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Makes the optimized editor approximately 75% shorter visually and provides a larger technical editor for structured product information.
 - Publishes saved technical content full-width below the product/image area and immediately before the FAQ section.
 - Does not truncate or migrate existing descriptions automatically; an operator must generate or edit and save the split content.
+- Certified in QAS at runtime commit `f65600d` with 22 backend tests, 13 QUnit tests/51 assertions, exact 33-file package verification and desktop/mobile/backend visual checks; PROD remains on `16.0.1.2.3` pending authorization.

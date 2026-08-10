@@ -10,9 +10,10 @@ This file is the operational handoff for the Odoo 16 addon. Never print or commi
 - Technical addon directory: `bader_product_intelligence`
 - Odoo app: `Producto Intelligence`
 - Current feature branch: `feature/bpi-technical-description`
-- Deployed release: `16.0.1.2.3`
-- Release under development: `16.0.1.3.0`
-- Certified runtime code: `881a580e295e9ce57c2107d42783fa1d8c1efea7`; package SHA256 `d7a77f2c928258e47ec4929af75ea31ff45dc8bb3e58c8abf596599c9e3d5123`
+- PROD deployed release: `16.0.1.2.3`
+- QAS certified candidate: `16.0.1.3.0`
+- PROD certified runtime: `881a580e295e9ce57c2107d42783fa1d8c1efea7`; package SHA256 `d7a77f2c928258e47ec4929af75ea31ff45dc8bb3e58c8abf596599c9e3d5123`
+- QAS candidate runtime: `f65600d`; package SHA256 `c9804160e9e06d01aff71d01c3f40e25578ea5d3bc0f4dee16df2db4a1476c31`
 - License: `LGPL-3`
 - Target: Odoo Community `16.0`
 - Dependencies: `product`, `web`, `website_sale`, `product_pack`, `sale_product_pack`, `stock_product_pack`
@@ -21,7 +22,7 @@ Release `1.2.2` builds on the certified `1.2.1` Pack/variant release and adds a 
 
 Release `1.2.3` publishes saved, complete Producto Intelligence FAQs below the main product block. It uses a `compute_sudo` JSON projection on `product.template`, so public visitors receive only escaped question/answer copy while `bpi.product.faq` keeps its manager-only ACL. The section uses native `details`/`summary` controls, a dedicated frontend SCSS asset path and Schema.org FAQ semantics; Google removed FAQ rich results in 2026, so this markup is semantic metadata rather than a rich-result promise. The release passed QAS certification and was deployed and certified in PROD on 2026-08-10.
 
-Release `1.3.0` is the separate short-commercial/long-technical content release. Nancy returns a 45–70 word optimized summary plus a 350–650 word technical HTML document. Both use the same frontend allowlist and Odoo HTML sanitization; the compact summary stays beside the purchase area and the full-width technical section renders after the product/image block and before FAQs. Existing descriptions are not automatically shortened or copied, so no catalog data changes until an operator saves new content.
+Release `1.3.0` is the separate short-commercial/long-technical content release. Nancy returns a 45–70 word optimized summary plus a 350–650 word technical HTML document. Both use the same frontend allowlist and Odoo HTML sanitization; the compact summary stays beside the purchase area and the full-width technical section renders after the product/image block and before FAQs. Existing descriptions are not automatically shortened or copied, so no catalog data changes until an operator saves new content. Runtime `f65600d` is certified in QAS; PROD authorization is still pending.
 
 ## Rich-text description behavior
 
@@ -186,6 +187,17 @@ Final QAS certification for the code tree published in the feature PR:
 - QAS and PROD runtime: all **32 files** matched the certified archive; services active, zero open AI jobs and no new BPI errors.
 - PROD rollback evidence: database dump passed `pg_restore -l`, addon tar listing passed and the hard-linked filestore snapshot file list matched.
 
+## Final validation status for 16.0.1.3.0 (QAS)
+
+- Local addon validator with Node required, Python compilation, XML parsing, JavaScript syntax, RPC/Git hygiene and asset invariants: passed.
+- QAS backend: **22 tests**, 0 failures/errors and no cache deprecation warnings.
+- QAS OWL QUnit: **13 tests**, **51 assertions**, 0 failures.
+- Real backend Content tab: compact optimized editor measured **180 px** and technical editor **420 px**, both with independent allowlisted rich-text toolbars.
+- Public product test: technical content rendered full-width before seven FAQs on desktop/mobile without overflow; the temporary sample was restored and product 107 technical content remains empty.
+- QAS runtime: all **33 files** matched package SHA256 `c9804160e9e06d01aff71d01c3f40e25578ea5d3bc0f4dee16df2db4a1476c31`; service active, zero open AI jobs, zero temporary visual users and Git configs preserved.
+- QAS rollback evidence: database dump passed `pg_restore -l`, addon snapshots exist and the hard-linked filestore snapshot list contains the same **17,603** entries as the baseline.
+- PROD remains on `16.0.1.2.3`; do not deploy `1.3.0` without explicit authorization.
+
 ## Safe QAS/PROD deployment
 
 Full rollback backups for the rich-text release:
@@ -200,6 +212,13 @@ Full rollback backups for the storefront FAQ release:
 ```text
 QAS:  /opt/odoo/backups/bpi_storefront_faq_16.0.1.2.3_20260810T150124Z
 PROD: /opt/odoo/backups/bpi_storefront_faq_16.0.1.2.3_20260810T152108Z
+```
+
+Full rollback backup for the QAS technical-description candidate:
+
+```text
+QAS:  /opt/odoo/backups/bpi_technical_description_16.0.1.3.0_20260810T155913Z
+PROD: not deployed
 ```
 
 Rules:
