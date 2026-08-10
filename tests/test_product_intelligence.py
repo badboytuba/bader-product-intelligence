@@ -259,6 +259,50 @@ class TestProductoIntelligence(TransactionCase):
         self.assertIn('data-bpi-description="formatted"', bridge.arch_db)
         self.assertIn("product.description_sale", bridge.arch_db)
 
+        View = self.env["ir.ui.view"]
+        website = self.env["website"].search([], order="id", limit=1)
+        website_template = View.search(
+            [
+                ("key", "=", "website_sale.product"),
+                ("mode", "=", "primary"),
+                ("website_id", "=", website.id),
+                ("active", "=", True),
+            ],
+            limit=1,
+        )
+        if not website_template:
+            website_template = View.create(
+                {
+                    "name": "BPI website-specific product test template",
+                    "type": "qweb",
+                    "key": "website_sale.product",
+                    "mode": "primary",
+                    "priority": 16,
+                    "active": True,
+                    "website_id": website.id,
+                    "arch_db": native_product_view.arch_db,
+                }
+            )
+
+        View.bpi_sync_product_description_bridges()
+        website_bridge = View.search(
+            [
+                ("inherit_id", "=", website_template.id),
+                (
+                    "name",
+                    "=",
+                    "bader.product.intelligence.website.formatted.description.%s"
+                    % website_template.id,
+                ),
+                ("active", "=", True),
+            ],
+            limit=1,
+        )
+        self.assertTrue(website_bridge)
+        self.assertEqual(website_bridge.website_id, website)
+        self.assertIn("product.bpi_ai_generated_description", website_bridge.arch_db)
+        self.assertIn('data-bpi-description="formatted"', website_bridge.arch_db)
+
     def test_variant_payload_exposes_native_operational_data_and_price_range(self):
         payload = self.product_with_variants.bpi_build_payload()
 

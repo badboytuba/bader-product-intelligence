@@ -1,4 +1,5 @@
 from . import product_template
+from . import ir_ui_view
 from . import product_public_category
 from . import product_intelligence
 from . import ai_job

@@ -22,4 +22,8 @@
             </xpath>
         </field>
     </record>
+
+    <!-- Website may clone website_sale.product as a website-specific primary
+         view without an XML ID. Synchronize the same bridge to those copies. -->
+    <function model="ir.ui.view" name="bpi_sync_product_description_bridges"/>
 </odoo>
