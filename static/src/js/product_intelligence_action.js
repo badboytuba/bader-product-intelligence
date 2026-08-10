@@ -8,6 +8,54 @@ const DASHBOARD_PAGE_SIZE = 40;
 const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_CHAT_MESSAGE_LENGTH = 4000;
+const DESCRIPTION_FONT_FAMILIES = [
+    { value: "Arial", label: "Arial" },
+    { value: "Verdana", label: "Verdana" },
+    { value: "Tahoma", label: "Tahoma" },
+    { value: "Trebuchet MS", label: "Trebuchet" },
+    { value: "Georgia", label: "Georgia" },
+    { value: "Times New Roman", label: "Times New Roman" },
+    { value: "Courier New", label: "Courier New" },
+];
+const DESCRIPTION_FONT_SIZES = [
+    { value: "12px", label: "12" },
+    { value: "14px", label: "14" },
+    { value: "16px", label: "16" },
+    { value: "18px", label: "18" },
+    { value: "24px", label: "24" },
+    { value: "32px", label: "32" },
+];
+const DESCRIPTION_BLOCK_FORMATS = [
+    { value: "p", label: "Parrafo" },
+    { value: "h2", label: "Titulo 2" },
+    { value: "h3", label: "Titulo 3" },
+    { value: "h4", label: "Titulo 4" },
+    { value: "blockquote", label: "Cita" },
+];
+const DESCRIPTION_LEGACY_FONT_SIZES = {
+    1: "10px",
+    2: "12px",
+    3: "14px",
+    4: "18px",
+    5: "24px",
+    6: "32px",
+    7: "48px",
+};
+const DESCRIPTION_COMMAND_FONT_SIZES = {
+    "12px": "2",
+    "14px": "3",
+    "16px": "3",
+    "18px": "4",
+    "24px": "5",
+    "32px": "6",
+};
+const DESCRIPTION_ALLOWED_FONT_SIZES = new Set([
+    ...DESCRIPTION_FONT_SIZES.map((item) => item.value),
+    "10px",
+    "48px",
+]);
+const DESCRIPTION_ALLOWED_ALIGNMENTS = new Set(["left", "center", "right", "justify"]);
+const DESCRIPTION_ALLOWED_INDENTS = new Set(["40px", "80px", "120px", "160px", "200px"]);
 
 export function competitorComparablePriceUsd(competitor) {
     const value = Number(competitor?.competitorOfferPriceUsd || competitor?.competitorPriceUsd || 0);
@@ -140,6 +188,9 @@ export class ProductIntelligenceAction extends Component {
         this.typeOptions = TYPE_OPTIONS;
         this.subcategoryOptions = SUBCATEGORY_OPTIONS;
         this.chatQuickActions = CHAT_QUICK_ACTIONS;
+        this.descriptionFontFamilies = DESCRIPTION_FONT_FAMILIES;
+        this.descriptionFontSizes = DESCRIPTION_FONT_SIZES;
+        this.descriptionBlockFormats = DESCRIPTION_BLOCK_FORMATS;
         this.dashboardReloadTimer = null;
         this.seoJobPollTimer = null;
         this.detailLoadSequence = 0;
@@ -223,6 +274,7 @@ export class ProductIntelligenceAction extends Component {
         this.playgroundMessagesRef = useRef("playgroundMessages");
         this.contentDescriptionEditorRef = useRef("contentDescriptionEditor");
         this.lastContentDescriptionEditorHtml = "";
+        this.contentDescriptionSelection = null;
 
         onWillStart(async () => {
             const productId = this.resolveProductId();
@@ -881,6 +933,104 @@ export class ProductIntelligenceAction extends Component {
             .join("");
     }
 
+    normalizeDescriptionFontFamily(value) {
+        const firstFamily = this.toInput(value)
+            .split(",")[0]
+            .trim()
+            .replace(/^['"]|['"]$/g, "");
+        const allowedFamily = DESCRIPTION_FONT_FAMILIES.find(
+            (item) => item.value.toLowerCase() === firstFamily.toLowerCase()
+        );
+        return allowedFamily ? allowedFamily.value : "";
+    }
+
+    normalizeDescriptionColor(value) {
+        const color = this.toInput(value).trim().toLowerCase();
+        if (/^#[0-9a-f]{3}([0-9a-f]{3})?([0-9a-f]{2})?$/.test(color)) {
+            return color;
+        }
+        if (/^rgba?\(\s*\d{1,3}(?:\.\d+)?\s*,\s*\d{1,3}(?:\.\d+)?\s*,\s*\d{1,3}(?:\.\d+)?(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/.test(color)) {
+            return color;
+        }
+        return "";
+    }
+
+    normalizeLegacyDescriptionFormatting(root) {
+        if (!root || typeof document === "undefined") {
+            return;
+        }
+        Array.from(root.querySelectorAll("font")).forEach((fontNode) => {
+            const span = document.createElement("span");
+            const legacyStyle = this.sanitizedDescriptionStyle(fontNode);
+            const family = this.normalizeDescriptionFontFamily(fontNode.getAttribute("face"));
+            const inlineSize = this.toInput(fontNode.style.fontSize).trim().toLowerCase();
+            const size = DESCRIPTION_ALLOWED_FONT_SIZES.has(inlineSize)
+                ? inlineSize
+                : (DESCRIPTION_LEGACY_FONT_SIZES[fontNode.getAttribute("size")] || "");
+            const color = this.normalizeDescriptionColor(fontNode.getAttribute("color"));
+            if (legacyStyle) {
+                span.setAttribute("style", legacyStyle);
+            }
+            if (family) {
+                span.style.fontFamily = family;
+            }
+            if (size) {
+                span.style.fontSize = size;
+            }
+            if (color) {
+                span.style.color = color;
+            }
+            while (fontNode.firstChild) {
+                span.appendChild(fontNode.firstChild);
+            }
+            fontNode.replaceWith(span);
+        });
+    }
+
+    sanitizedDescriptionStyle(node) {
+        const safeStyle = [];
+        const color = this.normalizeDescriptionColor(node.style.color);
+        const backgroundColor = this.normalizeDescriptionColor(node.style.backgroundColor);
+        const fontFamily = this.normalizeDescriptionFontFamily(node.style.fontFamily);
+        const fontSize = this.toInput(node.style.fontSize).trim().toLowerCase();
+        const textAlign = this.toInput(node.style.textAlign || node.getAttribute("align")).trim().toLowerCase();
+        const marginLeft = this.toInput(node.style.marginLeft).trim().toLowerCase();
+        const fontWeight = this.toInput(node.style.fontWeight).trim().toLowerCase();
+        const fontStyle = this.toInput(node.style.fontStyle).trim().toLowerCase();
+        const textDecoration = this.toInput(node.style.textDecoration || node.style.textDecorationLine)
+            .trim()
+            .toLowerCase();
+
+        if (color) {
+            safeStyle.push(`color: ${color}`);
+        }
+        if (backgroundColor) {
+            safeStyle.push(`background-color: ${backgroundColor}`);
+        }
+        if (fontFamily) {
+            safeStyle.push(`font-family: '${fontFamily}'`);
+        }
+        if (DESCRIPTION_ALLOWED_FONT_SIZES.has(fontSize)) {
+            safeStyle.push(`font-size: ${fontSize}`);
+        }
+        if (DESCRIPTION_ALLOWED_ALIGNMENTS.has(textAlign)) {
+            safeStyle.push(`text-align: ${textAlign}`);
+        }
+        if (DESCRIPTION_ALLOWED_INDENTS.has(marginLeft)) {
+            safeStyle.push(`margin-left: ${marginLeft}`);
+        }
+        if (["bold", "700"].includes(fontWeight)) {
+            safeStyle.push("font-weight: 700");
+        }
+        if (fontStyle === "italic") {
+            safeStyle.push("font-style: italic");
+        }
+        if (/^(underline|line-through)(\s+(underline|line-through))*$/.test(textDecoration)) {
+            safeStyle.push(`text-decoration: ${textDecoration}`);
+        }
+        return safeStyle.join("; ");
+    }
+
     sanitizeDescriptionHtml(value) {
         const html = this.toInput(value);
         if (!html || typeof document === "undefined") {
@@ -888,10 +1038,12 @@ export class ProductIntelligenceAction extends Component {
         }
         const allowedTags = new Set([
             "p", "br", "ul", "ol", "li", "strong", "b", "em", "i", "u",
-            "span", "div", "h3", "h4", "h5", "blockquote", "a",
+            "s", "strike", "sub", "sup", "span", "div", "h2", "h3", "h4", "h5",
+            "blockquote", "a",
         ]);
         const template = document.createElement("template");
         template.innerHTML = html;
+        this.normalizeLegacyDescriptionFormatting(template.content);
 
         const cleanNode = (node) => {
             if (node.nodeType === 3) {
@@ -911,6 +1063,7 @@ export class ProductIntelligenceAction extends Component {
                 node.replaceWith(fragment);
                 return;
             }
+            const safeStyle = this.sanitizedDescriptionStyle(node);
             Array.from(node.attributes).forEach((attr) => {
                 const attrName = attr.name.toLowerCase();
                 if (tagName === "a" && attrName === "href" && /^https?:\/\//i.test(attr.value || "")) {
@@ -923,6 +1076,9 @@ export class ProductIntelligenceAction extends Component {
                 }
                 node.removeAttribute(attr.name);
             });
+            if (safeStyle) {
+                node.setAttribute("style", safeStyle);
+            }
         };
 
         Array.from(template.content.childNodes).forEach(cleanNode);
@@ -969,11 +1125,14 @@ export class ProductIntelligenceAction extends Component {
         const html = this.sanitizeDescriptionHtml(ev.currentTarget.innerHTML || "");
         this.state.contentForm.description = html;
         this.lastContentDescriptionEditorHtml = ev.currentTarget.innerHTML || "";
+        this.saveContentDescriptionSelection();
     }
 
     normalizeContentDescriptionEditor(ev) {
         const html = this.normalizedDescriptionHtml(ev.currentTarget.innerHTML || "");
-        ev.currentTarget.innerHTML = html;
+        if (ev.currentTarget.innerHTML !== html) {
+            ev.currentTarget.innerHTML = html;
+        }
         this.state.contentForm.description = html;
         this.lastContentDescriptionEditorHtml = html;
     }
@@ -981,6 +1140,145 @@ export class ProductIntelligenceAction extends Component {
     onContentDescriptionSourceInput(ev) {
         this.state.contentForm.description = ev.target.value || "";
         this.syncContentDescriptionEditor(true);
+    }
+
+    saveContentDescriptionSelection() {
+        const editor = this.contentDescriptionEditorRef && this.contentDescriptionEditorRef.el;
+        const selection = typeof window !== "undefined" ? window.getSelection() : null;
+        if (!editor || !selection || !selection.rangeCount) {
+            return;
+        }
+        const range = selection.getRangeAt(0);
+        if (editor.contains(range.commonAncestorContainer)) {
+            this.contentDescriptionSelection = range.cloneRange();
+        }
+    }
+
+    restoreContentDescriptionSelection() {
+        const editor = this.contentDescriptionEditorRef && this.contentDescriptionEditorRef.el;
+        const selection = typeof window !== "undefined" ? window.getSelection() : null;
+        if (!editor || !selection) {
+            return false;
+        }
+        editor.focus();
+        selection.removeAllRanges();
+        if (
+            this.contentDescriptionSelection &&
+            editor.contains(this.contentDescriptionSelection.commonAncestorContainer)
+        ) {
+            try {
+                selection.addRange(this.contentDescriptionSelection);
+                return true;
+            } catch (_error) {
+                this.contentDescriptionSelection = null;
+            }
+        }
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.addRange(range);
+        return true;
+    }
+
+    onContentDescriptionToolbarMouseDown(ev) {
+        this.saveContentDescriptionSelection();
+        ev.preventDefault();
+    }
+
+    updateContentDescriptionFromEditor() {
+        const editor = this.contentDescriptionEditorRef && this.contentDescriptionEditorRef.el;
+        if (!editor) {
+            return;
+        }
+        this.state.contentForm.description = this.sanitizeDescriptionHtml(editor.innerHTML || "");
+        this.lastContentDescriptionEditorHtml = editor.innerHTML || "";
+        this.saveContentDescriptionSelection();
+    }
+
+    applyContentDescriptionCommand(command, value = null) {
+        if (typeof document === "undefined" || typeof document.execCommand !== "function") {
+            return;
+        }
+        this.restoreContentDescriptionSelection();
+        document.execCommand(command, false, value);
+        this.updateContentDescriptionFromEditor();
+    }
+
+    onContentDescriptionBlockChange(ev) {
+        const value = ev.target.value;
+        ev.target.value = "";
+        if (value) {
+            this.applyContentDescriptionCommand("formatBlock", `<${value}>`);
+        }
+    }
+
+    onContentDescriptionFontChange(ev) {
+        const value = this.normalizeDescriptionFontFamily(ev.target.value);
+        ev.target.value = "";
+        if (value) {
+            this.applyContentDescriptionCommand("fontName", value);
+        }
+    }
+
+    onContentDescriptionFontSizeChange(ev) {
+        const fontSize = ev.target.value;
+        const value = DESCRIPTION_COMMAND_FONT_SIZES[fontSize];
+        ev.target.value = "";
+        if (!value || typeof document === "undefined" || typeof document.execCommand !== "function") {
+            return;
+        }
+        this.restoreContentDescriptionSelection();
+        document.execCommand("fontSize", false, value);
+        const editor = this.contentDescriptionEditorRef && this.contentDescriptionEditorRef.el;
+        if (editor) {
+            Array.from(editor.querySelectorAll(`font[size="${value}"]`)).forEach((fontNode) => {
+                fontNode.removeAttribute("size");
+                fontNode.style.fontSize = fontSize;
+            });
+        }
+        this.updateContentDescriptionFromEditor();
+    }
+
+    onContentDescriptionTextColor(ev) {
+        const value = this.normalizeDescriptionColor(ev.target.value);
+        if (value) {
+            this.applyContentDescriptionCommand("foreColor", value);
+        }
+    }
+
+    onContentDescriptionHighlightColor(ev) {
+        const value = this.normalizeDescriptionColor(ev.target.value);
+        if (!value) {
+            return;
+        }
+        this.restoreContentDescriptionSelection();
+        const applied = document.execCommand("hiliteColor", false, value);
+        if (!applied) {
+            document.execCommand("backColor", false, value);
+        }
+        this.updateContentDescriptionFromEditor();
+    }
+
+    createContentDescriptionLink() {
+        this.saveContentDescriptionSelection();
+        const rawUrl = typeof window !== "undefined"
+            ? window.prompt("URL del enlace (https://...)", "https://")
+            : "";
+        if (!rawUrl) {
+            return;
+        }
+        let parsedUrl;
+        try {
+            parsedUrl = new URL(rawUrl);
+        } catch (_error) {
+            this.notify("La URL del enlace no es valida.", "warning");
+            return;
+        }
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+            this.notify("Solo se permiten enlaces HTTP o HTTPS.", "warning");
+            return;
+        }
+        this.applyContentDescriptionCommand("createLink", parsedUrl.href);
     }
 
     marginBenefitLabel() {

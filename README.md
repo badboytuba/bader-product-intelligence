@@ -97,7 +97,7 @@ Environment fallbacks:
 ## Compatibility Notes
 
 - This module is now independent from `bader_website`.
-- The public storefront bridge remains inactive; website Pack rendering is outside this release.
+- The product page renders the sanitized rich BPI description when available and falls back to Odoo's native commercial description; public Pack composition rendering remains outside this release.
 - Backend tests exist under `tests/test_product_intelligence.py`; OWL tests live in `static/tests/product_intelligence_tests.js`.
 
 
@@ -138,3 +138,12 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Uses effective Pack prices and native variant min–max ranges in analytics.
 - Adds secure variant image upload/reference/removal using the existing 10 MiB PNG/JPEG/WebP validation and product-owned image tokens.
 - Replaces the unsupported Odoo 16 OWL `.enter` event modifier with an explicit Enter-key handler in Pack component search.
+
+## Release 16.0.1.2.2
+
+- Adds a Word-like visual toolbar to the optimized-description editor without adding a third-party JavaScript dependency.
+- Supports paragraph styles, allowlisted fonts and sizes, text/highlight colors, bold, italic, underline, strikethrough, alignment, lists, indentation, links, undo/redo and format cleanup.
+- Preserves formatted HTML in `bpi_ai_generated_description` while continuing to copy plain text into Odoo's commercial description.
+- Sanitizes tags, links and inline styles using a strict client allowlist plus Odoo's `fields.Html` sanitizer.
+- Activates the product-page bridge so the sanitized formatted description is rendered in `website_sale.product`, with the native `description_sale` as fallback.
+- This release must pass Odoo backend and QUnit validation in QAS before production deployment.

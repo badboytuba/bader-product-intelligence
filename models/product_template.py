@@ -22,7 +22,12 @@ class ProductTemplate(models.Model):
 
     bpi_geo_title = fields.Char(string="GEO Title")
     bpi_geo_description = fields.Text(string="GEO Description")
-    bpi_ai_generated_description = fields.Html(string="Descripcion IA")
+    bpi_ai_generated_description = fields.Html(
+        string="Descripcion IA",
+        sanitize=True,
+        sanitize_style=True,
+        strip_style=False,
+    )
     bpi_ai_target_audience = fields.Selection(
         [
             ("clinicas", "Clinicas"),

@@ -1,13 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <record id="bpi_product_detail_extensions" model="ir.ui.view">
-        <field name="name">bader.product.intelligence.website.bridge.deprecated</field>
+        <field name="name">bader.product.intelligence.website.formatted.description</field>
         <field name="type">qweb</field>
-        <field name="mode">primary</field>
-        <field name="inherit_id" eval="False"/>
-        <field name="active" eval="False"/>
+        <field name="inherit_id" ref="website_sale.product"/>
+        <field name="mode">extension</field>
+        <field name="priority">90</field>
+        <field name="active" eval="True"/>
         <field name="arch" type="xml">
-            <t t-name="bader_product_intelligence.bpi_product_detail_extensions_deprecated"/>
+            <xpath expr="//div[@id='product_details']/p[@t-field='product.description_sale']" position="replace">
+                <div t-if="product.bpi_ai_generated_description"
+                     class="text-muted my-2 bpi-website-description"
+                     itemprop="description"
+                     data-bpi-description="formatted"
+                     t-field="product.bpi_ai_generated_description"/>
+                <p t-else=""
+                   class="text-muted my-2"
+                   itemprop="description"
+                   placeholder="Una descripcion corta que aparecera tambien en documentos."
+                   t-field="product.description_sale"/>
+            </xpath>
         </field>
     </record>
 </odoo>

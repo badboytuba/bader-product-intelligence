@@ -66,7 +66,7 @@ Release `16.0.1.1.14` addresses the previously documented backend stabilization 
 - image uploads/imports have strict format, size and redirect/SSRF validation;
 - the Product Intelligence category action no longer replaces the native eCommerce category views.
 
-The website bridge view remains intentionally inactive; storefront rendering is outside this release.
+The stabilization release left the website bridge inactive. Release `16.0.1.2.2` activates only the sanitized formatted product description on `website_sale.product`; public Pack composition rendering remains outside scope.
 
 Release `16.0.1.2.1` is developed on `feature/bpi-pack-variant-control` as the Pack/variant release plus its Odoo 16 OWL compatibility hotfix:
 
@@ -76,4 +76,6 @@ Release `16.0.1.2.1` is developed on `feature/bpi-pack-variant-control` as the P
 - Pack component search handles Enter in JavaScript because Odoo 16 OWL does not support the `.enter` event modifier;
 - ordinary products can only become Packs through the standard Odoo form;
 - public website Pack rendering and MRP Kits remain outside scope;
-- PROD stays untouched until QAS functional approval specific to `1.2.0`.
+- PROD stays untouched until QAS functional approval specific to the Pack/variant release.
+
+Release `16.0.1.2.2` is developed on `feature/bpi-rich-text-editor` and adds the optimized-description rich-text toolbar plus the active product-page description bridge. It keeps formatted HTML in the existing `fields.Html` field, keeps the Odoo sales description plain for documents/fallback, permits only an explicit set of fonts/sizes/colors/styles and requires QAS certification before PROD.

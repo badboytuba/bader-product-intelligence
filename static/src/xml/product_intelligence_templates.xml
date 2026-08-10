@@ -658,19 +658,91 @@
                                         <span t-if="!state.contentBusy">Generar Descripcion con Nancy AI</span>
                                         <span t-else="">Generando...</span>
                                     </button>
-                                    <div class="bpi-form-grid">
-                                        <label>Nombre del Producto</label>
-                                        <input class="bpi-input" t-model="state.contentForm.name"/>
-                                        <label>Descripcion Optimizada</label>
-                                        <div class="bpi-rich-editor"
-                                             contenteditable="true"
-                                             t-ref="contentDescriptionEditor"
-                                             t-on-input="onContentDescriptionInput"
-                                             t-on-blur="normalizeContentDescriptionEditor"
-                                             aria-label="Descripcion Optimizada"
-                                             data-placeholder="La descripcion generada aparecera aqui con formato."/>
+                                        <div class="bpi-form-grid">
+                                            <label>Nombre del Producto</label>
+                                            <input class="bpi-input" t-model="state.contentForm.name"/>
+                                            <label>Descripcion Optimizada</label>
+                                        <div class="bpi-rich-editor-shell">
+                                            <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion">
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <select class="bpi-editor-select bpi-editor-select--block"
+                                                            title="Estilo de parrafo"
+                                                            aria-label="Estilo de parrafo"
+                                                            t-on-mousedown="saveContentDescriptionSelection"
+                                                            t-on-change="onContentDescriptionBlockChange">
+                                                        <option value="">Formato</option>
+                                                        <option t-foreach="descriptionBlockFormats" t-as="block" t-key="block.value" t-att-value="block.value" t-esc="block.label"/>
+                                                    </select>
+                                                    <select class="bpi-editor-select bpi-editor-select--font"
+                                                            title="Fuente"
+                                                            aria-label="Fuente"
+                                                            t-on-mousedown="saveContentDescriptionSelection"
+                                                            t-on-change="onContentDescriptionFontChange">
+                                                        <option value="">Fuente</option>
+                                                        <option t-foreach="descriptionFontFamilies" t-as="font" t-key="font.value" t-att-value="font.value" t-att-style="'font-family: ' + font.value" t-esc="font.label"/>
+                                                    </select>
+                                                    <select class="bpi-editor-select bpi-editor-select--size"
+                                                            title="Tamano de fuente"
+                                                            aria-label="Tamano de fuente"
+                                                            t-on-mousedown="saveContentDescriptionSelection"
+                                                            t-on-change="onContentDescriptionFontSizeChange">
+                                                        <option value="">Tamano</option>
+                                                        <option t-foreach="descriptionFontSizes" t-as="fontSize" t-key="fontSize.value" t-att-value="fontSize.value" t-esc="fontSize.label"/>
+                                                    </select>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <button type="button" class="bpi-editor-tool" title="Negrita" aria-label="Negrita" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('bold')"><i class="fa fa-bold"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Cursiva" aria-label="Cursiva" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('italic')"><i class="fa fa-italic"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Subrayado" aria-label="Subrayado" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('underline')"><i class="fa fa-underline"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Tachado" aria-label="Tachado" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('strikeThrough')"><i class="fa fa-strikethrough"/></button>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group bpi-rich-editor-toolbar__group--colors">
+                                                    <label class="bpi-editor-color" title="Color del texto">
+                                                        <i class="fa fa-font"/>
+                                                        <input type="color" value="#003841" aria-label="Color del texto" t-on-mousedown="saveContentDescriptionSelection" t-on-change="onContentDescriptionTextColor"/>
+                                                    </label>
+                                                    <label class="bpi-editor-color" title="Color de resaltado">
+                                                        <i class="fa fa-paint-brush"/>
+                                                        <input type="color" value="#fff2a8" aria-label="Color de resaltado" t-on-mousedown="saveContentDescriptionSelection" t-on-change="onContentDescriptionHighlightColor"/>
+                                                    </label>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la izquierda" aria-label="Alinear a la izquierda" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('justifyLeft')"><i class="fa fa-align-left"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Centrar" aria-label="Centrar" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('justifyCenter')"><i class="fa fa-align-center"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la derecha" aria-label="Alinear a la derecha" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('justifyRight')"><i class="fa fa-align-right"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Justificar" aria-label="Justificar" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('justifyFull')"><i class="fa fa-align-justify"/></button>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <button type="button" class="bpi-editor-tool" title="Lista con vinetas" aria-label="Lista con vinetas" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('insertUnorderedList')"><i class="fa fa-list-ul"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Lista numerada" aria-label="Lista numerada" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('insertOrderedList')"><i class="fa fa-list-ol"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Reducir sangria" aria-label="Reducir sangria" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('outdent')"><i class="fa fa-outdent"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Aumentar sangria" aria-label="Aumentar sangria" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('indent')"><i class="fa fa-indent"/></button>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <button type="button" class="bpi-editor-tool" title="Agregar enlace" aria-label="Agregar enlace" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="createContentDescriptionLink"><i class="fa fa-link"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Quitar enlace" aria-label="Quitar enlace" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('unlink')"><i class="fa fa-unlink"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Limpiar formato" aria-label="Limpiar formato" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('removeFormat')"><i class="fa fa-eraser"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Deshacer" aria-label="Deshacer" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('undo')"><i class="fa fa-undo"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Rehacer" aria-label="Rehacer" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('redo')"><i class="fa fa-repeat"/></button>
+                                                </div>
+                                            </div>
+                                            <div class="bpi-rich-editor"
+                                                 contenteditable="true"
+                                                 t-ref="contentDescriptionEditor"
+                                                 t-on-input="onContentDescriptionInput"
+                                                 t-on-keyup="saveContentDescriptionSelection"
+                                                 t-on-mouseup="saveContentDescriptionSelection"
+                                                 t-on-blur="normalizeContentDescriptionEditor"
+                                                 aria-label="Descripcion Optimizada"
+                                                 data-placeholder="La descripcion generada aparecera aqui con formato."/>
+                                        </div>
                                         <div class="bpi-editor-help">
-                                            <i class="fa fa-eye"/> Vista renderizada: editá el texto directamente sin ver etiquetas HTML.
+                                            <i class="fa fa-eye"/> Seleccioná el texto y aplicá fuente, tamano, colores, listas, alineacion o enlaces.
                                         </div>
                                         <details class="bpi-html-source">
                                             <summary>Ver/editar HTML fuente</summary>

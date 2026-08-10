@@ -213,6 +213,46 @@ class TestProductoIntelligence(TransactionCase):
         self.assertTrue(self.product_new.bpi_featured)
         self.assertEqual(payload["product"]["slug"], "producto-inteligente-premium")
 
+    def test_rich_text_description_keeps_html_and_plain_sale_copy(self):
+        description_html = (
+            '<h2 style="color: #cc0000; font-family: Arial; font-size: 24px; text-align: center">'
+            "Titulo comercial</h2>"
+            '<p><strong>Texto destacado</strong> con <span style="background-color: #fff2a8">color</span>.</p>'
+        )
+
+        payload = self.service.save_content(
+            self.product_new,
+            {"description": description_html},
+        )
+        self.product_new.invalidate_cache(
+            fnames=["bpi_ai_generated_description", "description_sale"]
+        )
+
+        self.assertIn("<h2", self.product_new.bpi_ai_generated_description)
+        self.assertIn("font-size: 24px", self.product_new.bpi_ai_generated_description)
+        self.assertIn("font-family", self.product_new.bpi_ai_generated_description)
+        self.assertIn("color", self.product_new.bpi_ai_generated_description)
+        self.assertIn("text-align", self.product_new.bpi_ai_generated_description)
+        self.assertIn("background-color", self.product_new.bpi_ai_generated_description)
+        self.assertIn("Titulo comercial", self.product_new.description_sale)
+        self.assertIn("Texto destacado", self.product_new.description_sale)
+        self.assertNotIn("<h2", self.product_new.description_sale)
+        self.assertIn("font-size: 24px", payload["seoData"]["aiGeneratedDescriptionHtml"])
+
+    def test_storefront_bridge_uses_formatted_description_with_native_fallback(self):
+        bridge = self.env.ref(
+            "bader_product_intelligence.bpi_product_detail_extensions"
+        )
+        native_product_view = self.env.ref("website_sale.product")
+
+        self.assertTrue(bridge.active)
+        self.assertEqual(bridge.inherit_id, native_product_view)
+        self.assertEqual(bridge.mode, "extension")
+        self.assertEqual(bridge.priority, 90)
+        self.assertIn("product.bpi_ai_generated_description", bridge.arch_db)
+        self.assertIn('data-bpi-description="formatted"', bridge.arch_db)
+        self.assertIn("product.description_sale", bridge.arch_db)
+
     def test_variant_payload_exposes_native_operational_data_and_price_range(self):
         payload = self.product_with_variants.bpi_build_payload()
 

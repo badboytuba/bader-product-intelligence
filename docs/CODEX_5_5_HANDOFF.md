@@ -1,6 +1,6 @@
 # Codex Handoff — Bader Product Intelligence
 
-_Last updated: 2026-08-04_
+_Last updated: 2026-08-10_
 
 This file is the operational handoff for the Odoo 16 addon. Never print or commit the local `.env`.
 
@@ -9,14 +9,22 @@ This file is the operational handoff for the Odoo 16 addon. Never print or commi
 - Repository: `https://github.com/badboytuba/bader-product-intelligence.git`
 - Technical addon directory: `bader_product_intelligence`
 - Odoo app: `Producto Intelligence`
-- Current feature branch: `feature/bpi-pack-variant-control`
-- Release: `16.0.1.2.1`
-- Certified base: `16.0.1.1.14`, commit `e359464`
+- Current feature branch: `feature/bpi-rich-text-editor`
+- Release under development: `16.0.1.2.2`
+- Certified release: `16.0.1.2.1`, code tree `761e95d` / main merge `f4c8619`
 - License: `LGPL-3`
 - Target: Odoo Community `16.0`
 - Dependencies: `product`, `web`, `website_sale`, `product_pack`, `sale_product_pack`, `stock_product_pack`
 
-Release `1.2.1` is deliberately separate from the certified `1.1.14` stabilization. It adds the Odoo 16 OWL Enter-key compatibility hotfix to `1.2.0`. PROD must remain on its approved version until functional approval for Packs and variants.
+Release `1.2.2` builds on the certified `1.2.1` Pack/variant release and adds a safe Word-like editor toolbar for the optimized product description. It is not approved for PROD until its own QAS validation is complete.
+
+## Rich-text description behavior
+
+The Content tab uses the existing `contenteditable` surface with an addon-owned toolbar rather than a third-party editor. It supports headings/paragraphs, allowlisted font families and sizes, text/highlight colors, emphasis, alignment, lists, indentation, HTTP(S) links, undo/redo and format cleanup.
+
+The frontend converts legacy browser `<font>` markup to safe `<span style="...">` HTML and retains only explicitly permitted tags, links and CSS properties. Odoo's `fields.Html` sanitizer is also enabled with style sanitization. The formatted value remains in `bpi_ai_generated_description`; `description_sale` continues to receive the corresponding plain text for native Odoo compatibility and storefront fallback.
+
+The active `bader_product_intelligence.bpi_product_detail_extensions` view inherits `website_sale.product` at priority 90 and replaces only the standard short-description node. It renders the formatted BPI HTML when present and otherwise preserves the native `description_sale`. This bridge does not render Pack composition or introduce a dependency on `bader_website`.
 
 ## Scope
 
@@ -149,6 +157,13 @@ Final QAS certification for the code tree published in the feature PR:
 - normal and `debug=assets` action openings: dashboard rendered, 0 dialogs/runtime exceptions;
 - real Pack search Enter: default prevented and component results returned;
 - service restored active, temporary QUnit users removed, and the preexisting view state restored.
+
+## Development validation status for 16.0.1.2.2
+
+- Local addon validator with Node required: passed.
+- Python compile, XML parse, JavaScript syntax, RPC contract, Git hygiene and SCSS compilation: passed.
+- Test definitions: 20 backend tests and 12 QUnit tests, including formatted HTML/plain-text persistence, the website bridge contract and the safe editor allowlist.
+- Odoo runtime and browser QUnit tests have not yet been rerun in QAS for this release; PROD remains untouched.
 
 ## Safe QAS/PROD deployment
 

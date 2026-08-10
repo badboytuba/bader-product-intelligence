@@ -38,6 +38,36 @@ QUnit.test("gallery deletion is conditioned by canDelete and bpi token", async (
     assert.deepEqual(calls[0].payload, { product_tmpl_id: 7, image_token: "bpi:8" });
 });
 
+QUnit.test("description editor preserves safe Word-like formatting only", (assert) => {
+    const action = Object.create(ProductIntelligenceAction.prototype);
+    const sanitized = action.sanitizeDescriptionHtml(`
+        <h2 style="color: #cc0000; background-color: #fff2a8; font-family: Arial; font-size: 24px; text-align: center; position: fixed">
+            Titulo <script>alert(1)</script>
+        </h2>
+        <font face="Georgia" size="5" color="#00525c" style="background-color: #fff2a8">Texto</font>
+        <a href="javascript:alert(1)" onclick="alert(2)">Enlace inseguro</a>
+    `);
+    const container = document.createElement("div");
+    container.innerHTML = sanitized;
+    const heading = container.querySelector("h2");
+    const legacySpan = container.querySelector("span");
+    const link = container.querySelector("a");
+
+    assert.ok(heading, "supported heading is retained");
+    assert.ok(heading.style.color, "text color is retained");
+    assert.ok(heading.style.backgroundColor, "highlight color is retained");
+    assert.strictEqual(heading.style.fontFamily, "Arial", "allowlisted font is retained");
+    assert.strictEqual(heading.style.fontSize, "24px", "allowlisted size is retained");
+    assert.strictEqual(heading.style.textAlign, "center", "alignment is retained");
+    assert.notOk(heading.style.position, "unsafe style properties are removed");
+    assert.strictEqual(legacySpan.style.fontFamily, "Georgia", "legacy font markup is normalized");
+    assert.strictEqual(legacySpan.style.fontSize, "24px", "legacy font size is normalized");
+    assert.ok(legacySpan.style.backgroundColor, "legacy highlight is retained");
+    assert.notOk(container.querySelector("script"), "script elements are removed");
+    assert.notOk(link.hasAttribute("href"), "unsafe link protocols are removed");
+    assert.notOk(link.hasAttribute("onclick"), "event attributes are removed");
+});
+
 QUnit.test("chat quick action does not duplicate the user message", (assert) => {
     const action = Object.create(ProductIntelligenceAction.prototype);
     const sent = [];
