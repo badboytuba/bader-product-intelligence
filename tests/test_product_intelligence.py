@@ -232,7 +232,7 @@ class TestProductoIntelligence(TransactionCase):
                 "technicalDescription": technical_description_html,
             },
         )
-        self.product_new.invalidate_cache(
+        self.product_new.invalidate_recordset(
             fnames=[
                 "bpi_ai_generated_description",
                 "bpi_technical_description",
