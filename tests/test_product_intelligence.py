@@ -229,7 +229,10 @@ class TestProductoIntelligence(TransactionCase):
         )
 
         self.assertIn("<h2", self.product_new.bpi_ai_generated_description)
-        self.assertIn("font-size: 24px", self.product_new.bpi_ai_generated_description)
+        self.assertRegex(
+            str(self.product_new.bpi_ai_generated_description),
+            r"font-size:\s*24px",
+        )
         self.assertIn("font-family", self.product_new.bpi_ai_generated_description)
         self.assertIn("color", self.product_new.bpi_ai_generated_description)
         self.assertIn("text-align", self.product_new.bpi_ai_generated_description)
@@ -237,7 +240,10 @@ class TestProductoIntelligence(TransactionCase):
         self.assertIn("Titulo comercial", self.product_new.description_sale)
         self.assertIn("Texto destacado", self.product_new.description_sale)
         self.assertNotIn("<h2", self.product_new.description_sale)
-        self.assertIn("font-size: 24px", payload["seoData"]["aiGeneratedDescriptionHtml"])
+        self.assertRegex(
+            payload["seoData"]["aiGeneratedDescriptionHtml"],
+            r"font-size:\s*24px",
+        )
 
     def test_storefront_bridge_uses_formatted_description_with_native_fallback(self):
         bridge = self.env.ref(
