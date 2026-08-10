@@ -960,6 +960,28 @@ $bpi-orange: #ff8122;
         }
     }
 
+    .bpi-rich-editor--compact {
+        min-height: 70px;
+        max-height: 180px;
+    }
+
+    .bpi-rich-editor--technical {
+        min-height: 420px;
+        max-height: 900px;
+    }
+
+    .bpi-content-divider {
+        height: 1px;
+        margin: 12px 0 4px;
+        background: rgba(0, 56, 65, 0.14);
+    }
+
+    .bpi-label-hint {
+        color: $bpi-muted;
+        font-size: 12px;
+        font-weight: 400;
+    }
+
     .bpi-editor-help {
         display: flex;
         align-items: center;
@@ -976,6 +998,10 @@ $bpi-orange: #ff8122;
 
         .bpi-editor-select--font {
             width: 96px;
+        }
+
+        .bpi-rich-editor--technical {
+            min-height: 340px;
         }
     }
 

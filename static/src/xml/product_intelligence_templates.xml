@@ -655,13 +655,13 @@
                                     </div>
                                     <button type="button" class="bpi-button bpi-button--primary bpi-button--full" style="margin-top: 18px;" t-on-click="generateContent" t-att-disabled="state.contentBusy">
                                         <i class="fa fa-magic"/>
-                                        <span t-if="!state.contentBusy">Generar Descripcion con Nancy AI</span>
+                                        <span t-if="!state.contentBusy">Generar Descripciones con Nancy AI</span>
                                         <span t-else="">Generando...</span>
                                     </button>
                                         <div class="bpi-form-grid">
                                             <label>Nombre del Producto</label>
                                             <input class="bpi-input" t-model="state.contentForm.name"/>
-                                            <label>Descripcion Optimizada</label>
+                                            <label>Descripcion Optimizada <span class="bpi-label-hint">(resumen corto)</span></label>
                                         <div class="bpi-rich-editor-shell">
                                             <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion">
                                                 <div class="bpi-rich-editor-toolbar__group">
@@ -731,7 +731,7 @@
                                                     <button type="button" class="bpi-editor-tool" title="Rehacer" aria-label="Rehacer" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('redo')"><i class="fa fa-repeat"/></button>
                                                 </div>
                                             </div>
-                                            <div class="bpi-rich-editor"
+                                            <div class="bpi-rich-editor bpi-rich-editor--compact"
                                                  contenteditable="true"
                                                  t-ref="contentDescriptionEditor"
                                                  t-on-input="onContentDescriptionInput"
@@ -739,16 +739,105 @@
                                                  t-on-mouseup="saveContentDescriptionSelection"
                                                  t-on-blur="normalizeContentDescriptionEditor"
                                                  aria-label="Descripcion Optimizada"
-                                                 data-placeholder="La descripcion generada aparecera aqui con formato."/>
+                                                 data-placeholder="Resumen comercial breve de 45 a 70 palabras."/>
                                         </div>
                                         <div class="bpi-editor-help">
-                                            <i class="fa fa-eye"/> Seleccioná el texto y aplicá fuente, tamano, colores, listas, alineacion o enlaces.
+                                            <i class="fa fa-eye"/> Este resumen aparece junto a las imágenes y botones de compra. Objetivo: lectura rápida.
                                         </div>
                                         <details class="bpi-html-source">
                                             <summary>Ver/editar HTML fuente</summary>
-                                            <textarea class="bpi-textarea bpi-textarea--mono" rows="7" t-att-value="state.contentForm.description" t-on-input="onContentDescriptionSourceInput"/>
+                                            <textarea class="bpi-textarea bpi-textarea--mono" rows="3" t-att-value="state.contentForm.description" t-on-input="onContentDescriptionSourceInput"/>
                                         </details>
                                         <p class="bpi-muted" t-esc="contentWordCountLabel()"/>
+                                        <div class="bpi-content-divider" role="separator"></div>
+                                        <label>Descripcion Tecnica <span class="bpi-label-hint">(contenido ampliado)</span></label>
+                                        <div class="bpi-rich-editor-shell">
+                                            <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion tecnica">
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <select class="bpi-editor-select bpi-editor-select--block"
+                                                            title="Estilo de parrafo"
+                                                            aria-label="Estilo de parrafo"
+                                                            t-on-mousedown="saveTechnicalDescriptionSelection"
+                                                            t-on-change="onTechnicalDescriptionBlockChange">
+                                                        <option value="">Formato</option>
+                                                        <option t-foreach="descriptionBlockFormats" t-as="block" t-key="block.value" t-att-value="block.value" t-esc="block.label"/>
+                                                    </select>
+                                                    <select class="bpi-editor-select bpi-editor-select--font"
+                                                            title="Fuente"
+                                                            aria-label="Fuente"
+                                                            t-on-mousedown="saveTechnicalDescriptionSelection"
+                                                            t-on-change="onTechnicalDescriptionFontChange">
+                                                        <option value="">Fuente</option>
+                                                        <option t-foreach="descriptionFontFamilies" t-as="font" t-key="font.value" t-att-value="font.value" t-att-style="'font-family: ' + font.value" t-esc="font.label"/>
+                                                    </select>
+                                                    <select class="bpi-editor-select bpi-editor-select--size"
+                                                            title="Tamano de fuente"
+                                                            aria-label="Tamano de fuente"
+                                                            t-on-mousedown="saveTechnicalDescriptionSelection"
+                                                            t-on-change="onTechnicalDescriptionFontSizeChange">
+                                                        <option value="">Tamano</option>
+                                                        <option t-foreach="descriptionFontSizes" t-as="fontSize" t-key="fontSize.value" t-att-value="fontSize.value" t-esc="fontSize.label"/>
+                                                    </select>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <button type="button" class="bpi-editor-tool" title="Negrita" aria-label="Negrita" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('bold')"><i class="fa fa-bold"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Cursiva" aria-label="Cursiva" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('italic')"><i class="fa fa-italic"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Subrayado" aria-label="Subrayado" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('underline')"><i class="fa fa-underline"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Tachado" aria-label="Tachado" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('strikeThrough')"><i class="fa fa-strikethrough"/></button>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group bpi-rich-editor-toolbar__group--colors">
+                                                    <label class="bpi-editor-color" title="Color del texto">
+                                                        <i class="fa fa-font"/>
+                                                        <input type="color" value="#003841" aria-label="Color del texto" t-on-mousedown="saveTechnicalDescriptionSelection" t-on-change="onTechnicalDescriptionTextColor"/>
+                                                    </label>
+                                                    <label class="bpi-editor-color" title="Color de resaltado">
+                                                        <i class="fa fa-paint-brush"/>
+                                                        <input type="color" value="#fff2a8" aria-label="Color de resaltado" t-on-mousedown="saveTechnicalDescriptionSelection" t-on-change="onTechnicalDescriptionHighlightColor"/>
+                                                    </label>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la izquierda" aria-label="Alinear a la izquierda" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('justifyLeft')"><i class="fa fa-align-left"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Centrar" aria-label="Centrar" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('justifyCenter')"><i class="fa fa-align-center"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la derecha" aria-label="Alinear a la derecha" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('justifyRight')"><i class="fa fa-align-right"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Justificar" aria-label="Justificar" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('justifyFull')"><i class="fa fa-align-justify"/></button>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <button type="button" class="bpi-editor-tool" title="Lista con vinetas" aria-label="Lista con vinetas" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('insertUnorderedList')"><i class="fa fa-list-ul"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Lista numerada" aria-label="Lista numerada" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('insertOrderedList')"><i class="fa fa-list-ol"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Reducir sangria" aria-label="Reducir sangria" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('outdent')"><i class="fa fa-outdent"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Aumentar sangria" aria-label="Aumentar sangria" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('indent')"><i class="fa fa-indent"/></button>
+                                                </div>
+
+                                                <div class="bpi-rich-editor-toolbar__group">
+                                                    <button type="button" class="bpi-editor-tool" title="Agregar enlace" aria-label="Agregar enlace" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="createTechnicalDescriptionLink"><i class="fa fa-link"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Quitar enlace" aria-label="Quitar enlace" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('unlink')"><i class="fa fa-unlink"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Limpiar formato" aria-label="Limpiar formato" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('removeFormat')"><i class="fa fa-eraser"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Deshacer" aria-label="Deshacer" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('undo')"><i class="fa fa-undo"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Rehacer" aria-label="Rehacer" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('redo')"><i class="fa fa-repeat"/></button>
+                                                </div>
+                                            </div>
+                                            <div class="bpi-rich-editor bpi-rich-editor--technical"
+                                                 contenteditable="true"
+                                                 t-ref="technicalDescriptionEditor"
+                                                 t-on-input="onTechnicalDescriptionInput"
+                                                 t-on-keyup="saveTechnicalDescriptionSelection"
+                                                 t-on-mouseup="saveTechnicalDescriptionSelection"
+                                                 t-on-blur="normalizeTechnicalDescriptionEditor"
+                                                 aria-label="Descripcion Tecnica"
+                                                 data-placeholder="La descripcion tecnica ampliada aparecera aqui con formato."/>
+                                        </div>
+                                        <div class="bpi-editor-help">
+                                            <i class="fa fa-file-text-o"/> Esta sección se publica debajo del área de imágenes y antes de las FAQs.
+                                        </div>
+                                        <details class="bpi-html-source">
+                                            <summary>Ver/editar HTML técnico</summary>
+                                            <textarea class="bpi-textarea bpi-textarea--mono" rows="12" t-att-value="state.contentForm.technicalDescription" t-on-input="onTechnicalDescriptionSourceInput"/>
+                                        </details>
+                                        <p class="bpi-muted" t-esc="technicalDescriptionWordCountLabel()"/>
                                     </div>
                                     <button type="button" class="bpi-button bpi-button--secondary bpi-button--full" t-on-click="saveContentOnly" t-att-disabled="state.contentBusy">
                                         <i class="fa fa-floppy-o"/>

@@ -219,13 +219,25 @@ class TestProductoIntelligence(TransactionCase):
             "Titulo comercial</h2>"
             '<p><strong>Texto destacado</strong> con <span style="background-color: #fff2a8">color</span>.</p>'
         )
+        technical_description_html = (
+            '<h3 style="color: #00525c">Compatibilidad técnica</h3>'
+            '<p>Información ampliada con <strong>datos confirmados</strong>.</p>'
+            '<ul><li>Uso profesional</li><li>Mantenimiento controlado</li></ul>'
+        )
 
         payload = self.service.save_content(
             self.product_new,
-            {"description": description_html},
+            {
+                "description": description_html,
+                "technicalDescription": technical_description_html,
+            },
         )
         self.product_new.invalidate_cache(
-            fnames=["bpi_ai_generated_description", "description_sale"]
+            fnames=[
+                "bpi_ai_generated_description",
+                "bpi_technical_description",
+                "description_sale",
+            ]
         )
 
         self.assertIn("<h2", self.product_new.bpi_ai_generated_description)
@@ -240,10 +252,39 @@ class TestProductoIntelligence(TransactionCase):
         self.assertIn("Titulo comercial", self.product_new.description_sale)
         self.assertIn("Texto destacado", self.product_new.description_sale)
         self.assertNotIn("<h2", self.product_new.description_sale)
+        self.assertIn("<h3", self.product_new.bpi_technical_description)
+        self.assertIn("Compatibilidad técnica", self.product_new.bpi_technical_description)
+        self.assertNotIn("Compatibilidad técnica", self.product_new.description_sale)
         self.assertRegex(
             payload["seoData"]["aiGeneratedDescriptionHtml"],
             r"font-size:\s*24px",
         )
+        self.assertIn(
+            "Compatibilidad técnica",
+            payload["seoData"]["aiTechnicalDescriptionHtml"],
+        )
+
+    def test_generate_content_separates_short_and_technical_copy(self):
+        optimized_html = "<p>Resumen comercial breve para decisión rápida.</p>"
+        technical_html = (
+            "<p>Introducción técnica.</p>"
+            "<h3>Especificaciones</h3><ul><li>Dato confirmado</li></ul>"
+        )
+        with patch(
+            "odoo.addons.bader_product_intelligence.models.product_intelligence.BPIService._openai_json",
+            return_value={
+                "name": self.product_new.name,
+                "description": optimized_html,
+                "technicalDescription": technical_html,
+            },
+        ) as mocked_openai:
+            result = self.service.generate_content(self.product_new)
+
+        prompt = mocked_openai.call_args.args[0]
+        self.assertIn("45-70 palabras", prompt)
+        self.assertIn("350-650 palabras", prompt)
+        self.assertEqual(result["descriptionHtml"], optimized_html)
+        self.assertEqual(result["technicalDescriptionHtml"], technical_html)
 
     def test_storefront_bridge_uses_formatted_description_with_native_fallback(self):
         bridge = self.env.ref(
@@ -260,8 +301,14 @@ class TestProductoIntelligence(TransactionCase):
         self.assertIn("product.description_sale", bridge.arch_db)
         self.assertIn("product.bpi_public_faqs", bridge.arch_db)
         self.assertIn('data-bpi-faq="public"', bridge.arch_db)
+        self.assertIn("product.bpi_technical_description", bridge.arch_db)
+        self.assertIn('data-bpi-technical-description="formatted"', bridge.arch_db)
         self.assertIn('itemtype="https://schema.org/FAQPage"', bridge.arch_db)
         self.assertIn("//div[@id='product_detail_main']", bridge.arch_db)
+        self.assertLess(
+            bridge.arch_db.index('data-bpi-technical-description="formatted"'),
+            bridge.arch_db.index('data-bpi-faq="public"'),
+        )
 
         View = self.env["ir.ui.view"]
         website = self.env["website"].search([], order="id", limit=1)
@@ -308,6 +355,8 @@ class TestProductoIntelligence(TransactionCase):
         self.assertIn('data-bpi-description="formatted"', website_bridge.arch_db)
         self.assertIn("product.bpi_public_faqs", website_bridge.arch_db)
         self.assertIn('data-bpi-faq="public"', website_bridge.arch_db)
+        self.assertIn("product.bpi_technical_description", website_bridge.arch_db)
+        self.assertIn('data-bpi-technical-description="formatted"', website_bridge.arch_db)
 
     def test_public_faq_projection_is_ordered_complete_and_acl_safe(self):
         Faq = self.env["bpi.product.faq"]

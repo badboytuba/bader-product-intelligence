@@ -68,6 +68,33 @@ QUnit.test("description editor preserves safe Word-like formatting only", (asser
     assert.notOk(link.hasAttribute("onclick"), "event attributes are removed");
 });
 
+QUnit.test("content save keeps optimized and technical descriptions independent", async (assert) => {
+    const calls = [];
+    const action = Object.create(ProductIntelligenceAction.prototype);
+    action.state = {
+        productId: 17,
+        contentForm: {
+            name: "Producto técnico",
+            description: "<p>Resumen corto</p>",
+            technicalDescription: "<h3>Especificaciones</h3><p>Contenido ampliado</p>",
+            tone: "tecnico",
+            audience: "clinicas",
+            faqs: [],
+        },
+    };
+    action.rpc = async (route, payload) => calls.push({ route, payload });
+
+    await action.saveContentData();
+
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].route, "/bader_product_intelligence/save_content");
+    assert.strictEqual(calls[0].payload.values.description, "<p>Resumen corto</p>");
+    assert.strictEqual(
+        calls[0].payload.values.technicalDescription,
+        "<h3>Especificaciones</h3><p>Contenido ampliado</p>"
+    );
+});
+
 QUnit.test("chat quick action does not duplicate the user message", (assert) => {
     const action = Object.create(ProductIntelligenceAction.prototype);
     const sent = [];
@@ -99,7 +126,10 @@ QUnit.test("detail payload replaces chat state when product changes", (assert) =
 
     action.applyDetailPayload({
         product: { id: 2, name: "Producto B", referenceImages: [] },
-        seoData: {},
+        seoData: {
+            aiGeneratedDescriptionHtml: "<p>Resumen B</p>",
+            aiTechnicalDescriptionHtml: "<h3>Ficha B</h3><p>Detalle B</p>",
+        },
         images: [],
         chatHistory: [{ role: "assistant", content: "Historial B" }],
         chatSessionId: "session-b",
@@ -107,6 +137,11 @@ QUnit.test("detail payload replaces chat state when product changes", (assert) =
     });
 
     assert.deepEqual(action.state.chatMessages, [{ role: "assistant", content: "Historial B" }]);
+    assert.strictEqual(action.state.contentForm.description, "<p>Resumen B</p>");
+    assert.strictEqual(
+        action.state.contentForm.technicalDescription,
+        "<h3>Ficha B</h3><p>Detalle B</p>"
+    );
     assert.strictEqual(action.state.chatSessionKey, "session-b");
     assert.strictEqual(action.state.chatInput, "");
     assert.notOk(action.state.chatBusy);

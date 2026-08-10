@@ -28,6 +28,12 @@ class ProductTemplate(models.Model):
         sanitize_style=True,
         strip_style=False,
     )
+    bpi_technical_description = fields.Html(
+        string="Descripcion tecnica IA",
+        sanitize=True,
+        sanitize_style=True,
+        strip_style=False,
+    )
     bpi_ai_target_audience = fields.Selection(
         [
             ("clinicas", "Clinicas"),
@@ -167,6 +173,7 @@ class ProductTemplate(models.Model):
         sale_description = self._bpi_plain_text(self.description_sale)
         website_description_text = self._bpi_plain_text(self.website_description)
         technical_description = self._bpi_plain_text(self.description)
+        bpi_technical_description = self._bpi_plain_text(self.bpi_technical_description)
 
         description_candidates = [
             ("ai", ai_description),
@@ -194,6 +201,8 @@ class ProductTemplate(models.Model):
             "descriptionSale": sale_description,
             "websiteDescriptionText": website_description_text,
             "technicalDescription": technical_description,
+            "bpiTechnicalDescription": bpi_technical_description,
+            "bpiTechnicalDescriptionHtml": self.bpi_technical_description or "",
             "contentDescription": content_description,
             "source": source,
             "sourceLabel": source_labels.get(source, source_labels[""]),
@@ -207,7 +216,8 @@ class ProductTemplate(models.Model):
         self.ensure_one()
         descriptions = self._bpi_description_payload()
         return (
-            descriptions["descriptionSale"]
+            descriptions["bpiTechnicalDescription"]
+            or descriptions["descriptionSale"]
             or descriptions["websiteDescriptionText"]
             or descriptions["technicalDescription"]
             or descriptions["aiDescription"]
@@ -778,6 +788,8 @@ class ProductTemplate(models.Model):
             ],
             "aiGeneratedDescription": description_payload["aiDescription"],
             "aiGeneratedDescriptionHtml": self.bpi_ai_generated_description or "",
+            "aiTechnicalDescription": description_payload["bpiTechnicalDescription"],
+            "aiTechnicalDescriptionHtml": description_payload["bpiTechnicalDescriptionHtml"],
             "aiTargetAudience": self.bpi_ai_target_audience or "clinicas",
             "aiTone": self.bpi_ai_tone or "profesional",
             "seoScore": self.bpi_seo_score,
@@ -798,6 +810,8 @@ class ProductTemplate(models.Model):
                 "websiteDescription": self.website_description or "",
                 "websiteDescriptionText": description_payload["websiteDescriptionText"],
                 "technicalDescription": description_payload["technicalDescription"],
+                "bpiTechnicalDescription": description_payload["bpiTechnicalDescription"],
+                "bpiTechnicalDescriptionHtml": description_payload["bpiTechnicalDescriptionHtml"],
                 "sku": self.default_code or "",
                 "slug": current_slug,
                 "brand": self.bpi_brand_name or "Bader",

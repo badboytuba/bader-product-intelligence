@@ -1148,6 +1148,8 @@ class BPIService(models.AbstractModel):
                 "bpi_last_analyzed_at": fields.Datetime.now(),
             }
         )
+        if "aiTechnicalDescription" in data:
+            product.bpi_technical_description = data.get("aiTechnicalDescription") or False
 
         product.bpi_keyword_ids.unlink()
         keyword_commands = []
@@ -1245,7 +1247,7 @@ Devolvé exclusivamente un JSON válido con esta estructura:
             "sku": product.default_code or "N/A",
             "category": (product.public_categ_ids[:1].name if product.public_categ_ids else "Sin categoría"),
             "price": product.list_price,
-            "description": product.description_sale or product.description or "Sin descripción",
+            "description": product._bpi_prompt_description() or "Sin descripción",
             "audience": target_audience or "clinicas",
             "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
         }
@@ -1665,7 +1667,8 @@ Tu misión: crear contenido de producto que CONVIERTE visitantes en compradores 
 Devolvé solo JSON válido:
 {
   "name": "",
-  "description": ""
+  "description": "",
+  "technicalDescription": ""
 }
 
 ━━━ PRODUCTO ━━━
@@ -1674,6 +1677,7 @@ Devolvé solo JSON válido:
 - Categoría: %(category)s
 - Precio USD: %(price)s
 - Descripción actual: %(description)s
+- Descripción técnica actual: %(technical_description)s
 - Tono: %(tone)s
 - Audiencia: %(audience)s
 - Contexto de variantes/Pack:
@@ -1685,27 +1689,23 @@ Devolvé solo JSON válido:
 - NO cambiar marca ni modelo. NO agregar adjetivos de marketing vacíos.
 - Máximo 80 caracteres.
 
-━━━ REGLAS PARA "description" ━━━
-Generar descripción en HTML válido. Extensión: 180-280 palabras. Estructura obligatoria:
+━━━ REGLAS PARA "description" — RESUMEN COMERCIAL ━━━
+Generar HTML válido de 45-70 palabras, aproximadamente 75%% más corto que la descripción anterior.
+- Usar 1 o 2 párrafos breves; no usar títulos ni listas.
+- Abrir con el beneficio principal y explicar qué es, para quién sirve y su uso dental principal.
+- Incluir solo el dato técnico más decisivo para la compra.
+- Cerrar de forma natural, sin repetir soporte, envío y garantía si no aportan a la decisión inmediata.
+- Esta descripción aparece junto a las imágenes y botones de compra: debe poder leerse en pocos segundos.
 
-**Párrafo 1 — Hook + Definición** (2-3 oraciones):
-- Empezar con el beneficio principal del producto, NO con "Este producto es...".
-- Definir qué es y para qué procedimiento dental se usa.
-- Incluir al menos 1 entidad dental específica (procedimiento, técnica, especialidad).
-
-**Párrafo 2 — Características Técnicas** (usar <ul><li>):
-- 4-6 características con datos precisos (medidas, materiales, certificaciones).
-- Si no tenés datos exactos, describir la categoría general con precisión técnica.
-- Usar terminología odontológica correcta.
-
-**Párrafo 3 — Casos de Uso y Audiencia** (2-3 oraciones):
-- ¿Quién lo necesita? (odontólogo general, especialista, laboratorio, estudiante)
-- ¿En qué procedimiento específico se usa?
-- Tono de recomendación experta.
-
-**Párrafo 4 — Por qué Bader** (1-2 oraciones):
-- Mencionar: soporte técnico, envío a toda Argentina, garantía.
-- Cerrar con CTA implícito.
+━━━ REGLAS PARA "technicalDescription" — FICHA TÉCNICA AMPLIADA ━━━
+Generar HTML semántico de 350-650 palabras para mostrarse debajo de las imágenes y antes de las FAQs.
+- Empezar con un párrafo de alcance e indicación profesional.
+- Usar <h3> para secciones y <p>, <ul>, <li>, <strong> para el contenido.
+- Cubrir, cuando el contexto lo permita: características y especificaciones; compatibilidad; indicaciones y flujo de uso; mantenimiento, limpieza o esterilización; seguridad/precauciones; presentación y elementos incluidos.
+- Separar claramente datos confirmados de recomendaciones generales de la categoría.
+- Omitir cualquier medida, material, certificación o compatibilidad no confirmada; nunca completar huecos inventando.
+- No diagnosticar ni sustituir el criterio del profesional odontológico.
+- Mantener una jerarquía clara y útil para lectura técnica, SEO y motores de IA.
 
 ━━━ PRINCIPIOS DE CALIDAD ━━━
 - Tono: %(tone)s pero siempre profesional y creíble.
@@ -1720,16 +1720,20 @@ Generar descripción en HTML válido. Extensión: 180-280 palabras. Estructura o
             "category": self._public_category_label(product),
             "price": product.list_price,
             "description": product.description_sale or product.description or "Sin descripción",
+            "technical_description": self._description_plain_text(product.bpi_technical_description) or "Sin descripción técnica",
             "tone": tone or "profesional",
             "audience": audience or "clinicas",
             "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
         }
         response = self._openai_json(prompt)
         description_html = response.get("description") or product.bpi_ai_generated_description or product.description_sale or product.description or ""
+        technical_description_html = response.get("technicalDescription") or product.bpi_technical_description or ""
         return {
             "name": response.get("name") or product.name,
             "description": self._description_plain_text(description_html) or "",
             "descriptionHtml": description_html,
+            "technicalDescription": self._description_plain_text(technical_description_html) or "",
+            "technicalDescriptionHtml": technical_description_html,
             "tone": tone or "profesional",
             "audience": audience or "clinicas",
         }
@@ -1767,6 +1771,8 @@ Generar descripción en HTML válido. Extensión: 180-280 palabras. Estructura o
             description_value = values.get("description") or False
             write_values["description_sale"] = self._description_plain_text(description_value)
             write_values["bpi_ai_generated_description"] = description_value
+        if "technicalDescription" in values:
+            write_values["bpi_technical_description"] = values.get("technicalDescription") or False
         if "audience" in values:
             write_values["bpi_ai_target_audience"] = values.get("audience") or "clinicas"
         if "tone" in values:
@@ -1820,7 +1826,7 @@ Generar entre 5 y 7 FAQs. Cada FAQ debe cubrir una etapa diferente del buyer jou
             "name": product.name,
             "sku": product.default_code or "N/A",
             "category": self._public_category_label(product),
-            "description": product.description_sale or product.description or "Sin descripción",
+            "description": product._bpi_prompt_description() or "Sin descripción",
             "audience": audience or "clinicas",
         }
         response = self._openai_json(prompt)

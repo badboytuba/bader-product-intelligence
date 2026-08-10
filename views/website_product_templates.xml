@@ -22,6 +22,22 @@
             </xpath>
 
             <xpath expr="//div[@id='product_detail_main']" position="after">
+                <section t-if="product.bpi_technical_description"
+                         id="bpi-product-technical-description"
+                         class="bpi-website-technical-description"
+                         data-bpi-technical-description="formatted"
+                         aria-labelledby="bpi-product-technical-description-title">
+                    <div class="bpi-website-technical-description__header">
+                        <span class="bpi-website-technical-description__eyebrow">Información técnica</span>
+                        <h2 id="bpi-product-technical-description-title">
+                            Descripción técnica de <t t-out="product.name"/>
+                        </h2>
+                        <p>Especificaciones, compatibilidad y recomendaciones de uso profesional.</p>
+                    </div>
+                    <div class="bpi-website-technical-description__content"
+                         t-field="product.bpi_technical_description"/>
+                </section>
+
                 <section t-if="product.bpi_public_faqs"
                          id="bpi-product-faq"
                          class="bpi-website-faq"

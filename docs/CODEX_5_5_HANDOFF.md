@@ -9,8 +9,9 @@ This file is the operational handoff for the Odoo 16 addon. Never print or commi
 - Repository: `https://github.com/badboytuba/bader-product-intelligence.git`
 - Technical addon directory: `bader_product_intelligence`
 - Odoo app: `Producto Intelligence`
-- Current feature branch: `feature/bpi-storefront-faq`
+- Current feature branch: `feature/bpi-technical-description`
 - Deployed release: `16.0.1.2.3`
+- Release under development: `16.0.1.3.0`
 - Certified runtime code: `881a580e295e9ce57c2107d42783fa1d8c1efea7`; package SHA256 `d7a77f2c928258e47ec4929af75ea31ff45dc8bb3e58c8abf596599c9e3d5123`
 - License: `LGPL-3`
 - Target: Odoo Community `16.0`
@@ -19,6 +20,8 @@ This file is the operational handoff for the Odoo 16 addon. Never print or commi
 Release `1.2.2` builds on the certified `1.2.1` Pack/variant release and adds a safe Word-like editor toolbar for the optimized product description. It passed its own QAS certification and was deployed to PROD on 2026-08-10.
 
 Release `1.2.3` publishes saved, complete Producto Intelligence FAQs below the main product block. It uses a `compute_sudo` JSON projection on `product.template`, so public visitors receive only escaped question/answer copy while `bpi.product.faq` keeps its manager-only ACL. The section uses native `details`/`summary` controls, a dedicated frontend SCSS asset path and Schema.org FAQ semantics; Google removed FAQ rich results in 2026, so this markup is semantic metadata rather than a rich-result promise. The release passed QAS certification and was deployed and certified in PROD on 2026-08-10.
+
+Release `1.3.0` is the separate short-commercial/long-technical content release. Nancy returns a 45–70 word optimized summary plus a 350–650 word technical HTML document. Both use the same frontend allowlist and Odoo HTML sanitization; the compact summary stays beside the purchase area and the full-width technical section renders after the product/image block and before FAQs. Existing descriptions are not automatically shortened or copied, so no catalog data changes until an operator saves new content.
 
 ## Rich-text description behavior
 
@@ -108,7 +111,7 @@ Content, SEO, category, image, competitor strategy and chat prompts receive a bo
 ### Backend
 
 - `__manifest__.py` — version, OCA dependencies, views and asset bundles.
-- `models/product_template.py` — product kind, variant/Pack payloads, effective ranges, Pack revision, bounded AI context and the ACL-safe public FAQ projection.
+- `models/product_template.py` — product kind, variant/Pack payloads, effective ranges, Pack revision, bounded AI context, sanitized technical description and the ACL-safe public FAQ projection.
 - `models/ir_ui_view.py` — synchronizes the formatted-description bridge to website-specific product template copies.
 - `models/product_intelligence.py` — updates, image security, Pack validation, external services, competitors and AI workflows.
 - `controllers/main.py` — admin JSON routes and template/variant ownership checks.
@@ -121,6 +124,7 @@ Content, SEO, category, image, competitor strategy and chat prompts receive a bo
 - `static/src/js/product_intelligence_action.js` — OWL state, dashboard/detail flows, Pack autocomplete/composition and variant mutations.
 - `static/src/xml/product_intelligence_templates.xml` — dashboard, tabs, forms, image/competitor/chat UI.
 - `static/src/scss/product_intelligence.scss` — scoped backend styles.
+- `static/src/scss/storefront_technical_description.scss` — responsive public technical-description layout.
 - `static/tests/product_intelligence_tests.js` — QUnit tests.
 
 ### Views/security/tests

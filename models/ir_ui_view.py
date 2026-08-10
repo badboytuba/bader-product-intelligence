@@ -12,7 +12,7 @@ class IrUiView(models.Model):
 
     @api.model
     def bpi_sync_product_description_bridges(self):
-        """Attach the formatted-description and FAQ bridge to template clones.
+        """Attach the formatted-description, technical-content and FAQ bridge to template clones.
 
         Website customizations may create a website-specific *primary* copy of
         ``website_sale.product`` without an XML ID. In that case, extensions of

@@ -273,8 +273,11 @@ export class ProductIntelligenceAction extends Component {
         this.fileUploadInputRef = useRef("fileUploadInput");
         this.playgroundMessagesRef = useRef("playgroundMessages");
         this.contentDescriptionEditorRef = useRef("contentDescriptionEditor");
+        this.technicalDescriptionEditorRef = useRef("technicalDescriptionEditor");
         this.lastContentDescriptionEditorHtml = "";
+        this.lastTechnicalDescriptionEditorHtml = "";
         this.contentDescriptionSelection = null;
+        this.technicalDescriptionSelection = null;
 
         onWillStart(async () => {
             const productId = this.resolveProductId();
@@ -291,10 +294,12 @@ export class ProductIntelligenceAction extends Component {
             this._setupScrollListener();
             this._setupKeyboardShortcuts();
             this.syncContentDescriptionEditor(true);
+            this.syncTechnicalDescriptionEditor(true);
         });
 
         onPatched(() => {
             this.syncContentDescriptionEditor();
+            this.syncTechnicalDescriptionEditor();
         });
 
         onWillUnmount(() => {
@@ -386,6 +391,7 @@ export class ProductIntelligenceAction extends Component {
             audience: "clinicas",
             name: "",
             description: "",
+            technicalDescription: "",
             faqs: [],
         };
     }
@@ -500,6 +506,10 @@ export class ProductIntelligenceAction extends Component {
         if (seoData && (seoData.aiGeneratedDescriptionHtml || seoData.aiGeneratedDescription)) {
             this.state.contentForm.description = seoData.aiGeneratedDescriptionHtml || seoData.aiGeneratedDescription;
             this.syncContentDescriptionEditor(true);
+        }
+        if (seoData && (seoData.aiTechnicalDescriptionHtml || seoData.aiTechnicalDescription)) {
+            this.state.contentForm.technicalDescription = seoData.aiTechnicalDescriptionHtml || seoData.aiTechnicalDescription;
+            this.syncTechnicalDescriptionEditor(true);
         }
     }
 
@@ -653,6 +663,7 @@ export class ProductIntelligenceAction extends Component {
             audience: seoData.aiTargetAudience || "clinicas",
             name: product.name || "",
             description: seoData.aiGeneratedDescriptionHtml || seoData.aiGeneratedDescription || product.description || "",
+            technicalDescription: seoData.aiTechnicalDescriptionHtml || seoData.aiTechnicalDescription || product.bpiTechnicalDescriptionHtml || product.bpiTechnicalDescription || "",
             faqs: (seoData.geoFaq || []).map((faq) => ({
                 question: faq.question || "",
                 answer: faq.answer || "",
@@ -1281,6 +1292,189 @@ export class ProductIntelligenceAction extends Component {
         this.applyContentDescriptionCommand("createLink", parsedUrl.href);
     }
 
+    normalizedTechnicalDescriptionHtml(value = this.state.contentForm.technicalDescription) {
+        return this.normalizedDescriptionHtml(value);
+    }
+
+    technicalDescriptionPlainText(value = this.state.contentForm.technicalDescription) {
+        return this.descriptionPlainText(value);
+    }
+
+    syncTechnicalDescriptionEditor(force = false) {
+        const editor = this.technicalDescriptionEditorRef && this.technicalDescriptionEditorRef.el;
+        if (!editor) {
+            return;
+        }
+        const html = this.normalizedTechnicalDescriptionHtml();
+        if (!force && document.activeElement === editor) {
+            return;
+        }
+        if (force || this.lastTechnicalDescriptionEditorHtml !== html || editor.innerHTML !== html) {
+            editor.innerHTML = html;
+            this.lastTechnicalDescriptionEditorHtml = html;
+        }
+    }
+
+    onTechnicalDescriptionInput(ev) {
+        const html = this.sanitizeDescriptionHtml(ev.currentTarget.innerHTML || "");
+        this.state.contentForm.technicalDescription = html;
+        this.lastTechnicalDescriptionEditorHtml = ev.currentTarget.innerHTML || "";
+        this.saveTechnicalDescriptionSelection();
+    }
+
+    normalizeTechnicalDescriptionEditor(ev) {
+        const html = this.normalizedTechnicalDescriptionHtml(ev.currentTarget.innerHTML || "");
+        if (ev.currentTarget.innerHTML !== html) {
+            ev.currentTarget.innerHTML = html;
+        }
+        this.state.contentForm.technicalDescription = html;
+        this.lastTechnicalDescriptionEditorHtml = html;
+    }
+
+    onTechnicalDescriptionSourceInput(ev) {
+        this.state.contentForm.technicalDescription = ev.target.value || "";
+        this.syncTechnicalDescriptionEditor(true);
+    }
+
+    saveTechnicalDescriptionSelection() {
+        const editor = this.technicalDescriptionEditorRef && this.technicalDescriptionEditorRef.el;
+        const selection = typeof window !== "undefined" ? window.getSelection() : null;
+        if (!editor || !selection || !selection.rangeCount) {
+            return;
+        }
+        const range = selection.getRangeAt(0);
+        if (editor.contains(range.commonAncestorContainer)) {
+            this.technicalDescriptionSelection = range.cloneRange();
+        }
+    }
+
+    restoreTechnicalDescriptionSelection() {
+        const editor = this.technicalDescriptionEditorRef && this.technicalDescriptionEditorRef.el;
+        const selection = typeof window !== "undefined" ? window.getSelection() : null;
+        if (!editor || !selection) {
+            return false;
+        }
+        editor.focus();
+        selection.removeAllRanges();
+        if (
+            this.technicalDescriptionSelection &&
+            editor.contains(this.technicalDescriptionSelection.commonAncestorContainer)
+        ) {
+            try {
+                selection.addRange(this.technicalDescriptionSelection);
+                return true;
+            } catch (_error) {
+                this.technicalDescriptionSelection = null;
+            }
+        }
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.addRange(range);
+        return true;
+    }
+
+    onTechnicalDescriptionToolbarMouseDown(ev) {
+        this.saveTechnicalDescriptionSelection();
+        ev.preventDefault();
+    }
+
+    updateTechnicalDescriptionFromEditor() {
+        const editor = this.technicalDescriptionEditorRef && this.technicalDescriptionEditorRef.el;
+        if (!editor) {
+            return;
+        }
+        this.state.contentForm.technicalDescription = this.sanitizeDescriptionHtml(editor.innerHTML || "");
+        this.lastTechnicalDescriptionEditorHtml = editor.innerHTML || "";
+        this.saveTechnicalDescriptionSelection();
+    }
+
+    applyTechnicalDescriptionCommand(command, value = null) {
+        if (typeof document === "undefined" || typeof document.execCommand !== "function") {
+            return;
+        }
+        this.restoreTechnicalDescriptionSelection();
+        document.execCommand(command, false, value);
+        this.updateTechnicalDescriptionFromEditor();
+    }
+
+    onTechnicalDescriptionBlockChange(ev) {
+        const value = ev.target.value;
+        ev.target.value = "";
+        if (value) {
+            this.applyTechnicalDescriptionCommand("formatBlock", `<${value}>`);
+        }
+    }
+
+    onTechnicalDescriptionFontChange(ev) {
+        const value = this.normalizeDescriptionFontFamily(ev.target.value);
+        ev.target.value = "";
+        if (value) {
+            this.applyTechnicalDescriptionCommand("fontName", value);
+        }
+    }
+
+    onTechnicalDescriptionFontSizeChange(ev) {
+        const fontSize = ev.target.value;
+        const value = DESCRIPTION_COMMAND_FONT_SIZES[fontSize];
+        ev.target.value = "";
+        if (!value || typeof document === "undefined" || typeof document.execCommand !== "function") {
+            return;
+        }
+        this.restoreTechnicalDescriptionSelection();
+        document.execCommand("fontSize", false, value);
+        const editor = this.technicalDescriptionEditorRef && this.technicalDescriptionEditorRef.el;
+        if (editor) {
+            Array.from(editor.querySelectorAll(`font[size="${value}"]`)).forEach((fontNode) => {
+                fontNode.removeAttribute("size");
+                fontNode.style.fontSize = fontSize;
+            });
+        }
+        this.updateTechnicalDescriptionFromEditor();
+    }
+
+    onTechnicalDescriptionTextColor(ev) {
+        const value = this.normalizeDescriptionColor(ev.target.value);
+        if (value) {
+            this.applyTechnicalDescriptionCommand("foreColor", value);
+        }
+    }
+
+    onTechnicalDescriptionHighlightColor(ev) {
+        const value = this.normalizeDescriptionColor(ev.target.value);
+        if (!value) {
+            return;
+        }
+        this.restoreTechnicalDescriptionSelection();
+        const applied = document.execCommand("hiliteColor", false, value);
+        if (!applied) {
+            document.execCommand("backColor", false, value);
+        }
+        this.updateTechnicalDescriptionFromEditor();
+    }
+
+    createTechnicalDescriptionLink() {
+        this.saveTechnicalDescriptionSelection();
+        const rawUrl = typeof window !== "undefined"
+            ? window.prompt("URL del enlace (https://...)", "https://")
+            : "";
+        if (!rawUrl) {
+            return;
+        }
+        let parsedUrl;
+        try {
+            parsedUrl = new URL(rawUrl);
+        } catch (_error) {
+            this.notify("La URL del enlace no es valida.", "warning");
+            return;
+        }
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+            this.notify("Solo se permiten enlaces HTTP o HTTPS.", "warning");
+            return;
+        }
+        this.applyTechnicalDescriptionCommand("createLink", parsedUrl.href);
+    }
+
     marginBenefitLabel() {
         const product = this.currentProduct();
         const price = this.productComparisonPrice(product);
@@ -1349,7 +1543,19 @@ export class ProductIntelligenceAction extends Component {
     }
 
     contentWordCountLabel() {
-        return `${this.contentWordCount()} palabras - Optimizado para SEO y motores de IA (GEO)`;
+        return `${this.contentWordCount()} palabras · objetivo 45-70 (resumen comercial corto)`;
+    }
+
+    technicalDescriptionWordCount() {
+        const text = this.technicalDescriptionPlainText();
+        if (!text) {
+            return 0;
+        }
+        return text.split(/\s+/).filter(Boolean).length;
+    }
+
+    technicalDescriptionWordCountLabel() {
+        return `${this.technicalDescriptionWordCount()} palabras · objetivo 350-650 (información técnica ampliada)`;
     }
 
     filteredDashboardProducts() {
@@ -1881,6 +2087,7 @@ export class ProductIntelligenceAction extends Component {
             values: {
                 name: this.state.contentForm.name,
                 description: this.state.contentForm.description,
+                technicalDescription: this.state.contentForm.technicalDescription,
                 tone: this.state.contentForm.tone,
                 audience: this.state.contentForm.audience,
                 faqs: this.state.contentForm.faqs || [],
@@ -1906,6 +2113,7 @@ export class ProductIntelligenceAction extends Component {
                     .filter(Boolean),
                 geoFaq: this.state.contentForm.faqs || [],
                 aiGeneratedDescription: this.state.contentForm.description,
+                aiTechnicalDescription: this.state.contentForm.technicalDescription,
                 aiTargetAudience: this.state.contentForm.audience,
                 seoScore: this.currentSeoData().seoScore || 0,
                 geoScore: this.currentSeoData().geoScore || 0,
@@ -1977,8 +2185,10 @@ export class ProductIntelligenceAction extends Component {
             });
             this.state.contentForm.name = result.name || this.state.contentForm.name;
             this.state.contentForm.description = result.descriptionHtml || result.description || this.state.contentForm.description;
+            this.state.contentForm.technicalDescription = result.technicalDescriptionHtml || result.technicalDescription || this.state.contentForm.technicalDescription;
             this.syncContentDescriptionEditor(true);
-            this.notify("Descripcion generada con Nancy AI.");
+            this.syncTechnicalDescriptionEditor(true);
+            this.notify("Descripciones comercial y técnica generadas con Nancy AI.");
         } catch (error) {
             this.notify(this.errorMessage(error, "No se pudo generar el contenido."), "danger");
         } finally {

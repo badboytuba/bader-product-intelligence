@@ -158,3 +158,11 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Adds accessible keyboard focus, a first-question-open presentation and Schema.org `FAQPage`/`Question`/`Answer` semantics matching the visible copy.
 - Does not promise Google FAQ rich results: Google removed that search result feature in 2026; the markup remains semantic metadata for other consumers.
 - Certified in QAS with 21 backend tests, 12 QUnit tests/45 assertions and desktop/mobile visual checks, then deployed and visually certified on PROD on 2026-08-10.
+
+## Release 16.0.1.3.0
+
+- Reduces newly generated optimized descriptions from 180–280 to 45–70 words, keeping the purchase area concise.
+- Adds a separate sanitized rich-text technical description with a 350–650 word generation target and the same allowlisted Word-like formatting tools.
+- Makes the optimized editor approximately 75% shorter visually and provides a larger technical editor for structured product information.
+- Publishes saved technical content full-width below the product/image area and immediately before the FAQ section.
+- Does not truncate or migrate existing descriptions automatically; an operator must generate or edit and save the split content.
