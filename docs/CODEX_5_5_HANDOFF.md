@@ -10,16 +10,15 @@ This file is the operational handoff for the Odoo 16 addon. Never print or commi
 - Technical addon directory: `bader_product_intelligence`
 - Odoo app: `Producto Intelligence`
 - Current feature branch: `feature/bpi-storefront-faq`
-- Deployed release: `16.0.1.2.2`
-- Release under development: `16.0.1.2.3` on `feature/bpi-storefront-faq`
-- Certified runtime code: `f05d3e5`; package SHA256 `8fe178abcbe7378a67705d86b5fc2ef71edeaea7c213c8c428dab56f9c83bb73`
+- Deployed release: `16.0.1.2.3`
+- Certified runtime code: `881a580e295e9ce57c2107d42783fa1d8c1efea7`; package SHA256 `d7a77f2c928258e47ec4929af75ea31ff45dc8bb3e58c8abf596599c9e3d5123`
 - License: `LGPL-3`
 - Target: Odoo Community `16.0`
 - Dependencies: `product`, `web`, `website_sale`, `product_pack`, `sale_product_pack`, `stock_product_pack`
 
 Release `1.2.2` builds on the certified `1.2.1` Pack/variant release and adds a safe Word-like editor toolbar for the optimized product description. It passed its own QAS certification and was deployed to PROD on 2026-08-10.
 
-Release `1.2.3` publishes saved, complete Producto Intelligence FAQs below the main product block. It uses a `compute_sudo` JSON projection on `product.template`, so public visitors receive only escaped question/answer copy while `bpi.product.faq` keeps its manager-only ACL. The section uses native `details`/`summary` controls, a dedicated frontend SCSS asset path and Schema.org FAQ semantics; Google removed FAQ rich results in 2026, so this markup is semantic metadata rather than a rich-result promise.
+Release `1.2.3` publishes saved, complete Producto Intelligence FAQs below the main product block. It uses a `compute_sudo` JSON projection on `product.template`, so public visitors receive only escaped question/answer copy while `bpi.product.faq` keeps its manager-only ACL. The section uses native `details`/`summary` controls, a dedicated frontend SCSS asset path and Schema.org FAQ semantics; Google removed FAQ rich results in 2026, so this markup is semantic metadata rather than a rich-result promise. The release passed QAS certification and was deployed and certified in PROD on 2026-08-10.
 
 ## Rich-text description behavior
 
@@ -173,13 +172,30 @@ Final QAS certification for the code tree published in the feature PR:
 - PROD product 170: both origin and public edge rendered formatted BPI HTML with paragraphs, list and emphasis instead of literal formatting characters.
 - PROD module `16.0.1.2.2`: service active, website-specific bridge active, zero open AI jobs and checksum-verified rollback assets present.
 
+## Final validation status for 16.0.1.2.3
+
+- Local addon validator with Node required, Python compilation, XML parsing, RPC/Git hygiene and standalone SCSS compilation: passed.
+- QAS backend: **21 tests**, 0 failures/errors.
+- QAS OWL QUnit: **12 tests**, **45 assertions**, 0 failures; temporary user removed.
+- QAS product 107: seven FAQ items rendered after `Referencia interna`, with first item open, semantic schema, compiled CSS and successful desktop/mobile visual inspection.
+- PROD product 170: public edge and Odoo origin rendered seven complete FAQ items with the expected copy, placement, schema, first-open behavior and compiled styles.
+- QAS and PROD runtime: all **32 files** matched the certified archive; services active, zero open AI jobs and no new BPI errors.
+- PROD rollback evidence: database dump passed `pg_restore -l`, addon tar listing passed and the hard-linked filestore snapshot file list matched.
+
 ## Safe QAS/PROD deployment
 
-Full rollback backups for this release:
+Full rollback backups for the rich-text release:
 
 ```text
 QAS:  /opt/odoo/backups/bpi_rich_text_16.0.1.2.2_20260810T141150Z
 PROD: /opt/odoo/backups/bpi_rich_text_16.0.1.2.2_20260810T144036Z
+```
+
+Full rollback backups for the storefront FAQ release:
+
+```text
+QAS:  /opt/odoo/backups/bpi_storefront_faq_16.0.1.2.3_20260810T150124Z
+PROD: /opt/odoo/backups/bpi_storefront_faq_16.0.1.2.3_20260810T152108Z
 ```
 
 Rules:

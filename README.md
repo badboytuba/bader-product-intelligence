@@ -157,3 +157,4 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Keeps `bpi.product.faq` manager-only and exposes an escaped `compute_sudo` projection through `product.template`, without granting public model access.
 - Adds accessible keyboard focus, a first-question-open presentation and Schema.org `FAQPage`/`Question`/`Answer` semantics matching the visible copy.
 - Does not promise Google FAQ rich results: Google removed that search result feature in 2026; the markup remains semantic metadata for other consumers.
+- Certified in QAS with 21 backend tests, 12 QUnit tests/45 assertions and desktop/mobile visual checks, then deployed and visually certified on PROD on 2026-08-10.
