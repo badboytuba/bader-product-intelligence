@@ -153,6 +153,7 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 
 - Publishes only complete, saved Producto Intelligence FAQs on the product page; generated previews still require **Guardar Cambios** before publication.
 - Places a full-width, responsive native `details`/`summary` FAQ section immediately after the main product block, visually below the internal reference.
+- Loads the FAQ presentation from its own frontend SCSS asset so Odoo invalidates the compiled bundle when this feature changes.
 - Keeps `bpi.product.faq` manager-only and exposes an escaped `compute_sudo` projection through `product.template`, without granting public model access.
 - Adds accessible keyboard focus, a first-question-open presentation and Schema.org `FAQPage`/`Question`/`Answer` semantics matching the visible copy.
 - Does not promise Google FAQ rich results: Google removed that search result feature in 2026; the markup remains semantic metadata for other consumers.

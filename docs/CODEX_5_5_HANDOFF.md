@@ -19,7 +19,7 @@ This file is the operational handoff for the Odoo 16 addon. Never print or commi
 
 Release `1.2.2` builds on the certified `1.2.1` Pack/variant release and adds a safe Word-like editor toolbar for the optimized product description. It passed its own QAS certification and was deployed to PROD on 2026-08-10.
 
-Release `1.2.3` publishes saved, complete Producto Intelligence FAQs below the main product block. It uses a `compute_sudo` JSON projection on `product.template`, so public visitors receive only escaped question/answer copy while `bpi.product.faq` keeps its manager-only ACL. The section uses native `details`/`summary` controls and Schema.org FAQ semantics; Google removed FAQ rich results in 2026, so this markup is semantic metadata rather than a rich-result promise.
+Release `1.2.3` publishes saved, complete Producto Intelligence FAQs below the main product block. It uses a `compute_sudo` JSON projection on `product.template`, so public visitors receive only escaped question/answer copy while `bpi.product.faq` keeps its manager-only ACL. The section uses native `details`/`summary` controls, a dedicated frontend SCSS asset path and Schema.org FAQ semantics; Google removed FAQ rich results in 2026, so this markup is semantic metadata rather than a rich-result promise.
 
 ## Rich-text description behavior
 

@@ -46,6 +46,7 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
         ],
         "web.assets_frontend": [
             "bader_product_intelligence/static/src/scss/product_intelligence.scss",
+            "bader_product_intelligence/static/src/scss/storefront_faq.scss",
         ],
         "web.qunit_suite_tests": [
             "bader_product_intelligence/static/tests/product_intelligence_tests.js",
