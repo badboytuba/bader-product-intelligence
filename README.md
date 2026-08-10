@@ -148,3 +148,11 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Activates the product-page bridge so the sanitized formatted description is rendered in `website_sale.product`, with the native `description_sale` as fallback.
 - Synchronizes the bridge to website-specific primary copies of `website_sale.product`, which Odoo may create without an XML ID.
 - Certified in QAS with 20 backend tests and 12 QUnit tests/45 assertions, then deployed to PROD on 2026-08-10.
+
+## Release 16.0.1.2.3
+
+- Publishes only complete, saved Producto Intelligence FAQs on the product page; generated previews still require **Guardar Cambios** before publication.
+- Places a full-width, responsive native `details`/`summary` FAQ section immediately after the main product block, visually below the internal reference.
+- Keeps `bpi.product.faq` manager-only and exposes an escaped `compute_sudo` projection through `product.template`, without granting public model access.
+- Adds accessible keyboard focus, a first-question-open presentation and Schema.org `FAQPage`/`Question`/`Answer` semantics matching the visible copy.
+- Does not promise Google FAQ rich results: Google removed that search result feature in 2026; the markup remains semantic metadata for other consumers.

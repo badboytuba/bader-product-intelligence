@@ -9,14 +9,17 @@ This file is the operational handoff for the Odoo 16 addon. Never print or commi
 - Repository: `https://github.com/badboytuba/bader-product-intelligence.git`
 - Technical addon directory: `bader_product_intelligence`
 - Odoo app: `Producto Intelligence`
-- Current feature branch: `feature/bpi-rich-text-editor`
+- Current feature branch: `feature/bpi-storefront-faq`
 - Deployed release: `16.0.1.2.2`
+- Release under development: `16.0.1.2.3` on `feature/bpi-storefront-faq`
 - Certified runtime code: `f05d3e5`; package SHA256 `8fe178abcbe7378a67705d86b5fc2ef71edeaea7c213c8c428dab56f9c83bb73`
 - License: `LGPL-3`
 - Target: Odoo Community `16.0`
 - Dependencies: `product`, `web`, `website_sale`, `product_pack`, `sale_product_pack`, `stock_product_pack`
 
 Release `1.2.2` builds on the certified `1.2.1` Pack/variant release and adds a safe Word-like editor toolbar for the optimized product description. It passed its own QAS certification and was deployed to PROD on 2026-08-10.
+
+Release `1.2.3` publishes saved, complete Producto Intelligence FAQs below the main product block. It uses a `compute_sudo` JSON projection on `product.template`, so public visitors receive only escaped question/answer copy while `bpi.product.faq` keeps its manager-only ACL. The section uses native `details`/`summary` controls and Schema.org FAQ semantics; Google removed FAQ rich results in 2026, so this markup is semantic metadata rather than a rich-result promise.
 
 ## Rich-text description behavior
 
@@ -106,7 +109,7 @@ Content, SEO, category, image, competitor strategy and chat prompts receive a bo
 ### Backend
 
 - `__manifest__.py` — version, OCA dependencies, views and asset bundles.
-- `models/product_template.py` — product kind, variant/Pack payloads, effective ranges, Pack revision and bounded AI context.
+- `models/product_template.py` — product kind, variant/Pack payloads, effective ranges, Pack revision, bounded AI context and the ACL-safe public FAQ projection.
 - `models/ir_ui_view.py` — synchronizes the formatted-description bridge to website-specific product template copies.
 - `models/product_intelligence.py` — updates, image security, Pack validation, external services, competitors and AI workflows.
 - `controllers/main.py` — admin JSON routes and template/variant ownership checks.

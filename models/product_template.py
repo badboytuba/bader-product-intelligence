@@ -8,7 +8,7 @@ import unicodedata
 
 from markupsafe import escape
 
-from odoo import _, fields, models
+from odoo import _, api, fields, models
 from odoo.tools import html2plaintext
 
 
@@ -73,6 +73,11 @@ class ProductTemplate(models.Model):
         "product_tmpl_id",
         string="FAQs",
     )
+    bpi_public_faqs = fields.Json(
+        string="FAQs publicas",
+        compute="_compute_bpi_public_faqs",
+        compute_sudo=True,
+    )
     bpi_image_ids = fields.One2many(
         "bpi.product.image",
         "product_tmpl_id",
@@ -88,6 +93,22 @@ class ProductTemplate(models.Model):
         "product_tmpl_id",
         string="Sesiones Chat IA",
     )
+
+    @api.depends(
+        "bpi_faq_ids.question",
+        "bpi_faq_ids.answer",
+        "bpi_faq_ids.sequence",
+    )
+    def _compute_bpi_public_faqs(self):
+        """Expose only complete FAQ copy without relaxing manager-only ACLs."""
+        for product in self:
+            public_faqs = []
+            for faq in product.bpi_faq_ids.sorted(key=lambda record: (record.sequence, record.id)):
+                question = (faq.question or "").strip()
+                answer = (faq.answer or "").strip()
+                if question and answer:
+                    public_faqs.append({"question": question, "answer": answer})
+            product.bpi_public_faqs = public_faqs
 
     def _bpi_exchange_rate(self):
         value = self.env["ir.config_parameter"].sudo().get_param("bader_product_intelligence.exchange_rate", "1650")

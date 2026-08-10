@@ -20,6 +20,44 @@
                    placeholder="Una descripcion corta que aparecera tambien en documentos."
                    t-field="product.description_sale"/>
             </xpath>
+
+            <xpath expr="//div[@id='product_detail_main']" position="after">
+                <section t-if="product.bpi_public_faqs"
+                         id="bpi-product-faq"
+                         class="bpi-website-faq"
+                         data-bpi-faq="public"
+                         aria-labelledby="bpi-product-faq-title"
+                         itemscope="itemscope"
+                         itemtype="https://schema.org/FAQPage">
+                    <div class="bpi-website-faq__header">
+                        <span class="bpi-website-faq__eyebrow">FAQ</span>
+                        <h2 id="bpi-product-faq-title">
+                            Preguntas frecuentes sobre <t t-out="product.name"/>
+                        </h2>
+                        <p>Información útil sobre características, uso y compra.</p>
+                    </div>
+                    <div class="bpi-website-faq__list">
+                        <details class="bpi-website-faq__item"
+                                 t-foreach="product.bpi_public_faqs"
+                                 t-as="bpi_faq"
+                                 t-att-open="'open' if bpi_faq_index == 0 else None"
+                                 itemprop="mainEntity"
+                                 itemscope="itemscope"
+                                 itemtype="https://schema.org/Question">
+                            <summary class="bpi-website-faq__question">
+                                <span itemprop="name" t-out="bpi_faq['question']"/>
+                                <span class="bpi-website-faq__icon" aria-hidden="true"></span>
+                            </summary>
+                            <div class="bpi-website-faq__answer"
+                                 itemprop="acceptedAnswer"
+                                 itemscope="itemscope"
+                                 itemtype="https://schema.org/Answer">
+                                <p itemprop="text" t-out="bpi_faq['answer']"/>
+                            </div>
+                        </details>
+                    </div>
+                </section>
+            </xpath>
         </field>
     </record>
 

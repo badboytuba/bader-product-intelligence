@@ -79,3 +79,5 @@ Release `16.0.1.2.1` is developed on `feature/bpi-pack-variant-control` as the P
 - PROD stays untouched until QAS functional approval specific to the Pack/variant release.
 
 Release `16.0.1.2.2` was developed on `feature/bpi-rich-text-editor` and adds the optimized-description rich-text toolbar plus the active product-page description bridge. It keeps formatted HTML in the existing `fields.Html` field, keeps the Odoo sales description plain for documents/fallback, permits only an explicit set of fonts/sizes/colors/styles and synchronizes the bridge to website-specific primary template copies. Runtime commit `f05d3e5` passed 20 backend tests plus 12 QUnit tests/45 assertions in QAS before the 2026-08-10 PROD deployment.
+
+Release `16.0.1.2.3` is developed on `feature/bpi-storefront-faq`. It renders only saved, complete FAQs through the computed `product.template.bpi_public_faqs` projection, preserving manager-only ACLs on `bpi.product.faq`. The public block belongs after `product_detail_main`, uses escaped native `details`/`summary` markup, and must remain synchronized to website-specific product template copies through the existing bridge mechanism.

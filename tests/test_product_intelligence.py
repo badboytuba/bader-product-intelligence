@@ -258,6 +258,10 @@ class TestProductoIntelligence(TransactionCase):
         self.assertIn("product.bpi_ai_generated_description", bridge.arch_db)
         self.assertIn('data-bpi-description="formatted"', bridge.arch_db)
         self.assertIn("product.description_sale", bridge.arch_db)
+        self.assertIn("product.bpi_public_faqs", bridge.arch_db)
+        self.assertIn('data-bpi-faq="public"', bridge.arch_db)
+        self.assertIn('itemtype="https://schema.org/FAQPage"', bridge.arch_db)
+        self.assertIn("//div[@id='product_detail_main']", bridge.arch_db)
 
         View = self.env["ir.ui.view"]
         website = self.env["website"].search([], order="id", limit=1)
@@ -302,6 +306,44 @@ class TestProductoIntelligence(TransactionCase):
         self.assertEqual(website_bridge.website_id, website)
         self.assertIn("product.bpi_ai_generated_description", website_bridge.arch_db)
         self.assertIn('data-bpi-description="formatted"', website_bridge.arch_db)
+        self.assertIn("product.bpi_public_faqs", website_bridge.arch_db)
+        self.assertIn('data-bpi-faq="public"', website_bridge.arch_db)
+
+    def test_public_faq_projection_is_ordered_complete_and_acl_safe(self):
+        Faq = self.env["bpi.product.faq"]
+        Faq.create(
+            [
+                {
+                    "product_tmpl_id": self.product_published.id,
+                    "question": "¿Segunda pregunta?",
+                    "answer": "Segunda respuesta.",
+                    "sequence": 20,
+                },
+                {
+                    "product_tmpl_id": self.product_published.id,
+                    "question": " ¿Primera pregunta? ",
+                    "answer": " Primera respuesta. ",
+                    "sequence": 10,
+                },
+                {
+                    "product_tmpl_id": self.product_published.id,
+                    "question": "   ",
+                    "answer": "No debe publicarse.",
+                    "sequence": 5,
+                },
+            ]
+        )
+
+        public_user = self.env.ref("base.public_user")
+        public_faqs = self.product_published.with_user(public_user).bpi_public_faqs
+
+        self.assertEqual(
+            public_faqs,
+            [
+                {"question": "¿Primera pregunta?", "answer": "Primera respuesta."},
+                {"question": "¿Segunda pregunta?", "answer": "Segunda respuesta."},
+            ],
+        )
 
     def test_variant_payload_exposes_native_operational_data_and_price_range(self):
         payload = self.product_with_variants.bpi_build_payload()
