@@ -94,6 +94,11 @@ class TestBPIMeliContract(TransactionCase):
         with patch('odoo.addons.bader_product_intelligence.controllers.main.request', SimpleNamespace(env=env)):
             with self.assertRaises(MissingError):
                 BaderProductIntelligenceController()._product(product.id)
+            job = self.env['bpi.ai.job'].create({'product_tmpl_id': product.id, 'state': 'done'})
+            with self.assertRaises(MissingError):
+                BaderProductIntelligenceController()._ai_job(job.id)
+            own_job = self.env['bpi.ai.job'].create({'product_tmpl_id': self.products[0].id, 'state': 'done'})
+            self.assertEqual(BaderProductIntelligenceController()._ai_job(own_job.id).id, own_job.id)
 
     def test_admin_required_for_all_monitoring_methods(self):
         user = self.env['res.users'].with_context(no_reset_password=True).create({

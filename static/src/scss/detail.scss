@@ -141,3 +141,24 @@
 @media (max-width: 767px) {
     .o_action.bpi-app .bpi-detail-workspace .bpi-meli-detail-stats { gap: 7px; > div { padding: 10px; } strong { font-size: 19px; } }
 }
+// Odoo's flex action container otherwise lets intrinsic variant chip widths
+// enlarge the entire workspace, even when document overflow stays hidden.
+.o_action.bpi-app .bpi-detail-workspace {
+    width: 100%;
+    .bpi-variant-selector { min-width: 0; max-width: 100%; flex-wrap: wrap; overflow-x: visible; }
+    .bpi-variant-chip { flex: 0 1 160px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; &.is-active { border-color: #82b2c0; box-shadow: 0 0 0 2px #0b536510; background: #edf6f8; } }
+    .bpi-section-head { flex-wrap: wrap; }
+}
+@media (max-width: 767px) {
+    .o_action.bpi-app .bpi-detail-workspace .bpi-variant-chip { flex: 1 1 140px; }
+}
+
+// Long Pack labels must shrink/wrap instead of pushing their switch offscreen.
+.o_action.bpi-app .bpi-detail-workspace .bpi-inline-switch--spread {
+    min-width: 0; max-width: 100%; gap: 10px;
+    > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+    > .bpi-toggle { flex: 0 0 46px; }
+}
+@media (max-width: 767px) {
+    .o_action.bpi-app .bpi-detail-workspace .bpi-grid--3 { grid-template-columns: minmax(0,1fr); }
+}

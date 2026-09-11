@@ -49,9 +49,13 @@ class BaderProductIntelligenceController(http.Controller):
 
     def _ai_job(self, job_id):
         self._ensure_manager()
-        job = request.env["bpi.ai.job"].sudo().browse(int(job_id)).exists()
+        record_id = request.env["bpi.service"]._meli_account_key(job_id)
+        job = request.env["bpi.ai.job"].browse(record_id).exists()
         if not job:
             raise MissingError("Trabajo IA no encontrado.")
+        job.check_access_rights("read")
+        job.check_access_rule("read")
+        self._product(job.product_tmpl_id.id)
         return job
 
     @http.route("/bader_product_intelligence/dashboard", type="json", auth="user")

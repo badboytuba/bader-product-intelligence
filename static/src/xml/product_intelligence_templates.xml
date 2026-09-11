@@ -1070,6 +1070,7 @@
                                                         <div>
                                                             <strong t-esc="competitor.competitorName"/>
                                                             <p t-esc="competitor.competitorUrl"/>
+                                                            <small class="bpi-muted" data-competitor-last-consultation="true"><t t-set="lastConsultation" t-value="dashboardDateLabel(competitor.lastScrapedAt)"/>Última consulta: <t t-esc="lastConsultation !== '—' ? lastConsultation : 'Sin consulta registrada'"/></small>
                                                         </div>
                                                         <i t-att-class="'fa ' + (state.expandedCompetitorId === competitor.id ? 'fa-chevron-up' : 'fa-chevron-down')"/>
                                                     </div>
