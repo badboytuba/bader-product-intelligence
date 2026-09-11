@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from odoo import api, models
+from odoo import _, api, models
+from odoo.exceptions import AccessError
 
 
 class IrUiView(models.Model):
@@ -19,6 +20,8 @@ class IrUiView(models.Model):
         the global template are not part of the selected template's combined
         architecture. Keep one module-owned extension for every active clone.
         """
+        if not self.env.user.has_group("base.group_system"):
+            raise AccessError(_("Solo los administradores pueden sincronizar las vistas de Producto Intelligence."))
         View = self.sudo().with_context(active_test=False)
         ModelData = self.env["ir.model.data"].sudo()
         source_bridge = self.env.ref(

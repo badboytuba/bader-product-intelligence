@@ -58,6 +58,8 @@ Read these files before changing code:
 
 ## Stabilization status
 
+Release `16.0.1.3.1` is the 2026-09-11 QAS-only stabilization. Preserve the atomic `/save_all` contract (`product_tmpl_id`, `product_values`, `category_values`, `content_values`, `seo_data`) and canonical category in `productForm`. SEO generation is metadata-only preview and must not publish or overwrite commercial/technical content or FAQs. Job payloads contain `seoData`, not a full `detailPayload`; the frontend must only update the SEO draft. The job partial unique index and session advisory locks prevent duplicate active jobs/execution; never automatically replay an interrupted paid request. Model-level admin guards must remain in place even when controllers also check access. PROD remains explicitly out of scope.
+
 Release `16.0.1.1.14` addresses the previously documented backend stabilization issues:
 
 - gallery/Studio references and deletion use product-owned tokens;

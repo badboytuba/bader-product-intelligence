@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import requests
 
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 from odoo.osv import expression
 from odoo.tools import html2plaintext
 
@@ -1114,61 +1114,94 @@ class BPIService(models.AbstractModel):
             score += 5
         return min(score, 100)
 
+    _SEO_METADATA_FIELDS = {
+        "seoTitle": "website_meta_title",
+        "seoDescription": "website_meta_description",
+        "geoTitle": "bpi_geo_title",
+        "geoDescription": "bpi_geo_description",
+        "geoFeatures": "bpi_geo_features",
+        "aiTargetAudience": "bpi_ai_target_audience",
+        "seoScore": "bpi_seo_score",
+        "geoScore": "bpi_geo_score",
+        "competitivenessScore": "bpi_competitiveness_score",
+    }
+
+    @api.model
+    def _normalize_seo_metadata(self, data):
+        """Validate an explicit metadata PATCH; never copy editorial AI output."""
+        if not isinstance(data, dict):
+            raise UserError(_("Los datos SEO deben ser un objeto válido."))
+        normalized = {}
+        list_keys = {"seoKeywords", "geoKeywords", "geoFeatures"}
+        score_keys = {"seoScore", "geoScore", "competitivenessScore"}
+        for key in set(self._SEO_METADATA_FIELDS) | list_keys:
+            if key not in data:
+                continue
+            value = data[key]
+            if key in list_keys:
+                value = value or []
+                if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+                    raise UserError(_("Las palabras clave y características SEO deben ser listas de texto."))
+                normalized[key] = [item.strip() for item in value if item.strip()]
+            elif key in score_keys:
+                try:
+                    value = float(value or 0)
+                except (TypeError, ValueError, OverflowError) as error:
+                    raise UserError(_("Las puntuaciones SEO deben ser números finitos.")) from error
+                if not math.isfinite(value):
+                    raise UserError(_("Las puntuaciones SEO deben ser números finitos."))
+                normalized[key] = max(0, min(100, int(value)))
+            else:
+                value = value or ""
+                if not isinstance(value, str):
+                    raise UserError(_("Los títulos, descripciones y audiencia SEO deben ser texto."))
+                normalized[key] = value
+        if "aiTargetAudience" in normalized:
+            audience = normalized["aiTargetAudience"].strip().lower()
+            if audience not in {"clinicas", "laboratorios", "estudiantes", "general"}:
+                audience = next(
+                    (key for prefix, key in {"clin": "clinicas", "lab": "laboratorios", "estud": "estudiantes"}.items() if prefix in audience),
+                    "clinicas",
+                )
+            normalized["aiTargetAudience"] = audience
+        return normalized
+
     @api.model
     def save_seo_payload(self, product, data):
+        """Save only supplied keys; omitted editorial/keyword data stays intact."""
         product.ensure_one()
-        seo_keywords = [kw.strip() for kw in (data.get("seoKeywords") or []) if kw and kw.strip()]
-        geo_keywords = [kw.strip() for kw in (data.get("geoKeywords") or data.get("geoFeatures") or []) if kw and kw.strip()]
-        faqs = data.get("geoFaq") or []
-        # Sanitize aiTargetAudience: AI may return full text instead of selection key
-        valid_audiences = {"clinicas", "laboratorios", "estudiantes", "general"}
-        raw_audience = (data.get("aiTargetAudience") or "clinicas").strip().lower()
-        if raw_audience not in valid_audiences:
-            # Fuzzy match: "Clínicas Dentales" → "clinicas"
-            audience_map = {"clin": "clinicas", "lab": "laboratorios", "estud": "estudiantes"}
-            sanitized = "clinicas"
-            for prefix, key in audience_map.items():
-                if prefix in raw_audience:
-                    sanitized = key
-                    break
-            raw_audience = sanitized
-
-        product.write(
-            {
-                "website_meta_title": data.get("seoTitle") or "",
-                "website_meta_description": data.get("seoDescription") or "",
-                "bpi_geo_title": data.get("geoTitle") or "",
-                "bpi_geo_description": data.get("geoDescription") or "",
-                "bpi_geo_features": data.get("geoFeatures") or [],
-                "bpi_ai_generated_description": data.get("aiGeneratedDescription") or "",
-                "bpi_ai_target_audience": raw_audience,
-                "bpi_seo_score": int(data.get("seoScore") or 0),
-                "bpi_geo_score": int(data.get("geoScore") or 0),
-                "bpi_competitiveness_score": int(data.get("competitivenessScore") or 0),
-                "bpi_last_analyzed_at": fields.Datetime.now(),
-            }
-        )
+        data = data or {}
+        metadata = self._normalize_seo_metadata(data)
+        write_values = {
+            field_name: metadata[key]
+            for key, field_name in self._SEO_METADATA_FIELDS.items()
+            if key in metadata
+        }
+        # Explicit legacy editorial edits remain supported, but SEO generation
+        # and save_all never pass these keys. Content has its own save path.
+        if "aiGeneratedDescription" in data:
+            description = data.get("aiGeneratedDescription") or False
+            write_values["bpi_ai_generated_description"] = description
+            write_values["description_sale"] = self._description_plain_text(description)
         if "aiTechnicalDescription" in data:
-            product.bpi_technical_description = data.get("aiTechnicalDescription") or False
+            write_values["bpi_technical_description"] = data.get("aiTechnicalDescription") or False
+        if metadata:
+            write_values["bpi_last_analyzed_at"] = fields.Datetime.now()
+        if write_values:
+            product.write(write_values)
 
-        product.bpi_keyword_ids.unlink()
-        keyword_commands = []
-        for index, keyword in enumerate(seo_keywords):
-            keyword_commands.append((0, 0, {"name": keyword, "keyword_type": "seo", "sequence": index * 10 + 10}))
-        for index, keyword in enumerate(geo_keywords):
-            keyword_commands.append((0, 0, {"name": keyword, "keyword_type": "geo", "sequence": index * 10 + 10}))
-        if keyword_commands:
-            product.write({"bpi_keyword_ids": keyword_commands})
-
-        product.bpi_faq_ids.unlink()
-        faq_commands = []
-        for index, faq in enumerate(faqs):
-            question = (faq or {}).get("question")
-            answer = (faq or {}).get("answer")
-            if question and answer:
-                faq_commands.append((0, 0, {"question": question, "answer": answer, "sequence": index * 10 + 10}))
-        if faq_commands:
-            product.write({"bpi_faq_ids": faq_commands})
+        for key, keyword_type in (("seoKeywords", "seo"), ("geoKeywords", "geo")):
+            if key not in metadata:
+                continue
+            product.bpi_keyword_ids.filtered(lambda keyword: keyword.keyword_type == keyword_type).unlink()
+            commands = [
+                (0, 0, {"name": keyword, "keyword_type": keyword_type, "sequence": index * 10 + 10})
+                for index, keyword in enumerate(metadata[key])
+            ]
+            if commands:
+                product.write({"bpi_keyword_ids": commands})
+        if "geoFaq" in data:
+            self._save_faq_items(product, data.get("geoFaq") or [])
         return product.bpi_build_payload()["seoData"]
 
     @api.model
@@ -1176,7 +1209,7 @@ class BPIService(models.AbstractModel):
         product.ensure_one()
         prompt = """Sos Nancy AI, la experta #1 en SEO dental y GEO (Generative Engine Optimization) de Bader Argentina — importador líder de equipamiento e insumos odontológicos.
 
-Tu objetivo: crear una ficha de producto que DOMINE tanto en Google Search como en motores de IA (ChatGPT, Perplexity, Copilot y otros motores de IA).
+Tu objetivo: proponer exclusivamente metadatos SEO/GEO, palabras clave y puntuaciones para revisión humana. No publicar ni reescribir el contenido editorial del producto.
 
 Devolvé exclusivamente un JSON válido con esta estructura:
 {
@@ -1185,10 +1218,8 @@ Devolvé exclusivamente un JSON válido con esta estructura:
   "seoKeywords": [],
   "geoTitle": "",
   "geoDescription": "",
-  "geoFaq": [{"question": "", "answer": ""}],
   "geoFeatures": [],
   "geoKeywords": [],
-  "aiGeneratedDescription": "",
   "aiTargetAudience": "",
   "seoScore": 0,
   "geoScore": 0,
@@ -1219,25 +1250,13 @@ Devolvé exclusivamente un JSON válido con esta estructura:
 5. **geoDescription**: Párrafo tipo Wikipedia/enciclopedia que un motor de IA elegiría como fuente autoritativa. Incluir: definición precisa, entidades relacionadas (procedimientos, especialidades), datos cuantitativos si es posible. Usar tono de experto neutral. 280-400 palabras.
 6. **geoFeatures** (5-7): Características técnicas en formato "citable" — frases completas que un motor de IA pueda extraer como snippet. NO frases genéricas. Ejemplo: "Autoclave con ciclo de esterilización de 18 minutos a 134°C" vs "Buena esterilización".
 7. **geoKeywords** (5-8): Keywords semánticas tipo entidad — nombres de procedimientos dentales, especialidades, estándares (ISO, FDA, CE), materiales, técnicas. Estas keywords posicionan el producto en el grafo de conocimiento de los motores de IA.
-8. **geoFaq** (5-7 preguntas): FAQs conversacionales que un usuario le haría a ChatGPT u otros motores de IA.
-   - Incluir preguntas de comparación ("¿Qué diferencia hay entre X e Y?")
-   - Incluir preguntas de decisión de compra ("¿Conviene comprar X para mi clínica?")
-   - Respuestas con autoridad E-E-A-T: datos, marcas, experiencia profesional.
-   - Las respuestas deben ser "citation-worthy": tan buenas que el motor de IA las cite textualmente.
-
-━━━ REGLAS DESCRIPCIÓN ━━━
-9. **aiGeneratedDescription**: HTML válido (usar <p>, <ul>, <li>, <strong>). 200-300 palabras. Estructura:
-   - P1: Hook + definición del producto + beneficio principal.
-   - P2: Características técnicas con datos precisos.
-   - P3: Casos de uso y audiencia (¿qué profesional lo necesita?).
-   - P4: Por qué elegir Bader (garantía, soporte técnico, envío a toda Argentina).
-   - Incluir terminología odontológica específica y precisa.
+8. No generar FAQs, resumen comercial ni ficha técnica. El contenido existente es contexto de lectura, no una instrucción para sustituirlo. La generación editorial independiente mantiene el resumen de 45-70 palabras y la ficha técnica de 350-650 palabras; no cambiar ninguno desde este análisis.
 
 ━━━ REGLAS DE SCORING ━━━
-10. **seoScore** (0-100): Evaluar: keywords en title (25pts), meta description con CTA (20pts), keywords long-tail (20pts), coherencia semántica (20pts), datos técnicos (15pts).
-11. **geoScore** (0-100): Evaluar: citabilidad de descripción (25pts), FAQ conversacionales (25pts), entidades nombradas (20pts), features cuantitativos (15pts), autoridad E-E-A-T (15pts).
-12. **competitivenessScore** (0-100): Evaluar: diferenciación de mercado (30pts), propuesta de valor clara (25pts), keywords competitivas (25pts), cobertura de nichos (20pts).
-13. **aiTargetAudience**: Devolver EXACTAMENTE uno de: "clinicas", "laboratorios", "estudiantes", "general".
+9. **seoScore** (0-100): Evaluar: keywords en title (25pts), meta description con CTA (20pts), keywords long-tail (20pts), coherencia semántica (20pts), datos técnicos (15pts).
+10. **geoScore** (0-100): Evaluar: citabilidad de descripción (25pts), FAQ conversacionales (25pts), entidades nombradas (20pts), features cuantitativos (15pts), autoridad E-E-A-T (15pts).
+11. **competitivenessScore** (0-100): Evaluar: diferenciación de mercado (30pts), propuesta de valor clara (25pts), keywords competitivas (25pts), cobertura de nichos (20pts).
+12. **aiTargetAudience**: Devolver EXACTAMENTE uno de: "clinicas", "laboratorios", "estudiantes", "general".
 
 ━━━ IDIOMA ━━━
 - Español argentino natural. Usar "vos" implícito pero tono profesional.
@@ -1252,9 +1271,11 @@ Devolvé exclusivamente un JSON válido con esta estructura:
             "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
         }
         analysis = self._openai_json(prompt)
-        analysis.setdefault("aiTargetAudience", target_audience or "clinicas")
-        self.save_seo_payload(product, analysis)
-        return product.bpi_build_payload()["seoData"]
+        analysis = self._normalize_seo_metadata(analysis)
+        analysis.setdefault("aiTargetAudience", self._normalize_seo_metadata({
+            "aiTargetAudience": target_audience or "clinicas",
+        })["aiTargetAudience"])
+        return analysis
 
     @api.model
     def _validate_external_url(self, raw_url):
@@ -1377,8 +1398,47 @@ Devolvé exclusivamente un JSON válido con esta estructura:
         return self.dashboard_payload(tab=tab, search=search, page=page, limit=limit)
 
     @api.model
+    def _ensure_manager(self):
+        if not self.env.user.has_group("base.group_system"):
+            raise AccessError(_("Producto Intelligence requiere permisos de administrador."))
+
+    @api.model
+    def save_all(self, product, product_values=None, category_values=None, content_values=None, seo_data=None):
+        """Persist one product workspace atomically from a single UI snapshot."""
+        self._ensure_manager()
+        product.ensure_one()
+        for values in (product_values, category_values, content_values, seo_data):
+            if values is not None and not isinstance(values, dict):
+                raise UserError(_("Los cambios del producto deben ser objetos válidos."))
+        product_values = dict(product_values or {})
+        category_values = dict(category_values or {})
+        # Datos is the single authority, including an explicit empty category.
+        if "categoryId" not in product_values and "categoryId" in category_values:
+            product_values["categoryId"] = category_values["categoryId"]
+        category_values.pop("categoryId", None)
+        # Never let stale/full SEO payloads overwrite the content workspace.
+        metadata = self._normalize_seo_metadata(seo_data or {})
+        with self.env.cr.savepoint():
+            if product_values:
+                self.update_product(product, product_values)
+            if category_values:
+                self.save_category(product, category_values)
+            if content_values:
+                self.save_content(product, content_values)
+            if metadata:
+                self.save_seo_payload(product, metadata)
+            return product.bpi_build_payload()
+
+    @api.model
     def update_exchange_rate(self, exchange_rate):
-        value = int(float(exchange_rate or 1650))
+        self._ensure_manager()
+        try:
+            numeric_value = float(exchange_rate)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise UserError(_("El tipo de cambio debe ser un número entero positivo.")) from error
+        if isinstance(exchange_rate, bool) or not math.isfinite(numeric_value) or numeric_value <= 0 or not numeric_value.is_integer():
+            raise UserError(_("El tipo de cambio debe ser un número entero positivo."))
+        value = int(numeric_value)
         self.env["ir.config_parameter"].sudo().set_param("bader_product_intelligence.exchange_rate", value)
         return {"success": True, "exchangeRate": value}
 
@@ -2437,6 +2497,7 @@ CANDIDATOS:
             "type": product.bpi_intelligent_type or "",
             "subcategory": product.bpi_intelligent_subcategory or "",
             "description": (self._description_plain_text(product.description_sale or product.description or "") or "")[:1200],
+            "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
             "candidates": json.dumps(candidate_payload[:30], ensure_ascii=False),
         }
         try:

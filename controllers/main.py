@@ -83,6 +83,17 @@ class BaderProductIntelligenceController(http.Controller):
         payload = request.env["bpi.service"].update_product(product, values or {})
         return {"success": True, **payload}
 
+    @http.route("/bader_product_intelligence/save_all", type="json", auth="user")
+    def save_all(self, product_tmpl_id, product_values=None, category_values=None, content_values=None, seo_data=None, **kwargs):
+        product = self._product(product_tmpl_id)
+        return request.env["bpi.service"].save_all(
+            product,
+            product_values=product_values,
+            category_values=category_values,
+            content_values=content_values,
+            seo_data=seo_data,
+        )
+
     @http.route("/bader_product_intelligence/update_variant", type="json", auth="user")
     def update_variant(self, product_tmpl_id, product_variant_id, values=None, **kwargs):
         product = self._product(product_tmpl_id)
@@ -184,7 +195,7 @@ class BaderProductIntelligenceController(http.Controller):
     @http.route("/bader_product_intelligence/save_video", type="json", auth="user")
     def save_video(self, product_tmpl_id, video_url="", **kwargs):
         product = self._product(product_tmpl_id)
-        product.write({"bpi_video_url": video_url or False})
+        product.write({"bpi_video_url": product._bpi_normalize_video_url(video_url)})
         return {"success": True, "videoUrl": product.bpi_video_url or ""}
 
     @http.route("/bader_product_intelligence/generate_image", type="json", auth="user")

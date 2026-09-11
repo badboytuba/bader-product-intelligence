@@ -28,7 +28,7 @@ QUnit.test("gallery deletion is conditioned by canDelete and bpi token", async (
     const action = Object.create(ProductIntelligenceAction.prototype);
     action.state = { productId: 7, imageBusy: false };
     action.rpc = async (route, payload) => calls.push({ route, payload });
-    action.loadDetail = async () => {};
+    action.refreshDetail = async () => {};
     action.notify = () => {};
     action.errorMessage = () => "error";
 
@@ -327,4 +327,409 @@ QUnit.test("pack component search handles Enter without unsupported OWL modifier
     });
     assert.deepEqual([searches, prevented], [1, 1], "Enter prevents submit and starts one search");
     assert.strictEqual(result, "searched", "the search promise is returned");
+});
+
+function stabilizationDeferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+    return { promise, resolve, reject };
+}
+
+function stabilizationPayload(id = 1) {
+    return {
+        product: { id, name: `Producto ${id}`, categoryId: 11, slug: `producto-${id}`, description: `Resumen ${id}`, referenceImages: [], isPack: true },
+        seoData: { seoTitle: `Meta ${id}`, seoKeywords: ["dental"], geoKeywords: ["clinicas"], seoScore: 40, geoFaq: [{ question: "Pregunta", answer: "Respuesta" }] },
+        variants: [{ id: id * 10, sku: `VAR-${id}`, active: true, costUsd: 3 }],
+        pack: { isPack: true, revision: `rev-${id}`, compositions: [] },
+        images: [],
+    };
+}
+
+function stabilizationAction(id = 1) {
+    const action = Object.create(ProductIntelligenceAction.prototype);
+    action.state = {
+        productId: id, viewMode: "detail", activeTab: "overview", dashboardTab: "all", searchTerm: "",
+        playground: { messages: [], canvasUrl: "", inputText: "" },
+    };
+    action.applyDetailPayload(stabilizationPayload(id));
+    action.notifications = [];
+    action.notify = (message) => action.notifications.push(message);
+    action.syncContentDescriptionEditor = action.syncTechnicalDescriptionEditor = action.scrollPlayground = () => {};
+    return action;
+}
+
+QUnit.test("saveAll uses one immutable transaction and one canonical category", async (assert) => {
+    const action = stabilizationAction();
+    action.state.productForm.categoryId = "22";
+    action.state.categoryForm.categoryId = "11"; // Legacy stale state must not win.
+    action.state.contentForm.faqs = [{ question: "Antes", answer: "Original" }];
+    const pending = stabilizationDeferred();
+    const calls = [];
+    action.rpc = (route, payload) => { calls.push({ route, payload }); return pending.promise; };
+    const saving = action.saveAll();
+    action.state.contentForm.faqs[0].answer = "Edición posterior";
+    action.invalidateProductRequests();
+    action.state.productId = 2;
+    action.applyDetailPayload(stabilizationPayload(2));
+    pending.resolve(stabilizationPayload(1));
+    await saving;
+    assert.strictEqual(calls.length, 1, "no second request can target the newly selected product");
+    assert.strictEqual(calls[0].route, "/bader_product_intelligence/save_all");
+    assert.strictEqual(calls[0].payload.product_tmpl_id, 1);
+    assert.strictEqual(calls[0].payload.product_values.categoryId, "22");
+    assert.strictEqual(calls[0].payload.category_values.categoryId, "22");
+    assert.strictEqual(calls[0].payload.content_values.faqs[0].answer, "Original", "RPC values are not live form references");
+    assert.strictEqual(action.state.detail.product.id, 2);
+    assert.deepEqual(action.notifications, [], "no stale success notification");
+});
+
+QUnit.test("saveAll retains edits made during the request and clears its busy flag", async (assert) => {
+    const action = stabilizationAction();
+    action.state.productForm.categoryId = "22";
+    const pending = stabilizationDeferred();
+    action.rpc = () => pending.promise;
+    const saving = action.saveAll();
+    action.state.contentForm.description = "Nuevo borrador sin guardar";
+    action.state.productForm.sku = "SKU-NUEVO";
+    const saved = stabilizationPayload();
+    saved.product.categoryId = 22;
+    pending.resolve(saved);
+    await saving;
+    assert.strictEqual(action.state.productForm.categoryId, "22", "canonical category survives normal reload");
+    assert.strictEqual(action.state.productForm.sku, "SKU-NUEVO");
+    assert.strictEqual(action.state.contentForm.description, "Nuevo borrador sin guardar");
+    assert.notOk(action.state.saveBusy);
+});
+
+QUnit.test("saveAll failure retains every draft and makes no follow-up RPC", async (assert) => {
+    const action = stabilizationAction();
+    action.state.contentForm.description = "Borrador";
+    action.state.productForm.categoryId = "22";
+    const before = action.captureDrafts();
+    let calls = 0;
+    action.rpc = async () => { calls += 1; throw new Error("Rollback"); };
+    await action.saveAll();
+    assert.strictEqual(calls, 1);
+    assert.deepEqual(action.captureDrafts(), before);
+    assert.notOk(action.state.saveBusy);
+});
+
+QUnit.test("SEO preview changes metadata only and SEO save omits every editorial field", async (assert) => {
+    const action = stabilizationAction();
+    action.state.contentForm.description = "Comercial sin guardar";
+    action.state.contentForm.technicalDescription = "Técnica sin guardar";
+    action.state.contentForm.faqs = [{ question: "Manual", answer: "Conservar" }];
+    action.state.productForm.categoryId = "22";
+    const before = action.captureDrafts();
+    const originalDetail = action.state.detail;
+    action.applySeoJobPayload({ productId: 1, resultPayload: { seoData: {
+        seoTitle: "Nueva meta", seoScore: 88, seoKeywords: ["a", "b"], geoKeywords: ["local"],
+        aiGeneratedDescriptionHtml: "NO", aiTechnicalDescription: "NO", geoFaq: [],
+    } } });
+    assert.strictEqual(action.state.seoForm.seoTitle, "Nueva meta");
+    assert.strictEqual(action.state.seoForm.seoScore, 88);
+    assert.strictEqual(action.state.seoForm.geoKeywords, "local");
+    assert.strictEqual(action.state.detail, originalDetail, "preview does not impersonate persisted product data");
+    assert.deepEqual(action.state.contentForm, before.contentForm);
+    assert.deepEqual(action.state.productForm, before.productForm);
+    assert.deepEqual(action.state.packForm, before.packForm);
+    assert.ok(action.state.seoPreviewPending);
+    const calls = [];
+    action.rpc = async (route, payload) => { calls.push({ route, payload }); return {}; };
+    await action.saveSeoData();
+    const values = calls[0].payload.seo_data;
+    for (const field of ["geoFaq", "aiGeneratedDescription", "aiGeneratedDescriptionHtml", "aiTechnicalDescription", "aiTargetAudience"]) {
+        assert.notOk(field in values, `${field} is outside SEO save`);
+    }
+    assert.deepEqual(values.geoKeywords, ["local"]);
+});
+
+QUnit.test("late SEO polling preserves new product and a fresh SEO job busy state", async (assert) => {
+    const action = stabilizationAction();
+    const pending = stabilizationDeferred();
+    action.rpc = () => pending.promise;
+    const polling = action.pollSeoJob(99);
+    action.invalidateProductRequests();
+    action.state.productId = 2;
+    action.applyDetailPayload(stabilizationPayload(2));
+    action.state.seoBusy = true;
+    action.state.seoJobId = 100;
+    pending.resolve({ job: { id: 99, productId: 1, state: "done", resultPayload: { seoData: { seoTitle: "Producto A" }, detailPayload: stabilizationPayload(1) } } });
+    await polling;
+    assert.strictEqual(action.state.detail.product.id, 2);
+    assert.strictEqual(action.state.seoForm.seoTitle, "Meta 2");
+    assert.strictEqual(action.state.seoJobId, 100);
+    assert.ok(action.state.seoBusy, "old finalizer cannot release the new product's operation");
+    assert.notOk(action.seoJobPollTimer);
+});
+
+QUnit.test("SEO preview preserves metadata typed while the job was pending", (assert) => {
+    const action = stabilizationAction();
+    const request = action.beginRequest("seoJob", true);
+    action.state.seoForm.seoTitle = "Meta manual más reciente";
+    action.applySeoJobPayload({ productId: 1, resultPayload: { seoData: { seoTitle: "Meta de IA", geoTitle: "Nueva GEO" } } }, request);
+    assert.strictEqual(action.state.seoForm.seoTitle, "Meta manual más reciente");
+    assert.strictEqual(action.state.seoForm.geoTitle, "Nueva GEO");
+});
+
+QUnit.test("late responses for every product operation are ignored after navigation", async (assert) => {
+    const operations = [
+        ["generateContent", [], "contentBusy"], ["generateFaq", [], "faqBusy"],
+        ["analyzeSeo", [], "seoBusy"], ["saveSeoOnly", [], "seoBusy"],
+        ["saveContentOnly", [], "contentBusy"], ["reclassifyCategory", [], "categoryBusy"],
+        ["saveCategoryOnly", [], "categoryBusy"], ["generateImage", [], "imageBusy"],
+        ["approveImage", [], "imageBusy"], ["saveCanvasToGallery", [], "imageBusy"],
+        ["generateFromForm", [], "imageBusy"], ["sendPlaygroundMessage", [], "imageBusy"],
+        ["saveGeneratedImage", ["data:image/png;base64,preview"], "imageBusy"],
+        ["addImageUrl", [], "imageBusy"], ["deleteImage", [{ canDelete: true, referenceToken: "bpi:8" }], "imageBusy"],
+        ["saveVideo", [], "imageBusy"], ["discoverCompetitors", [], "competitorBusy"],
+        ["addCompetitor", ["Tienda", "https://example.com/item"], "competitorBusy"],
+        ["scrapeCompetitor", [1], "competitorBusy"], ["analyzeCompetitor", [1], "competitorBusy"],
+        ["deleteCompetitor", [1], "competitorBusy"], ["generateStrategy", [], "strategyBusy"],
+        ["searchPackComponents", [], "componentSearchBusy"], ["savePack", [], "packBusy"],
+        ["saveVariant", [{ id: 10, sku: "OLD", active: true }], "variantBusy"],
+        ["setVariantImage", [{ id: 10, imageReferenceToken: "main" }, "reference"], "variantBusy"],
+    ];
+    for (const [method, args, busy] of operations) {
+        const action = stabilizationAction();
+        action.state.imageForm.prompt = "Prompt A";
+        action.state.imageForm.generatedPreviewUrl = "data:image/png;base64,preview";
+        action.state.imageForm.addImageUrl = "https://example.com/image.png";
+        action.state.playground.canvasUrl = "data:image/png;base64,preview";
+        action.state.playground.inputText = "Prompt A";
+        const pending = stabilizationDeferred();
+        let calls = 0;
+        action.rpc = () => { calls += 1; return pending.promise; };
+        const result = action[method](...args);
+        action.invalidateProductRequests();
+        action.state.productId = 2;
+        action.applyDetailPayload(stabilizationPayload(2));
+        action.state[busy] = true;
+        const before = action.captureDrafts();
+        pending.resolve({
+            ...stabilizationPayload(1), previewUrl: "STALE", name: "STALE", description: "STALE", faqs: [],
+            competitors: [{ id: 99 }], components: [{ id: 99 }],
+            job: { id: 99, productId: 1, state: "pending" },
+        });
+        await result;
+        assert.strictEqual(calls, 1, `${method}: no stale follow-up fetch/mutation`);
+        assert.deepEqual(action.captureDrafts(), before, `${method}: all new product drafts preserved`);
+        assert.ok(action.state[busy], `${method}: new product busy flag preserved`);
+        assert.deepEqual(action.notifications, [], `${method}: no stale notification`);
+        assert.notOk(action.seoJobPollTimer, `${method}: no stale polling timer`);
+    }
+});
+
+QUnit.test("generation tokens reject A to B to A and destroyed-component responses", async (assert) => {
+    for (const destroyed of [false, true]) {
+        const action = stabilizationAction();
+        const pending = stabilizationDeferred();
+        action.rpc = () => pending.promise;
+        const generating = action.generateContent();
+        action.invalidateProductRequests();
+        action.state.productId = 2;
+        action.invalidateProductRequests();
+        action.state.productId = 1;
+        action.applyDetailPayload(stabilizationPayload());
+        action.destroyed = destroyed;
+        pending.resolve({ name: "Respuesta vieja", description: "Respuesta vieja" });
+        await generating;
+        assert.strictEqual(action.state.contentForm.name, "Producto 1");
+        assert.strictEqual(action.state.contentForm.description, "Resumen 1");
+        assert.deepEqual(action.notifications, []);
+    }
+});
+
+QUnit.test("newest request wins and stale failure cannot reset busy or notify", async (assert) => {
+    const action = stabilizationAction();
+    const old = stabilizationDeferred();
+    const recent = stabilizationDeferred();
+    let count = 0;
+    action.rpc = () => (++count === 1 ? old.promise : recent.promise);
+    const a = action.generateContent();
+    const b = action.generateContent();
+    old.reject(new Error("Old failure"));
+    await a;
+    assert.ok(action.state.contentBusy);
+    assert.deepEqual(action.notifications, []);
+    recent.resolve({ name: "Más reciente", description: "Contenido reciente" });
+    await b;
+    assert.strictEqual(action.state.contentForm.name, "Más reciente");
+    assert.strictEqual(action.state.productForm.name, "Más reciente", "canonical product name stays synchronized");
+    assert.notOk(action.state.contentBusy);
+});
+
+QUnit.test("partial variant and gallery updates retain editorial, Pack and chat drafts", async (assert) => {
+    const action = stabilizationAction();
+    action.state.contentForm.description = "Comercial borrador";
+    action.state.contentForm.technicalDescription = "Técnica borrador";
+    action.state.productForm.categoryId = "22";
+    action.state.seoForm.seoTitle = "SEO borrador";
+    action.state.chatMessages = [{ role: "user", content: "Mensaje pendiente" }];
+    action.state.packForm.modifiable = true;
+    const before = action.captureDrafts();
+    action.rpc = async () => stabilizationPayload();
+    await action.saveVariant(action.currentVariants()[0]);
+    assert.deepEqual(action.state.contentForm, before.contentForm);
+    assert.deepEqual(action.state.productForm, before.productForm);
+    assert.deepEqual(action.state.seoForm, before.seoForm);
+    assert.deepEqual(action.state.packForm, before.packForm);
+    assert.deepEqual(action.state.chatMessages, [{ role: "user", content: "Mensaje pendiente" }]);
+    await action.deleteImage({ canDelete: true, referenceToken: "bpi:9" });
+    assert.deepEqual(action.state.contentForm, before.contentForm, "gallery refresh does not reset editors");
+    assert.deepEqual(action.state.packForm, before.packForm);
+});
+
+QUnit.test("dashboard out-of-order search and dashboard/detail navigation cannot restore stale views", async (assert) => {
+    const action = stabilizationAction();
+    const old = stabilizationDeferred();
+    const recent = stabilizationDeferred();
+    action.rpc = (_route, data) => data.search === "old" ? old.promise : recent.promise;
+    const a = action.loadDashboard({ search: "old" });
+    const b = action.loadDashboard({ search: "new" });
+    recent.resolve({ products: [{ id: 2 }] });
+    await b;
+    old.resolve({ products: [{ id: 1 }] });
+    await a;
+    assert.strictEqual(action.state.searchTerm, "new");
+    assert.strictEqual(action.state.dashboardRows[0].id, 2);
+
+    for (const first of ["dashboard", "detail"]) {
+        const pending = stabilizationDeferred();
+        action.rpc = (route) => {
+            if (route.endsWith(first === "dashboard" ? "/dashboard" : "/data")) return pending.promise;
+            return Promise.resolve(first === "dashboard" ? stabilizationPayload(2) : { products: [{ id: 3 }] });
+        };
+        const waiting = first === "dashboard" ? action.loadDashboard() : action.loadDetail(1);
+        if (first === "dashboard") await action.loadDetail(2);
+        else await action.loadDashboard();
+        pending.resolve(first === "dashboard" ? { products: [{ id: 1 }] } : stabilizationPayload(1));
+        await waiting;
+        assert.strictEqual(action.state.viewMode, first === "dashboard" ? "detail" : "dashboard");
+        assert.strictEqual(action.state.productId, first === "dashboard" ? 2 : null);
+    }
+});
+
+QUnit.test("navigation cancels dashboard debounce and SEO polling timers", (assert) => {
+    const action = stabilizationAction();
+    action.scheduleDashboardReload();
+    action.scheduleSeoJobPoll(99, 60000);
+    assert.ok(action.dashboardReloadTimer);
+    assert.ok(action.seoJobPollTimer);
+    action.state.seoBusy = true;
+    action.state.imageBusy = true;
+    action.state.showImageModal = true;
+    action.invalidateProductRequests();
+    assert.strictEqual(action.dashboardReloadTimer, null);
+    assert.strictEqual(action.seoJobPollTimer, null);
+    assert.notOk(action.state.seoBusy);
+    assert.notOk(action.state.imageBusy);
+    assert.notOk(action.state.showImageModal);
+});
+
+QUnit.test("variant selection invalidates component searches without losing drafts", async (assert) => {
+    const action = stabilizationAction();
+    action.state.componentSearch.query = "motor";
+    const pending = stabilizationDeferred();
+    action.rpc = () => pending.promise;
+    const searching = action.searchPackComponents();
+    action.selectVariant(20);
+    pending.resolve({ components: [{ productVariantId: 99 }] });
+    await searching;
+    assert.deepEqual(action.state.componentSearch.results, []);
+    assert.notOk(action.state.componentSearchBusy);
+});
+
+QUnit.test("late follow-up refresh after a successful mutation cannot replace a new product", async (assert) => {
+    for (const method of ["saveSeoOnly", "saveContentOnly", "saveCategoryOnly", "saveVideo"]) {
+        const action = stabilizationAction();
+        const refresh = stabilizationDeferred();
+        let calls = 0;
+        action.rpc = async (route) => {
+            calls += 1;
+            return route.endsWith("/data") ? refresh.promise : {};
+        };
+        const saving = action[method]();
+        // Let the mutation settle and the second RPC start.
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        action.invalidateProductRequests();
+        action.state.productId = 2;
+        action.applyDetailPayload(stabilizationPayload(2));
+        refresh.resolve(stabilizationPayload(1));
+        await saving;
+        assert.strictEqual(calls, 2, `${method}: exercised the post-mutation read`);
+        assert.strictEqual(action.state.detail.product.id, 2, `${method}: stale read ignored`);
+        assert.deepEqual(action.notifications, []);
+    }
+});
+
+QUnit.test("dashboard mutations do not navigate away from a newly opened product", async (assert) => {
+    for (const method of ["toggleDashboardPublish", "toggleDashboardFeatured", "saveExchangeRate"]) {
+        const action = stabilizationAction();
+        action.state.viewMode = "dashboard";
+        action.state.productId = null;
+        const pending = stabilizationDeferred();
+        let calls = 0;
+        action.rpc = () => { calls += 1; return pending.promise; };
+        const mutation = action[method](1, true);
+        action.invalidateProductRequests();
+        action.state.productId = 2;
+        action.state.viewMode = "detail";
+        action.applyDetailPayload(stabilizationPayload(2));
+        pending.resolve({ exchangeRate: 1800 });
+        await mutation;
+        assert.strictEqual(calls, 1, `${method}: no unsolicited dashboard refresh`);
+        assert.strictEqual(action.state.viewMode, "detail");
+        assert.deepEqual(action.notifications, []);
+    }
+});
+
+QUnit.test("file reader responses are invalidated on product change or reference removal", (assert) => {
+    const OriginalReader = window.FileReader;
+    const readers = [];
+    window.FileReader = class {
+        constructor() { readers.push(this); }
+        readAsDataURL() {}
+    };
+    try {
+        const action = stabilizationAction();
+        const event = { target: { files: [{ type: "image/png", size: 4, name: "a.png" }] } };
+        action.handleFileUpload(event);
+        action.removeUploadedRef();
+        readers[0].onload({ target: { result: "OLD" } });
+        assert.strictEqual(action.state.imageForm.uploadedRefUrl, "", "removed reference cannot reappear");
+        action.handleFileUpload(event);
+        action.handleVariantImageUpload(10, event);
+        const oldVariant = action.currentVariants()[0];
+        action.invalidateProductRequests();
+        action.state.productId = 2;
+        action.applyDetailPayload(stabilizationPayload(2));
+        readers[1].onload({ target: { result: "OLD" } });
+        readers[2].onload({ target: { result: "OLD" } });
+        assert.notOk(action.state.imageForm.uploadedRefUrl);
+        assert.strictEqual(action.currentVariants()[0].imageUploadDataUrl, "");
+        assert.strictEqual(oldVariant.imageUploadDataUrl, "", "detached old variant is untouched too");
+    } finally {
+        window.FileReader = OriginalReader;
+    }
+});
+
+QUnit.test("saving a variant image retains its unsaved SKU and Pack composition", async (assert) => {
+    const action = stabilizationAction();
+    const variant = action.currentVariants()[0];
+    variant.sku = "SKU SIN GUARDAR";
+    variant.imageReferenceToken = "main";
+    action.state.packForm.modifiable = true;
+    action.rpc = async () => ({
+        ...stabilizationPayload(),
+        variants: [{ ...stabilizationPayload().variants[0], imageUrl: "/fresh-image", hasOwnImage: true }],
+    });
+    await action.setVariantImage(variant, "reference");
+    assert.strictEqual(action.currentVariants()[0].sku, "SKU SIN GUARDAR");
+    assert.strictEqual(action.currentVariants()[0].imageUrl, "/fresh-image");
+    assert.ok(action.currentVariants()[0].hasOwnImage);
+    assert.ok(action.state.packForm.modifiable);
 });

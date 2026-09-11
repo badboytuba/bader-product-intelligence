@@ -2,6 +2,17 @@
 
 Installable Odoo 16 Community product operations module with SEO, GEO, image generation, competitor analysis and product-level AI workflows.
 
+## Release 16.0.1.3.1 — QAS stabilization
+
+- A single admin `/save_all` request saves a captured product workspace atomically; the category selected in Datos is authoritative.
+- Async results are scoped to product, navigation generation and operation. Late responses, including A→B→A navigation, cannot replace another workspace; partial saves preserve unsaved drafts.
+- SEO analysis produces a **metadata proposal**, not an automatic publication. Review and save explicitly; commercial/technical descriptions and FAQs are unchanged by analysis.
+- Competitor discovery includes the missing Pack/variant prompt context and retains real-candidate/fallback behavior.
+- Supported video URLs are parsed by host/path/query; reordered YouTube parameters work and invalid legacy values no longer break the product detail.
+- Public exchange-rate and website-bridge methods require an administrator before privilege elevation.
+- Active SEO jobs are deduplicated at database level and execution is locked across visibility commits. Interrupted expired jobs fail safely, without automatically replaying potentially paid API requests.
+- This release is authorized for **QAS only**. No PROD deployment is included.
+
 ## Target Stack
 
 - Odoo `16.0` Community

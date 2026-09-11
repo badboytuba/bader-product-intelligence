@@ -660,7 +660,7 @@
                                     </button>
                                         <div class="bpi-form-grid">
                                             <label>Nombre del Producto</label>
-                                            <input class="bpi-input" t-model="state.contentForm.name"/>
+                                            <input class="bpi-input" t-att-value="state.contentForm.name" t-on-input="(ev) => this.updateContentField('name', ev.target.value)"/>
                                             <label>Descripcion Optimizada <span class="bpi-label-hint">(resumen corto)</span></label>
                                         <div class="bpi-rich-editor-shell">
                                             <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion">
@@ -1046,9 +1046,10 @@
                                         <textarea class="bpi-textarea" rows="4" maxlength="160" t-model="state.seoForm.seoDescription"/>
                                         <label>Slug (URL)</label>
                                         <div class="bpi-inline-field">
-                                            <input class="bpi-input" t-model="state.seoForm.slug"/>
+                                            <input class="bpi-input" t-model="state.productForm.slug"/>
                                             <button type="button" class="bpi-icon-button" t-on-click="() => this.regenerateSlug('seo')"><i class="fa fa-refresh"/></button>
                                         </div>
+                                        <small class="bpi-muted">El slug se guarda con Guardar Cambios.</small>
                                         <label>Keywords SEO</label>
                                         <textarea class="bpi-textarea" rows="3" t-model="state.seoForm.seoKeywords"/>
                                         <label>Titulo GEO</label>
@@ -1065,6 +1066,9 @@
                                             <t t-else=""> Optimizar SEO con Nancy AI</t>
                                         </button>
                                         <button type="button" class="bpi-icon-button" t-on-click="saveSeoOnly" t-att-disabled="state.seoBusy"><i class="fa fa-floppy-o"/></button>
+                                    </div>
+                                    <div t-if="state.seoPreviewPending" class="bpi-muted bpi-job-status">
+                                        <i class="fa fa-info-circle"/> Propuesta SEO sin guardar. Revisa los metadatos y pulsa Guardar; las descripciones y FAQs no cambian.
                                     </div>
                                     <div t-if="state.seoJobMessage" class="bpi-muted bpi-job-status">
                                         <i class="fa fa-clock-o"/> <t t-esc="state.seoJobMessage"/>

@@ -5,10 +5,12 @@ import json
 import math
 import re
 import unicodedata
+from urllib.parse import parse_qs, urlparse
 
 from markupsafe import escape
 
 from odoo import _, api, fields, models
+from odoo.exceptions import UserError
 from odoo.tools import html2plaintext
 
 
@@ -597,29 +599,59 @@ class ProductTemplate(models.Model):
                 segments.append(product.bpi_intelligent_subcategory)
             product.bpi_intelligent_path = " / ".join([segment for segment in segments if segment])
 
+    @api.model
+    def _bpi_parse_video_url(self, value):
+        """Return canonical page/embed URLs without fetching an untrusted URL."""
+        if not value:
+            return "", ""
+        invalid = _("Ingresa un enlace válido de YouTube, Instagram o TikTok con el identificador del video.")
+        if not isinstance(value, str) or len(value) > 2048:
+            raise UserError(invalid)
+        value = value.strip()
+        if not value:
+            return "", ""
+        if any(ord(char) < 32 for char in value):
+            raise UserError(invalid)
+        try:
+            parsed = urlparse(value)
+            host = (parsed.hostname or "").lower()
+            if parsed.scheme not in ("http", "https") or parsed.username or parsed.password or parsed.port not in (None, 80, 443):
+                raise ValueError("invalid video origin")
+        except ValueError as error:
+            raise UserError(invalid) from error
+        parts = [part for part in parsed.path.split("/") if part]
+        video_id = ""
+        if host in ("youtu.be", "www.youtu.be") and len(parts) == 1:
+            video_id = parts[0]
+        elif host in ("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "www.youtube-nocookie.com", "youtube-nocookie.com"):
+            if parts == ["watch"]:
+                video_id = (parse_qs(parsed.query).get("v") or [""])[0]
+            elif len(parts) == 2 and parts[0] in ("shorts", "embed", "live"):
+                video_id = parts[1]
+        if video_id and re.fullmatch(r"[A-Za-z0-9_-]{6,64}", video_id):
+            return "https://www.youtube.com/watch?v=%s" % video_id, "https://www.youtube.com/embed/%s" % video_id
+        if host in ("instagram.com", "www.instagram.com") and len(parts) == 2 and parts[0] in ("p", "reel", "reels"):
+            if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", parts[1]):
+                kind = "reel" if parts[0] == "reels" else parts[0]
+                page = "https://www.instagram.com/%s/%s/" % (kind, parts[1])
+                return page, page + "embed"
+        if host in ("tiktok.com", "www.tiktok.com", "m.tiktok.com") and len(parts) == 3 and parts[0].startswith("@") and parts[1] == "video":
+            if re.fullmatch(r"@[A-Za-z0-9_.]{1,64}", parts[0]) and re.fullmatch(r"[0-9]{1,32}", parts[2]):
+                return "https://www.tiktok.com/%s/video/%s" % (parts[0], parts[2]), "https://www.tiktok.com/embed/v2/%s" % parts[2]
+        raise UserError(invalid)
+
+    @api.model
+    def _bpi_normalize_video_url(self, value):
+        return self._bpi_parse_video_url(value)[0]
+
+    @api.depends("bpi_video_url")
     def _compute_bpi_video_embed_url(self):
         for product in self:
-            url = product.bpi_video_url or ""
-            embed_url = ""
-            if "youtube.com/watch" in url:
-                video_id = url.split("watch?v=")[1].split("&")[0]
-                embed_url = "https://www.youtube.com/embed/%s" % video_id
-            elif "youtu.be/" in url:
-                video_id = url.split("youtu.be/")[1].split("?")[0]
-                embed_url = "https://www.youtube.com/embed/%s" % video_id
-            elif "youtube.com/shorts/" in url:
-                video_id = url.split("youtube.com/shorts/")[1].split("?")[0]
-                embed_url = "https://www.youtube.com/embed/%s" % video_id
-            else:
-                instagram_match = re.search(r"/(p|reel|reels)/([A-Za-z0-9_-]+)", url)
-                tiktok_match = re.search(r"video/(\d+)", url)
-                if instagram_match:
-                    embed_url = "https://www.instagram.com/%s/%s/embed" % (
-                        instagram_match.group(1),
-                        instagram_match.group(2),
-                    )
-                elif tiktok_match:
-                    embed_url = "https://www.tiktok.com/embed/v2/%s" % tiktok_match.group(1)
+            try:
+                _page, embed_url = product._bpi_parse_video_url(product.bpi_video_url)
+            except UserError:
+                # Legacy invalid values must never prevent opening the product.
+                embed_url = ""
             product.bpi_video_embed_url = embed_url
 
     def action_open_product_intelligence(self):
@@ -775,6 +807,7 @@ class ProductTemplate(models.Model):
             "seoTitle": self.website_meta_title or self.name or "",
             "seoDescription": self.website_meta_description or "",
             "seoKeywords": self._bpi_keyword_values("seo"),
+            "geoKeywords": self._bpi_keyword_values("geo"),
             "geoTitle": self.bpi_geo_title or "",
             "geoDescription": self.bpi_geo_description or "",
             "geoFeatures": self.bpi_geo_features or [],

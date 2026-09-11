@@ -1,6 +1,20 @@
 # Codex Handoff — Bader Product Intelligence
 
-_Last updated: 2026-08-10_
+_Last updated: 2026-09-11_
+
+## Current stabilization candidate — 16.0.1.3.1 (QAS only)
+
+Branch: `fix/bpi-qas-stabilization-20260911`. User authorized fixing the seven priority findings and updating QAS only; PROD is excluded. The older certification records below remain historical evidence.
+
+- `/save_all` accepts `product_tmpl_id`, `product_values`, `category_values`, `content_values`, `seo_data` and returns the full detail payload. It uses a savepoint within one HTTP transaction; the Datos category takes precedence, and SEO metadata cannot overwrite content saved in that transaction.
+- All async workspace operations use product/navigation-generation/request identity. Partial detail updates merge against submitted snapshots rather than replacing every draft. SEO and dashboard polling discard stale responses.
+- `analyze_seo` now returns normalized metadata proposals without database writes. `save_seo_payload` uses PATCH semantics: omitted descriptions, FAQs and keyword types remain unchanged. The content generator keeps its 45–70 / 350–650 word split.
+- Jobs return `{"seoData": ...}` only. A partial unique index enforces one pending/running job per product/type/audience. Real SQLSTATE40001 lets Odoo retry conflicting creation. Session advisory locks survive visibility commits; terminal-state recovery only retries database persistence, never the provider. Unlocked jobs running over 30 minutes are failed by the next cron rather than replayed.
+- Video parsing validates supported hosts and query parameters. Invalid legacy URLs yield an empty embed; new invalid saves are rejected before writing.
+- Exchange-rate and bridge-sync public model methods validate `base.group_system` before `sudo()`.
+- Backend suite: 44 actual test methods passed on an isolated restored QAS DB, plus three real-transaction concurrency/final-commit/lock-release checks. Frontend suite expanded to 30 QUnit tests; integrated browser certification is tracked with release delivery evidence.
+
+Do not replace the server Git directories or reset dirty runtime worktrees. The QAS runtime is a deployed file tree, not its old Git HEAD. Stage/backup/upgrade only `bader_product_intelligence`.
 
 This file is the operational handoff for the Odoo 16 addon. Never print or commit the local `.env`.
 

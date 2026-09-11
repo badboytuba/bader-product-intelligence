@@ -195,6 +195,10 @@ export class ProductIntelligenceAction extends Component {
         this.seoJobPollTimer = null;
         this.detailLoadSequence = 0;
         this.chatRequestSequence = 0;
+        this.requestSequences = {};
+        this.viewGeneration = 0;
+        this.destroyed = false;
+        this.scrollSetupTimer = null;
 
         this.state = useState({
             loading: true,
@@ -234,6 +238,7 @@ export class ProductIntelligenceAction extends Component {
             seoBusy: false,
             seoJobId: false,
             seoJobMessage: "",
+            seoPreviewPending: false,
             contentBusy: false,
             faqBusy: false,
             imageBusy: false,
@@ -303,8 +308,9 @@ export class ProductIntelligenceAction extends Component {
         });
 
         onWillUnmount(() => {
-            this.clearDashboardReloadTimer();
-            this.clearSeoJobPollTimer();
+            this.destroyed = true;
+            this.invalidateProductRequests();
+            clearTimeout(this.scrollSetupTimer);
             this._cleanupScrollListener();
             this._cleanupKeyboardShortcuts();
         });
@@ -319,7 +325,8 @@ export class ProductIntelligenceAction extends Component {
             }
         };
         // Defer to let OWL render
-        setTimeout(() => {
+        this.scrollSetupTimer = setTimeout(() => {
+            if (this.destroyed) return;
             const shell = this.el?.querySelector?.(".bpi-detail-shell");
             if (shell) {
                 shell.addEventListener("scroll", this._scrollHandler, { passive: true });
@@ -403,6 +410,7 @@ export class ProductIntelligenceAction extends Component {
             slug: "",
             seoKeywords: "",
             geoTitle: "",
+            geoKeywords: "",
             geoDescription: "",
             geoFeatures: "",
         };
@@ -414,7 +422,6 @@ export class ProductIntelligenceAction extends Component {
             niches: [],
             type: "",
             subcategory: "",
-            categoryId: "",
         };
     }
 
@@ -464,6 +471,126 @@ export class ProductIntelligenceAction extends Component {
         return params.origin || "menu";
     }
 
+    snapshotDraft(value) {
+        if (Array.isArray(value)) return value.map((item) => this.snapshotDraft(item));
+        if (value && typeof value === "object") {
+            return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, this.snapshotDraft(item)]));
+        }
+        return value;
+    }
+
+    captureDrafts() {
+        const drafts = {};
+        for (const key of ["productForm", "contentForm", "seoForm", "categoryForm", "imageForm", "competitorForm", "variantDrafts", "packForm"]) {
+            if (this.state[key] !== undefined) {
+                drafts[key] = this.snapshotDraft(this.state[key]);
+            }
+        }
+        return drafts;
+    }
+
+    beginRequest(scope, withDrafts = false) {
+        this.requestSequences = this.requestSequences || {};
+        const sequence = (this.requestSequences[scope] || 0) + 1;
+        this.requestSequences[scope] = sequence;
+        return {
+            scope,
+            sequence,
+            generation: this.viewGeneration || 0,
+            productId: this.state.productId,
+            seoPreviewVersion: this.seoPreviewVersion || 0,
+            ...(withDrafts ? { drafts: this.captureDrafts() } : {}),
+        };
+    }
+
+    isRequestCurrent(request) {
+        return !!request && !this.destroyed &&
+            request.generation === (this.viewGeneration || 0) &&
+            request.sequence === (this.requestSequences || {})[request.scope] &&
+            String(request.productId || "") === String(this.state.productId || "");
+    }
+
+    invalidateProductRequests() {
+        this.viewGeneration = (this.viewGeneration || 0) + 1;
+        this.detailLoadSequence = (this.detailLoadSequence || 0) + 1;
+        this.chatRequestSequence = (this.chatRequestSequence || 0) + 1;
+        this.clearDashboardReloadTimer();
+        this.clearSeoJobPollTimer();
+        for (const key of ["saveBusy", "seoBusy", "contentBusy", "faqBusy", "imageBusy", "competitorBusy", "strategyBusy", "categoryBusy", "chatBusy", "variantBusy", "packBusy", "componentSearchBusy", "dashboardBusy", "exchangeRateBusy"]) {
+            this.state[key] = false;
+        }
+        this.state.seoJobId = false;
+        this.state.seoJobMessage = "";
+        this.state.seoPreviewPending = false;
+        this.state.showImageModal = false;
+        this.contentDescriptionSelection = null;
+        this.technicalDescriptionSelection = null;
+        this.state.playground = { messages: [], canvasUrl: "", inputText: "" };
+    }
+
+    mergeSavedDraft(current, submitted, saved) {
+        if (JSON.stringify(current) === JSON.stringify(submitted)) {
+            return saved;
+        }
+        if (current && submitted && saved && !Array.isArray(current) && typeof current === "object") {
+            const merged = { ...current };
+            for (const key of Object.keys(saved)) {
+                merged[key] = this.mergeSavedDraft(current[key], submitted[key], saved[key]);
+            }
+            return merged;
+        }
+        // Never discard edits made after the request (including reordered FAQs/Pack lines).
+        return current;
+    }
+
+    applyDetailUpdate(data, request, updates = {}) {
+        if (!this.isRequestCurrent(request) || !data.product || String(data.product.id) !== String(request.productId)) {
+            return;
+        }
+        const retained = {};
+        const keys = ["productForm", "contentForm", "seoForm", "categoryForm", "imageForm", "competitorForm", "variantDrafts", "packForm", "componentSearch", "selectedVariantId", "chatMessages", "chatSessionKey", "chatInput", "chatBusy", "variantBusy", "packBusy", "componentSearchBusy"];
+        for (const key of keys) retained[key] = this.state[key];
+        this.applyDetailPayload(data);
+        for (const key of keys) {
+            const saved = this.state[key];
+            this.state[key] = retained[key];
+            if (!updates[key]) continue;
+            const submitted = (request.drafts || {})[key];
+            if (updates[key] === true) {
+                this.state[key] = this.mergeSavedDraft(retained[key], submitted, saved);
+            } else if (key === "variantDrafts") {
+                this.state.variantDrafts = (retained.variantDrafts || []).map((variant) => {
+                    const target = updates.variantDrafts.id || updates.variantDrafts;
+                    if (String(variant.id) !== String(target)) return variant;
+                    const original = (submitted || []).find((item) => item.id === variant.id);
+                    const updated = (saved || []).find((item) => item.id === variant.id);
+                    if (!updated) return variant;
+                    if (updates.variantDrafts.fields) {
+                        const fresh = { ...variant };
+                        for (const field of updates.variantDrafts.fields) {
+                            fresh[field] = this.mergeSavedDraft(variant[field], original?.[field], updated[field]);
+                        }
+                        return fresh;
+                    }
+                    return this.mergeSavedDraft(variant, original, updated);
+                });
+            } else {
+                const updated = { ...retained[key] };
+                for (const field of updates[key]) {
+                    updated[field] = this.mergeSavedDraft(retained[key]?.[field], submitted?.[field], saved[field]);
+                }
+                this.state[key] = updated;
+            }
+        }
+    }
+
+    async refreshDetail(request, updates = {}) {
+        if (!this.isRequestCurrent(request)) return;
+        const refresh = this.beginRequest("detailRefresh");
+        const data = await this.rpc("/bader_product_intelligence/data", { product_tmpl_id: request.productId });
+        if (this.isRequestCurrent(refresh)) this.applyDetailUpdate(data, request, updates);
+    }
+
     clearDashboardReloadTimer() {
         if (this.dashboardReloadTimer) {
             clearTimeout(this.dashboardReloadTimer);
@@ -473,8 +600,9 @@ export class ProductIntelligenceAction extends Component {
 
     scheduleDashboardReload() {
         this.clearDashboardReloadTimer();
+        const request = this.beginRequest("dashboard");
         this.dashboardReloadTimer = setTimeout(() => {
-            this.loadDashboard({ page: 1 }, { showSpinner: false });
+            if (this.isRequestCurrent(request)) this.loadDashboard({ page: 1 }, { showSpinner: false });
         }, 300);
     }
 
@@ -485,65 +613,56 @@ export class ProductIntelligenceAction extends Component {
         }
     }
 
-    scheduleSeoJobPoll(jobId, delay = 5000) {
+    scheduleSeoJobPoll(jobId, delay = 5000, request = this.beginRequest("seoJob")) {
         this.clearSeoJobPollTimer();
         this.seoJobPollTimer = setTimeout(() => {
-            this.pollSeoJob(jobId);
+            if (this.isRequestCurrent(request)) this.pollSeoJob(jobId, request);
         }, delay);
     }
 
-    applySeoJobPayload(job) {
-        const resultPayload = (job && job.resultPayload) || {};
-        if (resultPayload.detailPayload) {
-            this.applyDetailPayload(resultPayload.detailPayload);
-        } else if (resultPayload.seoData) {
-            this.applyDetailPayload({
-                ...this.state.detail,
-                seoData: resultPayload.seoData,
-            });
+    applySeoJobPayload(job, request = null) {
+        if ((request && !this.isRequestCurrent(request)) || String(job?.productId) !== String(this.state.productId)) return;
+        const seoData = job?.resultPayload?.seoData;
+        if (!seoData) return;
+        const proposal = { ...this.state.seoForm };
+        for (const key of ["seoTitle", "seoDescription", "geoTitle", "geoDescription", "seoScore", "geoScore", "competitivenessScore"]) {
+            if (seoData[key] !== undefined) proposal[key] = seoData[key];
         }
-        const seoData = resultPayload.seoData || (resultPayload.detailPayload && resultPayload.detailPayload.seoData);
-        if (seoData && (seoData.aiGeneratedDescriptionHtml || seoData.aiGeneratedDescription)) {
-            this.state.contentForm.description = seoData.aiGeneratedDescriptionHtml || seoData.aiGeneratedDescription;
-            this.syncContentDescriptionEditor(true);
+        for (const key of ["seoKeywords", "geoKeywords", "geoFeatures"]) {
+            if (Array.isArray(seoData[key])) proposal[key] = seoData[key].join(", ");
         }
-        if (seoData && (seoData.aiTechnicalDescriptionHtml || seoData.aiTechnicalDescription)) {
-            this.state.contentForm.technicalDescription = seoData.aiTechnicalDescriptionHtml || seoData.aiTechnicalDescription;
-            this.syncTechnicalDescriptionEditor(true);
-        }
+        this.state.seoForm = request?.drafts?.seoForm
+            ? this.mergeSavedDraft(this.state.seoForm, request.drafts.seoForm, proposal)
+            : proposal;
+        this.state.seoPreviewPending = true;
+        this.seoPreviewVersion = (this.seoPreviewVersion || 0) + 1;
+        // SEO is a metadata preview: never replace product/content/FAQ/technical drafts.
     }
 
-    async pollSeoJob(jobId) {
-        if (!jobId || !this.state.productId) {
-            this.state.seoBusy = false;
-            this.state.seoJobId = false;
-            return;
-        }
+    async pollSeoJob(jobId, request = this.beginRequest("seoJob", true)) {
+        if (!jobId || !request.productId || !this.isRequestCurrent(request)) return;
         try {
-            const result = await this.rpc("/bader_product_intelligence/ai_job/status", {
-                job_id: jobId,
-            });
+            const result = await this.rpc("/bader_product_intelligence/ai_job/status", { job_id: jobId });
+            if (!this.isRequestCurrent(request)) return;
             const job = result.job || {};
+            if (String(job.productId) !== String(request.productId) || String(job.id) !== String(jobId)) return;
             this.state.seoJobMessage = job.message || "Nancy AI esta trabajando...";
-            if (job.state === "done") {
-                this.clearSeoJobPollTimer();
-                this.applySeoJobPayload(job);
-                this.state.seoBusy = false;
-                this.state.seoJobId = false;
-                this.state.seoJobMessage = "";
-                this.notify("SEO optimizado con Nancy AI.");
-                return;
-            }
-            if (job.state === "failed") {
+            if (job.state === "done" || job.state === "failed") {
                 this.clearSeoJobPollTimer();
                 this.state.seoBusy = false;
                 this.state.seoJobId = false;
                 this.state.seoJobMessage = "";
-                this.notify(job.errorMessage || "No se pudo analizar el SEO.", "danger");
+                if (job.state === "done") {
+                    this.applySeoJobPayload(job, request);
+                    this.notify("Propuesta SEO lista. Revisa los metadatos y pulsa Guardar para aplicarlos.", "info");
+                } else {
+                    this.notify(job.errorMessage || "No se pudo analizar el SEO.", "danger");
+                }
                 return;
             }
-            this.scheduleSeoJobPoll(jobId, 5000);
+            this.scheduleSeoJobPoll(jobId, 5000, request);
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.clearSeoJobPollTimer();
             this.state.seoBusy = false;
             this.state.seoJobId = false;
@@ -620,21 +739,27 @@ export class ProductIntelligenceAction extends Component {
 
     async loadDashboard(overrides = {}, options = {}) {
         const params = this.resolveDashboardParams(overrides);
+        if (this.state.viewMode !== "dashboard") this.invalidateProductRequests();
+        this.clearDashboardReloadTimer();
+        this.state.viewMode = "dashboard";
+        this.state.productId = null;
+        const request = this.beginRequest("dashboard");
+        this.state.dashboardTab = params.tab;
+        this.state.searchTerm = params.search || "";
         const showSpinner = options.showSpinner !== false;
-        if (showSpinner) {
-            this.state.loading = true;
-        } else {
-            this.state.dashboardBusy = true;
-        }
+        this.state.loading = showSpinner;
+        this.state.dashboardBusy = !showSpinner;
         this.state.error = "";
         try {
             const data = await this.rpc("/bader_product_intelligence/dashboard", params);
-            this.applyDashboardPayload(data, params);
+            if (this.isRequestCurrent(request)) this.applyDashboardPayload(data, params);
         } catch (error) {
-            this.state.error = this.errorMessage(error, "No se pudo cargar Producto Intelligence.");
+            if (this.isRequestCurrent(request)) this.state.error = this.errorMessage(error, "No se pudo cargar Producto Intelligence.");
         } finally {
-            this.state.loading = false;
-            this.state.dashboardBusy = false;
+            if (this.isRequestCurrent(request)) {
+                this.state.loading = false;
+                this.state.dashboardBusy = false;
+            }
         }
     }
 
@@ -675,15 +800,18 @@ export class ProductIntelligenceAction extends Component {
             slug: product.slug || "",
             seoKeywords: (seoData.seoKeywords || []).join(", "),
             geoTitle: seoData.geoTitle || "",
+            geoKeywords: (seoData.geoKeywords || []).join(", "),
             geoDescription: seoData.geoDescription || "",
             geoFeatures: (seoData.geoFeatures || []).join(", "),
+            seoScore: seoData.seoScore || 0,
+            geoScore: seoData.geoScore || 0,
+            competitivenessScore: seoData.competitivenessScore || 0,
         };
         this.state.categoryForm = {
             manualMode: !!product.intelligentCategoryManual,
             niches: product.intelligentNiches || [],
             type: this.normalizeChoiceValue(product.intelligentType, TYPE_OPTIONS, TYPE_ALIASES),
             subcategory: this.normalizeChoiceValue(product.intelligentSubcategory, SUBCATEGORY_OPTIONS, SUBCATEGORY_ALIASES),
-            categoryId: product.categoryId ? String(product.categoryId) : "",
         };
         const defaultImage = product.mainImageUrl || (data.images && data.images.length ? data.images[0].imageUrl : "");
         this.state.imageForm = {
@@ -750,15 +878,16 @@ export class ProductIntelligenceAction extends Component {
             await this.loadDashboard();
             return;
         }
-        const loadSequence = ++this.detailLoadSequence;
-        if (String(currentId) !== String(this.state.productId || "")) {
-            ++this.chatRequestSequence;
-            this.state.productId = currentId;
+        const differentProduct = String(currentId) !== String(this.state.productId || "");
+        this.invalidateProductRequests();
+        this.state.productId = currentId;
+        this.state.viewMode = "detail";
+        const request = this.beginRequest("detail");
+        if (differentProduct) {
             this.state.detail = null;
             this.state.chatMessages = [];
             this.state.chatSessionKey = "";
             this.state.chatInput = "";
-            this.state.chatBusy = false;
             this.state.selectedVariantId = null;
             this.state.variantDrafts = [];
             this.state.packForm = this.emptyPackForm();
@@ -767,24 +896,13 @@ export class ProductIntelligenceAction extends Component {
         this.state.loading = true;
         this.state.error = "";
         try {
-            const data = await this.rpc("/bader_product_intelligence/data", {
-                product_tmpl_id: currentId,
-            });
-            if (loadSequence !== this.detailLoadSequence) {
-                return;
-            }
-            this.state.productId = currentId;
-            this.state.viewMode = "detail";
+            const data = await this.rpc("/bader_product_intelligence/data", { product_tmpl_id: currentId });
+            if (!this.isRequestCurrent(request)) return;
             this.applyDetailPayload(data);
         } catch (error) {
-            if (loadSequence !== this.detailLoadSequence) {
-                return;
-            }
-            this.state.error = this.errorMessage(error, "No se pudo cargar el detalle del producto.");
+            if (this.isRequestCurrent(request)) this.state.error = this.errorMessage(error, "No se pudo cargar el detalle del producto.");
         } finally {
-            if (loadSequence === this.detailLoadSequence) {
-                this.state.loading = false;
-            }
+            if (this.isRequestCurrent(request)) this.state.loading = false;
         }
     }
 
@@ -793,7 +911,9 @@ export class ProductIntelligenceAction extends Component {
     }
 
     currentSeoData() {
-        return (this.state.detail && this.state.detail.seoData) || {};
+        const data = (this.state.detail && this.state.detail.seoData) || {};
+        if (!this.state.seoPreviewPending) return data;
+        return { ...data, seoScore: this.state.seoForm.seoScore, geoScore: this.state.seoForm.geoScore, competitivenessScore: this.state.seoForm.competitivenessScore };
     }
 
     currentImages() {
@@ -844,6 +964,8 @@ export class ProductIntelligenceAction extends Component {
     }
 
     selectVariant(variantId) {
+        this.beginRequest("componentSearch");
+        this.state.componentSearchBusy = false;
         this.state.selectedVariantId = variantId;
         this.state.componentSearch = { query: "", results: [] };
     }
@@ -1591,18 +1713,21 @@ export class ProductIntelligenceAction extends Component {
 
     async saveExchangeRate() {
         this.state.exchangeRateBusy = true;
+        const request = this.beginRequest("saveExchangeRate");
         try {
             const value = this.parseNumber(this.state.exchangeRateInput) || 1650;
             const result = await this.rpc("/bader_product_intelligence/update_exchange_rate", {
                 exchange_rate: value,
             });
+            if (!this.isRequestCurrent(request)) return;
             this.state.exchangeRate = result.exchangeRate || value;
             await this.loadDashboard({}, { showSpinner: false });
-            this.notify("Tipo de cambio actualizado.");
+            if (this.isRequestCurrent(request)) this.notify("Tipo de cambio actualizado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo actualizar el tipo de cambio."), "danger");
         } finally {
-            this.state.exchangeRateBusy = false;
+            if (this.isRequestCurrent(request)) this.state.exchangeRateBusy = false;
         }
     }
 
@@ -1772,6 +1897,7 @@ export class ProductIntelligenceAction extends Component {
 
     updateProductField(field, value) {
         this.state.productForm[field] = value;
+        if (field === "name") this.state.contentForm.name = value;
         if (field === "name" && !this.state.productForm.slug) {
             this.state.productForm.slug = this.generateSlug(value);
         }
@@ -1788,10 +1914,11 @@ export class ProductIntelligenceAction extends Component {
         if (!variant || this.state.variantBusy) {
             return;
         }
+        const request = this.beginRequest("variant", true);
         this.state.variantBusy = true;
         try {
             const payload = await this.rpc("/bader_product_intelligence/update_variant", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 product_variant_id: variant.id,
                 values: {
                     sku: variant.sku || "",
@@ -1800,14 +1927,16 @@ export class ProductIntelligenceAction extends Component {
                     active: !!variant.active,
                 },
             });
-            this.applyDetailPayload(payload);
+            if (!this.isRequestCurrent(request)) return;
+            this.applyDetailUpdate(payload, request, { variantDrafts: variant.id });
             this.state.activeTab = "variants_pack";
             this.state.selectedVariantId = variant.id;
             this.notify("Variante actualizada.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo actualizar la variante."), "danger");
         } finally {
-            this.state.variantBusy = false;
+            if (this.isRequestCurrent(request)) this.state.variantBusy = false;
         }
     }
 
@@ -1834,17 +1963,20 @@ export class ProductIntelligenceAction extends Component {
             }
             payload.image_token = variant.imageReferenceToken;
         }
+        const request = this.beginRequest("variant", true);
         this.state.variantBusy = true;
         try {
             const result = await this.rpc("/bader_product_intelligence/set_variant_image", payload);
-            this.applyDetailPayload(result);
+            if (!this.isRequestCurrent(request)) return;
+            this.applyDetailUpdate(result, request, { variantDrafts: { id: variant.id, fields: ["imageUrl", "hasOwnImage", "imageUploadDataUrl", "imageUploadName", "imageReferenceToken"] } });
             this.state.activeTab = "variants_pack";
             this.state.selectedVariantId = variant.id;
             this.notify(operation === "remove" ? "Imagen propia eliminada." : "Imagen de variante actualizada.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo actualizar la imagen de la variante."), "danger");
         } finally {
-            this.state.variantBusy = false;
+            if (this.isRequestCurrent(request)) this.state.variantBusy = false;
         }
     }
 
@@ -1864,8 +1996,10 @@ export class ProductIntelligenceAction extends Component {
             ev.target.value = "";
             return;
         }
+        const request = this.beginRequest("variantUpload");
         const reader = new FileReader();
         reader.onload = (event) => {
+            if (!this.isRequestCurrent(request)) return;
             variant.imageUploadDataUrl = event.target.result;
             variant.imageUploadName = file.name;
         };
@@ -1905,18 +2039,21 @@ export class ProductIntelligenceAction extends Component {
 
     async searchPackComponents() {
         const query = (this.state.componentSearch.query || "").trim();
+        const request = this.beginRequest("componentSearch", true);
         this.state.componentSearchBusy = true;
         try {
             const result = await this.rpc("/bader_product_intelligence/search_pack_components", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 query,
                 limit: 20,
             });
-            this.state.componentSearch.results = result.components || [];
+            if (!this.isRequestCurrent(request)) return;
+            if (query === (this.state.componentSearch.query || "").trim()) this.state.componentSearch.results = result.components || [];
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudieron buscar componentes."), "danger");
         } finally {
-            this.state.componentSearchBusy = false;
+            if (this.isRequestCurrent(request)) this.state.componentSearchBusy = false;
         }
     }
 
@@ -1957,6 +2094,7 @@ export class ProductIntelligenceAction extends Component {
         if (!pack.isPack || this.state.packBusy) {
             return;
         }
+        const request = this.beginRequest("pack", true);
         this.state.packBusy = true;
         try {
             const values = {
@@ -1974,17 +2112,19 @@ export class ProductIntelligenceAction extends Component {
                 })),
             };
             const result = await this.rpc("/bader_product_intelligence/update_pack", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 packRevision: pack.revision,
                 values,
             });
-            this.applyDetailPayload(result);
+            if (!this.isRequestCurrent(request)) return;
+            this.applyDetailUpdate(result, request, { packForm: true });
             this.state.activeTab = "variants_pack";
             this.notify("Pack actualizado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo actualizar el Pack."), "danger");
         } finally {
-            this.state.packBusy = false;
+            if (this.isRequestCurrent(request)) this.state.packBusy = false;
         }
     }
 
@@ -2008,6 +2148,7 @@ export class ProductIntelligenceAction extends Component {
 
     updateContentField(field, value) {
         this.state.contentForm[field] = value;
+        if (field === "name") this.state.productForm.name = value;
     }
 
     updateSeoField(field, value) {
@@ -2018,7 +2159,8 @@ export class ProductIntelligenceAction extends Component {
     }
 
     updateCategoryField(field, value) {
-        this.state.categoryForm[field] = value;
+        if (field === "categoryId") this.state.productForm.categoryId = value;
+        else this.state.categoryForm[field] = value;
     }
 
     toggleManualMode(ev) {
@@ -2050,111 +2192,111 @@ export class ProductIntelligenceAction extends Component {
         this.state.contentForm.faqs.splice(index, 1);
     }
 
+    productSaveValues(form = this.state.productForm) {
+        return {
+            name: form.name, sku: form.sku, slug: form.slug, brand: form.brand,
+            categoryId: form.categoryId || false,
+            priceUsd: this.parseNumber(form.priceUsd), previousPriceUsd: this.parseNumber(form.previousPriceUsd),
+            costUsd: this.parseNumber(form.costUsd), isPublished: !!form.isPublished, featured: !!form.featured,
+        };
+    }
+
+    categorySaveValues(form = this.state.categoryForm, product = this.state.productForm) {
+        return {
+            manualMode: !!form.manualMode, niches: [...(form.niches || [])],
+            type: form.type || false, subcategory: form.subcategory || false,
+            categoryId: product.categoryId || false,
+        };
+    }
+
+    contentSaveValues(form = this.state.contentForm) {
+        return {
+            name: form.name, description: form.description, technicalDescription: form.technicalDescription,
+            tone: form.tone, audience: form.audience,
+            faqs: (form.faqs || []).map((faq) => ({ question: faq.question, answer: faq.answer })),
+        };
+    }
+
+    seoSaveValues(form = this.state.seoForm) {
+        return {
+            seoTitle: form.seoTitle, seoDescription: form.seoDescription,
+            seoKeywords: (form.seoKeywords || "").split(",").map((item) => item.trim()).filter(Boolean),
+            geoTitle: form.geoTitle, geoDescription: form.geoDescription,
+            geoKeywords: (form.geoKeywords || "").split(",").map((item) => item.trim()).filter(Boolean),
+            geoFeatures: (form.geoFeatures || "").split(",").map((item) => item.trim()).filter(Boolean),
+            seoScore: form.seoScore || 0, geoScore: form.geoScore || 0,
+            competitivenessScore: form.competitivenessScore || 0,
+        };
+    }
+
     async saveProductData() {
         return this.rpc("/bader_product_intelligence/update_product", {
-            product_tmpl_id: this.state.productId,
-            values: {
-                name: this.state.productForm.name,
-                sku: this.state.productForm.sku,
-                slug: this.state.productForm.slug,
-                brand: this.state.productForm.brand,
-                categoryId: this.state.productForm.categoryId || false,
-                priceUsd: this.parseNumber(this.state.productForm.priceUsd),
-                previousPriceUsd: this.parseNumber(this.state.productForm.previousPriceUsd),
-                costUsd: this.parseNumber(this.state.productForm.costUsd),
-                isPublished: !!this.state.productForm.isPublished,
-                featured: !!this.state.productForm.featured,
-            },
+            product_tmpl_id: this.state.productId, values: this.productSaveValues(),
         });
     }
 
     async saveCategoryData() {
         return this.rpc("/bader_product_intelligence/save_category", {
-            product_tmpl_id: this.state.productId,
-            values: {
-                manualMode: !!this.state.categoryForm.manualMode,
-                niches: this.state.categoryForm.niches || [],
-                type: this.state.categoryForm.type || false,
-                subcategory: this.state.categoryForm.subcategory || false,
-                categoryId: this.state.categoryForm.categoryId || false,
-            },
+            product_tmpl_id: this.state.productId, values: this.categorySaveValues(),
         });
     }
 
     async saveContentData() {
         return this.rpc("/bader_product_intelligence/save_content", {
-            product_tmpl_id: this.state.productId,
-            values: {
-                name: this.state.contentForm.name,
-                description: this.state.contentForm.description,
-                technicalDescription: this.state.contentForm.technicalDescription,
-                tone: this.state.contentForm.tone,
-                audience: this.state.contentForm.audience,
-                faqs: this.state.contentForm.faqs || [],
-            },
+            product_tmpl_id: this.state.productId, values: this.contentSaveValues(),
         });
     }
 
     async saveSeoData() {
         return this.rpc("/bader_product_intelligence/save_seo", {
-            product_tmpl_id: this.state.productId,
-            seo_data: {
-                seoTitle: this.state.seoForm.seoTitle,
-                seoDescription: this.state.seoForm.seoDescription,
-                seoKeywords: this.state.seoForm.seoKeywords
-                    .split(",")
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                geoTitle: this.state.seoForm.geoTitle,
-                geoDescription: this.state.seoForm.geoDescription,
-                geoFeatures: this.state.seoForm.geoFeatures
-                    .split(",")
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                geoFaq: this.state.contentForm.faqs || [],
-                aiGeneratedDescription: this.state.contentForm.description,
-                aiTechnicalDescription: this.state.contentForm.technicalDescription,
-                aiTargetAudience: this.state.contentForm.audience,
-                seoScore: this.currentSeoData().seoScore || 0,
-                geoScore: this.currentSeoData().geoScore || 0,
-                competitivenessScore: this.currentSeoData().competitivenessScore || 0,
-            },
+            product_tmpl_id: this.state.productId, seo_data: this.seoSaveValues(),
         });
     }
 
     async saveAll() {
-        if (!this.state.productId) {
-            return;
-        }
+        if (!this.state.productId || this.state.saveBusy) return;
+        const request = this.beginRequest("save", true);
+        const drafts = request.drafts;
+        const payload = {
+            product_tmpl_id: request.productId,
+            product_values: this.productSaveValues(drafts.productForm),
+            category_values: this.categorySaveValues(drafts.categoryForm, drafts.productForm),
+            content_values: this.contentSaveValues(drafts.contentForm),
+            seo_data: this.seoSaveValues(drafts.seoForm),
+        };
         this.state.saveBusy = true;
         try {
-            await this.saveProductData();
-            await this.saveCategoryData();
-            await this.saveContentData();
-            await this.saveSeoData();
-            await this.loadDetail(this.state.productId);
+            const result = await this.rpc("/bader_product_intelligence/save_all", payload);
+            if (!this.isRequestCurrent(request)) return;
+            this.applyDetailUpdate(result, request, { productForm: true, categoryForm: true, contentForm: true, seoForm: true });
+            if (request.seoPreviewVersion === (this.seoPreviewVersion || 0)) this.state.seoPreviewPending = false;
             this.notify("Cambios guardados.");
         } catch (error) {
-            this.notify(this.errorMessage(error, "No se pudieron guardar los cambios."), "danger");
+            if (this.isRequestCurrent(request)) this.notify(this.errorMessage(error, "No se pudieron guardar los cambios."), "danger");
         } finally {
-            this.state.saveBusy = false;
+            if (this.isRequestCurrent(request)) this.state.saveBusy = false;
         }
     }
 
     async analyzeSeo() {
+        if (!this.state.productId || this.state.seoBusy) return;
+        const request = this.beginRequest("seoJob", true);
         this.state.seoBusy = true;
         this.state.seoJobMessage = "Iniciando trabajo de Nancy AI...";
         try {
             const result = await this.rpc("/bader_product_intelligence/ai_job/start_seo", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 target_audience: this.state.contentForm.audience || "clinicas",
             });
+            if (!this.isRequestCurrent(request)) return;
             const job = result.job || {};
-            this.state.seoJobId = job.id || false;
+            if (!job.id || String(job.productId) !== String(request.productId)) throw new Error("Trabajo SEO inválido.");
+            this.state.seoJobId = job.id;
             this.state.seoJobMessage = job.message || "Nancy AI esta trabajando en segundo plano...";
-            this.notify("Trabajo SEO iniciado. Nancy AI seguirá procesando en segundo plano.", "info");
-            this.scheduleSeoJobPoll(this.state.seoJobId, 3000);
+            this.notify("Trabajo SEO iniciado. Nancy AI preparará una propuesta sin cambiar el contenido guardado.", "info");
+            this.scheduleSeoJobPoll(job.id, 3000, request);
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.state.seoBusy = false;
             this.state.seoJobId = false;
             this.state.seoJobMessage = "";
@@ -2163,96 +2305,124 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveSeoOnly() {
+        const request = this.beginRequest("seoSave", true);
         this.state.seoBusy = true;
         try {
             await this.saveSeoData();
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, { seoForm: true });
+            if (!this.isRequestCurrent(request)) return;
+            if (request.seoPreviewVersion === (this.seoPreviewVersion || 0)) this.state.seoPreviewPending = false;
             this.notify("SEO guardado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo guardar el SEO."), "danger");
         } finally {
-            this.state.seoBusy = false;
+            if (this.isRequestCurrent(request)) this.state.seoBusy = false;
         }
     }
 
     async generateContent() {
+        const request = this.beginRequest("content", true);
         this.state.contentBusy = true;
         try {
             const result = await this.rpc("/bader_product_intelligence/generate_content", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 tone: this.state.contentForm.tone,
                 audience: this.state.contentForm.audience,
             });
-            this.state.contentForm.name = result.name || this.state.contentForm.name;
-            this.state.contentForm.description = result.descriptionHtml || result.description || this.state.contentForm.description;
-            this.state.contentForm.technicalDescription = result.technicalDescriptionHtml || result.technicalDescription || this.state.contentForm.technicalDescription;
+            if (!this.isRequestCurrent(request)) return;
+            const proposal = {
+                ...request.drafts.contentForm,
+                name: result.name || request.drafts.contentForm.name,
+                description: result.descriptionHtml || result.description || request.drafts.contentForm.description,
+                technicalDescription: result.technicalDescriptionHtml || result.technicalDescription || request.drafts.contentForm.technicalDescription,
+            };
+            this.state.contentForm = this.mergeSavedDraft(this.state.contentForm, request.drafts.contentForm, proposal);
+            this.state.productForm.name = this.mergeSavedDraft(this.state.productForm.name, request.drafts.productForm.name, this.state.contentForm.name);
             this.syncContentDescriptionEditor(true);
             this.syncTechnicalDescriptionEditor(true);
             this.notify("Descripciones comercial y técnica generadas con Nancy AI.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo generar el contenido."), "danger");
         } finally {
-            this.state.contentBusy = false;
+            if (this.isRequestCurrent(request)) this.state.contentBusy = false;
         }
     }
 
     async generateFaq() {
+        const request = this.beginRequest("faq", true);
         this.state.faqBusy = true;
         try {
             const result = await this.rpc("/bader_product_intelligence/generate_faq", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 audience: this.state.contentForm.audience,
             });
-            this.state.contentForm.faqs = (result.faqs || []).map((faq) => ({
+            if (!this.isRequestCurrent(request)) return;
+            const faqs = (result.faqs || []).map((faq) => ({
                 question: faq.question || "",
                 answer: faq.answer || "",
             }));
+            this.state.contentForm.faqs = this.mergeSavedDraft(this.state.contentForm.faqs, request.drafts.contentForm.faqs, faqs);
             this.notify("FAQs generadas con Nancy AI.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudieron generar las FAQs."), "danger");
         } finally {
-            this.state.faqBusy = false;
+            if (this.isRequestCurrent(request)) this.state.faqBusy = false;
         }
     }
 
     async saveContentOnly() {
+        const request = this.beginRequest("content", true);
         this.state.contentBusy = true;
         try {
             await this.saveContentData();
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, { contentForm: true, productForm: ["name"] });
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Contenido guardado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo guardar el contenido."), "danger");
         } finally {
-            this.state.contentBusy = false;
+            if (this.isRequestCurrent(request)) this.state.contentBusy = false;
         }
     }
 
     async reclassifyCategory() {
+        const request = this.beginRequest("category", true);
         this.state.categoryBusy = true;
         try {
             const result = await this.rpc("/bader_product_intelligence/reclassify_category", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
             });
-            this.applyDetailPayload(result);
+            if (!this.isRequestCurrent(request)) return;
+            this.applyDetailUpdate(result, request, { categoryForm: true, productForm: ["categoryId"] });
             this.notify("Categoria reclasificada con Nancy AI.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo reclasificar el producto."), "danger");
         } finally {
-            this.state.categoryBusy = false;
+            if (this.isRequestCurrent(request)) this.state.categoryBusy = false;
         }
     }
 
     async saveCategoryOnly() {
+        const request = this.beginRequest("category", true);
         this.state.categoryBusy = true;
         try {
             await this.saveCategoryData();
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, { categoryForm: true, productForm: ["categoryId"] });
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Categorizacion guardada.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo guardar la categorizacion."), "danger");
         } finally {
-            this.state.categoryBusy = false;
+            if (this.isRequestCurrent(request)) this.state.categoryBusy = false;
         }
     }
 
@@ -2273,12 +2443,13 @@ export class ProductIntelligenceAction extends Component {
             this.notify("Escribe un prompt para generar la imagen.", "warning");
             return;
         }
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             const payload = {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 prompt: this.state.imageForm.prompt,
-                reference_tokens: this.state.imageForm.selectedReferences,
+                reference_tokens: [...this.state.imageForm.selectedReferences],
                 style: this.state.imageForm.style,
                 use_pro: true,
             };
@@ -2286,12 +2457,14 @@ export class ProductIntelligenceAction extends Component {
                 payload.uploaded_ref = this.state.imageForm.uploadedRefUrl;
             }
             const result = await this.rpc("/bader_product_intelligence/generate_image", payload);
+            if (!this.isRequestCurrent(request)) return;
             this.state.imageForm.generatedPreviewUrl = result.previewUrl || "";
             this.notify("Preview generado con Nancy AI.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo generar la imagen."), "danger");
         } finally {
-            this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
         }
     }
 
@@ -2299,23 +2472,32 @@ export class ProductIntelligenceAction extends Component {
         if (!this.state.imageForm.generatedPreviewUrl) {
             return;
         }
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/approve_image", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 image_data_url: this.state.imageForm.generatedPreviewUrl,
                 prompt: this.state.imageForm.prompt,
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Imagen aprobada y guardada.");
+            return true;
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo guardar la imagen."), "danger");
         } finally {
-            this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
         }
     }
 
     openImageModal() {
+        this.beginRequest("image");
+        this.beginRequest("imageModal");
+        this.beginRequest("imageUpload");
+        this.state.imageBusy = false;
         const product = this.currentProduct();
         this.state.playground.messages = [
             { role: "ai", text: `¡Hola! Soy Nancy AI. Estoy lista para editar las imágenes de "${product ? product.name : 'tu producto'}". Selecciona imágenes de referencia abajo, adjunta un logo si quieres, y describe lo que necesitas.` },
@@ -2329,6 +2511,10 @@ export class ProductIntelligenceAction extends Component {
     }
 
     closeImageModal() {
+        this.beginRequest("image");
+        this.beginRequest("imageModal");
+        this.beginRequest("imageUpload");
+        this.state.imageBusy = false;
         this.state.showImageModal = false;
     }
 
@@ -2352,8 +2538,10 @@ export class ProductIntelligenceAction extends Component {
             ev.target.value = "";
             return;
         }
+        const request = this.beginRequest("imageUpload");
         const reader = new FileReader();
         reader.onload = (e) => {
+            if (!this.isRequestCurrent(request)) return;
             this.state.imageForm.uploadedRefUrl = e.target.result;
             this.state.imageForm.uploadedRefName = file.name;
         };
@@ -2361,13 +2549,15 @@ export class ProductIntelligenceAction extends Component {
     }
 
     removeUploadedRef() {
+        this.beginRequest("imageUpload");
         this.state.imageForm.uploadedRefUrl = "";
         this.state.imageForm.uploadedRefName = "";
     }
 
     async approveImageAndClose() {
-        await this.approveImage();
-        this.state.showImageModal = false;
+        const request = this.beginRequest("imageModal");
+        const approved = await this.approveImage();
+        if (approved && this.isRequestCurrent(request)) this.state.showImageModal = false;
     }
 
     selectCanvasImage(url) {
@@ -2394,7 +2584,7 @@ export class ProductIntelligenceAction extends Component {
     scrollPlayground() {
         const el = this.playgroundMessagesRef.el;
         if (el) {
-            requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+            requestAnimationFrame(() => { if (!this.destroyed) el.scrollTop = el.scrollHeight; });
         }
     }
 
@@ -2421,12 +2611,13 @@ export class ProductIntelligenceAction extends Component {
         ];
         this.scrollPlayground();
 
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             const payload = {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 prompt: text,
-                reference_tokens: this.state.imageForm.selectedReferences,
+                reference_tokens: [...this.state.imageForm.selectedReferences],
                 style: this.state.imageForm.style || "professional",
                 use_pro: true,
             };
@@ -2434,6 +2625,7 @@ export class ProductIntelligenceAction extends Component {
                 payload.uploaded_ref = this.state.imageForm.uploadedRefUrl;
             }
             const result = await this.rpc("/bader_product_intelligence/generate_image", payload);
+            if (!this.isRequestCurrent(request)) return;
             const previewUrl = result.previewUrl || "";
 
             this.state.playground.messages = this.state.playground.messages.map((m, i) =>
@@ -2444,30 +2636,35 @@ export class ProductIntelligenceAction extends Component {
             this.state.imageForm.uploadedRefUrl = "";
             this.state.imageForm.uploadedRefName = "";
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.state.playground.messages = this.state.playground.messages.map((m, i) =>
                 i === loadingIdx ? { role: "ai", text: this.errorMessage(error, "No se pudo generar la imagen. Intenta de nuevo.") } : m
             );
         } finally {
-            this.state.imageBusy = false;
-            this.scrollPlayground();
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.scrollPlayground();
         }
     }
 
     async saveCanvasToGallery() {
         if (!this.state.playground.canvasUrl) return;
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/approve_image", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 image_data_url: this.state.playground.canvasUrl,
                 prompt: "Nancy AI Studio",
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Imagen guardada en la galería.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo guardar la imagen."), "danger");
         } finally {
-            this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
         }
     }
 
@@ -2496,12 +2693,13 @@ export class ProductIntelligenceAction extends Component {
         ];
         this.scrollPlayground();
 
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             const payload = {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 prompt,
-                reference_tokens: this.state.imageForm.selectedReferences,
+                reference_tokens: [...this.state.imageForm.selectedReferences],
                 style: this.state.imageForm.style || "professional",
                 use_pro: true,
             };
@@ -2509,6 +2707,7 @@ export class ProductIntelligenceAction extends Component {
                 payload.uploaded_ref = this.state.imageForm.uploadedRefUrl;
             }
             const result = await this.rpc("/bader_product_intelligence/generate_image", payload);
+            if (!this.isRequestCurrent(request)) return;
             const previewUrl = result.previewUrl || "";
 
             this.state.playground.messages = this.state.playground.messages.map((m, i) =>
@@ -2516,30 +2715,35 @@ export class ProductIntelligenceAction extends Component {
             );
             this.state.imageForm.generatedPreviewUrl = previewUrl;
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.state.playground.messages = this.state.playground.messages.map((m, i) =>
                 i === loadingIdx ? { role: "ai", text: this.errorMessage(error, "❌ No se pudo generar la imagen. Intenta de nuevo.") } : m
             );
         } finally {
-            this.state.imageBusy = false;
-            this.scrollPlayground();
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.scrollPlayground();
         }
     }
 
     async saveGeneratedImage(imageUrl) {
         if (!imageUrl) return;
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/approve_image", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 image_data_url: imageUrl,
                 prompt: this.state.imageForm.prompt || "Nancy AI Studio",
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Imagen guardada en la galería del producto.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo guardar la imagen."), "danger");
         } finally {
-            this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
         }
     }
 
@@ -2547,18 +2751,22 @@ export class ProductIntelligenceAction extends Component {
         if (!this.state.imageForm.addImageUrl.trim()) {
             return;
         }
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/add_image_url", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 image_url: this.state.imageForm.addImageUrl,
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Imagen agregada.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo agregar la imagen."), "danger");
         } finally {
-            this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
         }
     }
 
@@ -2566,51 +2774,62 @@ export class ProductIntelligenceAction extends Component {
         if (!canDeleteGalleryImage(image)) {
             return;
         }
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/delete_image", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 image_token: image.referenceToken,
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Imagen eliminada.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo eliminar la imagen."), "danger");
         } finally {
-            this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
         }
     }
 
     async saveVideo() {
+        const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/save_video", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 video_url: this.state.imageForm.videoUrl,
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Video guardado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo guardar el video."), "danger");
         } finally {
-            this.state.imageBusy = false;
+            if (this.isRequestCurrent(request)) this.state.imageBusy = false;
         }
     }
 
     async discoverCompetitors() {
+        const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
             const result = await this.rpc("/bader_product_intelligence/discover_competitors", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 limit: 10,
             });
+            if (!this.isRequestCurrent(request)) return;
             this.state.competitorForm.discoveredCompetitors = result.competitors || [];
             this.state.competitorForm.discoveryQuery = result.query || "";
             this.notify(`Se encontraron ${result.totalFound || 0} competidores.`);
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudieron descubrir competidores."), "danger");
         } finally {
-            this.state.competitorBusy = false;
+            if (this.isRequestCurrent(request)) this.state.competitorBusy = false;
         }
     }
 
@@ -2621,108 +2840,134 @@ export class ProductIntelligenceAction extends Component {
             this.notify("Ingresa una URL de competidor.", "warning");
             return;
         }
+        const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/add_competitor", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 competitor_name: competitorName,
                 competitor_url: competitorUrl,
                 competitor_description: description || "",
             });
+            if (!this.isRequestCurrent(request)) return;
             this.state.competitorForm.competitorName = "";
             this.state.competitorForm.competitorUrl = "";
-            await this.loadDetail(this.state.productId);
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Competidor agregado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo agregar el competidor."), "danger");
         } finally {
-            this.state.competitorBusy = false;
+            if (this.isRequestCurrent(request)) this.state.competitorBusy = false;
         }
     }
 
     async scrapeCompetitor(competitorId) {
+        const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/scrape_competitor", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 competitor_id: competitorId,
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Scraping completado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo scrapear el competidor."), "danger");
         } finally {
-            this.state.competitorBusy = false;
+            if (this.isRequestCurrent(request)) this.state.competitorBusy = false;
         }
     }
 
     async analyzeCompetitor(competitorId) {
+        const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/analyze_competitor", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 competitor_id: competitorId,
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Analisis competitivo actualizado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo analizar el competidor."), "danger");
         } finally {
-            this.state.competitorBusy = false;
+            if (this.isRequestCurrent(request)) this.state.competitorBusy = false;
         }
     }
 
     async deleteCompetitor(competitorId) {
+        const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/delete_competitor", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
                 competitor_id: competitorId,
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Competidor eliminado.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo eliminar el competidor."), "danger");
         } finally {
-            this.state.competitorBusy = false;
+            if (this.isRequestCurrent(request)) this.state.competitorBusy = false;
         }
     }
 
     async generateStrategy() {
+        const request = this.beginRequest("strategy", true);
         this.state.strategyBusy = true;
         try {
             await this.rpc("/bader_product_intelligence/generate_strategy", {
-                product_tmpl_id: this.state.productId,
+                product_tmpl_id: request.productId,
             });
-            await this.loadDetail(this.state.productId);
+            if (!this.isRequestCurrent(request)) return;
+            await this.refreshDetail(request, {});
+            if (!this.isRequestCurrent(request)) return;
             this.notify("Estrategia competitiva generada.");
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo generar la estrategia."), "danger");
         } finally {
-            this.state.strategyBusy = false;
+            if (this.isRequestCurrent(request)) this.state.strategyBusy = false;
         }
     }
 
     async toggleDashboardPublish(productId, checked) {
+        const request = this.beginRequest("toggleDashboardPublish");
         try {
             await this.rpc("/bader_product_intelligence/update_product", {
                 product_tmpl_id: productId,
                 values: { isPublished: checked },
             });
+            if (!this.isRequestCurrent(request)) return;
             await this.loadDashboard({}, { showSpinner: false });
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo actualizar la publicacion."), "danger");
         }
     }
 
     async toggleDashboardFeatured(productId, checked) {
+        const request = this.beginRequest("toggleDashboardFeatured");
         try {
             await this.rpc("/bader_product_intelligence/update_product", {
                 product_tmpl_id: productId,
                 values: { featured: checked },
             });
+            if (!this.isRequestCurrent(request)) return;
             await this.loadDashboard({}, { showSpinner: false });
         } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo actualizar el destacado."), "danger");
         }
     }
@@ -2760,7 +3005,7 @@ export class ProductIntelligenceAction extends Component {
             return;
         }
         const requestProductId = this.state.productId;
-        const requestSequence = ++this.chatRequestSequence;
+        const requestSequence = this.chatRequestSequence = (this.chatRequestSequence || 0) + 1;
         this.state.chatMessages.push({ role: "user", content: msg });
         this.state.chatInput = "";
         this.state.chatBusy = true;
@@ -2770,18 +3015,18 @@ export class ProductIntelligenceAction extends Component {
                 message: msg,
                 session_id: this.state.chatSessionKey || false,
             });
-            if (requestSequence !== this.chatRequestSequence || String(requestProductId) !== String(this.state.productId)) {
+            if (this.destroyed || requestSequence !== this.chatRequestSequence || String(requestProductId) !== String(this.state.productId)) {
                 return;
             }
             this.state.chatMessages.push({ role: "assistant", content: result.response });
             this.state.chatSessionKey = result.sessionId || this.state.chatSessionKey;
         } catch (error) {
-            if (requestSequence !== this.chatRequestSequence || String(requestProductId) !== String(this.state.productId)) {
+            if (this.destroyed || requestSequence !== this.chatRequestSequence || String(requestProductId) !== String(this.state.productId)) {
                 return;
             }
             this.state.chatMessages.push({ role: "assistant", content: "Error: " + this.errorMessage(error, "No se pudo obtener respuesta.") });
         } finally {
-            if (requestSequence === this.chatRequestSequence && String(requestProductId) === String(this.state.productId)) {
+            if (!this.destroyed && requestSequence === this.chatRequestSequence && String(requestProductId) === String(this.state.productId)) {
                 this.state.chatBusy = false;
             }
         }
