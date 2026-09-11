@@ -178,3 +178,11 @@ This repository should be cloned/deployed with folder name `bader_product_intell
 - Publishes saved technical content full-width below the product/image area and immediately before the FAQ section.
 - Does not truncate or migrate existing descriptions automatically; an operator must generate or edit and save the split content.
 - Certified in QAS at runtime commit `f65600d` with 22 backend tests, 13 QUnit tests/51 assertions, exact 33-file package verification and desktop/mobile/backend visual checks; PROD remains on `16.0.1.2.3` pending authorization.
+
+## Executive catalog dashboard — 16.0.1.4.0
+
+The admin home opens **Visión general**, with eight current-state coverage KPIs, publication/completeness charts, actionable priorities and the latest SEO/GEO jobs. **Catálogo** retains pagination, search, publication/star controls and the existing product workspace. Categories are shared; KPI drill-down uses the same backend predicates as the overview.
+
+Counters now consistently refer to active saleable templates in the selected Odoo companies; the former “Nuevos” tab is correctly labeled “Sin publicar”. A finished SEO job is only a proposal, not publication. No historical trends, external analytics, paid requests or automatic content changes are triggered by opening the dashboard.
+
+See [Executive dashboard contract](docs/EXECUTIVE_DASHBOARD.md). This release is scoped to QAS only.

@@ -8,7 +8,7 @@
                     <p>Cargando Producto Intelligence...</p>
                 </div>
             </t>
-            <t t-elif="state.error">
+            <t t-elif="state.error and state.viewMode !== 'dashboard'">
                 <div class="bpi-empty-shell">
                     <h2>Producto Intelligence</h2>
                     <p t-esc="state.error"/>
@@ -16,79 +16,128 @@
             </t>
             <t t-else="">
                 <t t-if="state.viewMode === 'dashboard'">
-                    <div class="bpi-module-shell">
-                        <div class="bpi-module-header">
-                            <div>
-                                <h1>Productos</h1>
-                                <p>Gestiona el catalogo de productos con Product Intelligence</p>
+                    <div class="bpi-module-shell bpi-home">
+                        <header class="bpi-home-hero">
+                            <div class="bpi-home-hero__copy">
+                                <div class="bpi-home-eyebrow"><span class="bpi-home-brand-mark"><i class="fa fa-cube"/></span> PRODUCT INTELLIGENCE <span class="bpi-home-eyebrow__divider"/> BADER</div>
+                                <h1>Inteligencia del catálogo</h1>
+                                <p>Una visión clara de tu catálogo. Cada indicador, una oportunidad de mejora.</p>
+                            </div>
+                            <div class="bpi-home-hero__actions">
+                                <span class="bpi-home-update"><i class="fa fa-clock-o"/> Actualizado · <t t-esc="dashboardUpdatedLabel()"/></span>
+                                <button type="button" class="bpi-home-refresh" t-on-click="refreshDashboardHome" t-att-disabled="state.overviewBusy || state.dashboardBusy">
+                                    <i t-att-class="'fa fa-refresh' + ((state.overviewBusy || state.dashboardBusy) ? ' fa-spin' : '')"/> Actualizar
+                                </button>
+                            </div>
+                        </header>
+                        <div class="bpi-home-navigation">
+                            <nav class="bpi-home-tabs" aria-label="Secciones de inteligencia del catálogo">
+                                <button type="button" data-bpi-section="overview" t-att-class="'bpi-home-tab' + (state.dashboardSection === 'overview' ? ' is-active' : '')" t-att-aria-current="state.dashboardSection === 'overview' ? 'page' : false" t-on-click="() => this.selectDashboardSection('overview')"><i class="fa fa-pie-chart"/> Visión general</button>
+                                <button type="button" data-bpi-section="catalog" t-att-class="'bpi-home-tab' + (state.dashboardSection === 'catalog' ? ' is-active' : '')" t-att-aria-current="state.dashboardSection === 'catalog' ? 'page' : false" t-on-click="() => this.selectDashboardSection('catalog')"><i class="fa fa-th-list"/> Catálogo</button>
+                            </nav>
+                            <div class="bpi-home-controls">
+                                <label for="bpi-home-category"><i class="fa fa-folder-open-o"/> Categoría</label>
+                                <select id="bpi-home-category" class="bpi-home-category" t-att-value="state.dashboardCategoryId" t-on-change="changeDashboardCategory">
+                                    <option value="">Todas las categorías</option>
+                                    <option t-foreach="dashboardCategories()" t-as="category" t-key="category.id" t-att-value="category.id" t-att-selected="templateString(category.id) === templateString(state.dashboardCategoryId)" t-esc="category.completeName || category.name"/>
+                                </select>
+                                <button type="button" class="bpi-home-settings-button" aria-label="Configuración del tipo de cambio" title="Tipo de cambio" t-att-aria-expanded="state.showDashboardSettings ? 'true' : 'false'" aria-controls="bpi-home-settings" t-on-click="() => state.showDashboardSettings = !state.showDashboardSettings"><i class="fa fa-sliders"/></button>
                             </div>
                         </div>
-
-                        <div class="bpi-kpi-grid bpi-kpi-grid--dashboard">
-                            <div class="bpi-kpi-card">
-                                <div class="bpi-kpi-card__copy">
-                                    <span>Total Productos</span>
-                                    <strong t-esc="state.dashboardStats.total"/>
-                                </div>
-                                <div class="bpi-kpi-card__icon bpi-kpi-card__icon--dark"><i class="fa fa-cube"/></div>
+                        <section t-if="state.showDashboardSettings" id="bpi-home-settings" class="bpi-home-settings" aria-label="Configuración del tipo de cambio">
+                            <div><h2>Tipo de cambio</h2><p>Conversión de los precios del catálogo de USD a ARS.</p></div>
+                            <div class="bpi-home-rate"><label for="bpi-home-rate">ARS por USD</label><input id="bpi-home-rate" class="bpi-input bpi-input--small" type="number" min="1" step="1" t-model="state.exchangeRateInput"/><button type="button" class="bpi-button bpi-button--primary" t-on-click="saveExchangeRate" t-att-disabled="state.exchangeRateBusy"><t t-if="state.exchangeRateBusy">Guardando…</t><t t-else="">Guardar</t></button></div>
+                        </section>
+                        <t t-if="state.dashboardSection === 'overview'">
+                            <div t-if="state.overviewError" class="bpi-home-feedback bpi-home-feedback--error" role="alert"><i class="fa fa-exclamation-circle"/><div><strong>No se pudo actualizar la visión general</strong><p t-esc="state.overviewError"/></div><button type="button" class="bpi-button bpi-button--secondary" t-on-click="refreshDashboardHome">Reintentar</button></div>
+                            <div t-if="state.overviewBusy" class="bpi-home-progress" role="status"><i class="fa fa-circle-o-notch fa-spin"/> Actualizando indicadores del catálogo…</div>
+                            <div t-if="!state.overviewBusy and !state.overviewError and !state.dashboardOverview.total" class="bpi-home-feedback" role="status"><i class="fa fa-info-circle"/><div><strong>No hay productos activos para esta selección</strong><p>Los indicadores se actualizarán cuando haya productos disponibles para venta. Puedes elegir otra categoría.</p></div></div>
+                            <fieldset t-if="state.dashboardOverview.generatedAt and !state.overviewError" class="bpi-home-overview-content" t-att-disabled="state.overviewBusy">
+                            <div class="bpi-home-section-heading"><div><h2>Tu catálogo, en cifras</h2><p>Productos activos disponibles para venta · La categoría seleccionada se aplica a todos los indicadores.</p></div><span class="bpi-home-context"><span/> Situación actual</span></div>
+                            <div class="bpi-home-kpis" t-att-aria-busy="state.overviewBusy ? 'true' : 'false'">
+                                <button type="button" t-foreach="state.dashboardOverview.kpis" t-as="metric" t-key="metric.key" class="bpi-home-kpi" t-att-data-kpi-key="metric.key" t-att-data-quality-filter="metric.filter" t-att-title="metric.description" t-att-aria-label="metric.label + ': ' + formatNumber(metric.count) + '. ' + metric.description + '. Ver productos.'" t-on-click="() => this.openDashboardMetric(metric.filter)" t-att-disabled="state.overviewBusy">
+                                    <div class="bpi-home-kpi__top"><span t-esc="metric.label"/><span t-att-class="'bpi-home-kpi__icon bpi-home-kpi__icon--' + metric.key"><i t-att-class="dashboardMetricIcon(metric.key)"/></span></div>
+                                    <div class="bpi-home-kpi__value"><strong t-att-data-kpi-value="metric.count" t-esc="formatNumber(metric.count)"/><span t-if="metric.key !== 'all'" class="bpi-home-kpi__percent" t-esc="dashboardPercent(metric.percent) + '%'"/><span t-else="" class="bpi-home-kpi__unit">productos</span></div>
+                                    <div class="bpi-home-kpi__foot"><small t-esc="metric.description"/><i class="fa fa-arrow-right"/></div>
+                                </button>
                             </div>
-                            <div class="bpi-kpi-card">
-                                <div class="bpi-kpi-card__copy">
-                                    <span>Publicados</span>
-                                    <strong t-esc="state.dashboardStats.published"/>
-                                </div>
-                                <div class="bpi-kpi-card__icon bpi-kpi-card__icon--green"><i class="fa fa-eye"/></div>
+                            <div class="bpi-home-chart-grid">
+                                <section class="bpi-home-panel bpi-home-publication">
+                                    <div class="bpi-home-panel__heading"><div><span class="bpi-home-overline">VISIBILIDAD</span><h2>Estado de publicación</h2></div><i class="fa fa-globe bpi-home-panel__symbol"/></div>
+                                    <div class="bpi-home-publication__body">
+                                        <div class="bpi-home-donut" t-att-style="dashboardPublicationStyle()" role="img" t-att-aria-label="dashboardPercent(state.dashboardOverview.publication.publishedPercent) + '% del catálogo publicado'">
+                                            <div class="bpi-home-donut__center"><strong t-esc="dashboardPercent(state.dashboardOverview.publication.publishedPercent) + '%'"/><span>publicado</span></div>
+                                        </div>
+                                        <div class="bpi-home-legend">
+                                            <button type="button" t-on-click="() => this.openDashboardMetric('published')"><span class="bpi-home-dot bpi-home-dot--published"/><span>Publicados</span><strong t-esc="formatNumber(state.dashboardOverview.publication.published)"/><i class="fa fa-angle-right"/></button>
+                                            <button type="button" t-on-click="() => this.openDashboardMetric('unpublished')"><span class="bpi-home-dot"/><span>Sin publicar</span><strong t-esc="formatNumber(state.dashboardOverview.publication.unpublished)"/><i class="fa fa-angle-right"/></button>
+                                        </div>
+                                    </div>
+                                    <p class="bpi-home-panel__note">Publicación actual, no visitas ni ventas. Selecciona un estado para revisar sus productos.</p>
+                                </section>
+                                <section class="bpi-home-panel bpi-home-coverage">
+                                    <div class="bpi-home-panel__heading"><div><span class="bpi-home-overline">PREPARACIÓN DEL CATÁLOGO</span><h2>Cobertura de información</h2></div><span class="bpi-home-badge">Campos completos</span></div>
+                                    <div class="bpi-home-coverage__rows">
+                                        <button type="button" t-foreach="state.dashboardOverview.coverage" t-as="metric" t-key="metric.key" class="bpi-home-coverage-row" t-on-click="() => this.openDashboardMetric(metric.filter)" t-att-title="metric.description">
+                                            <span class="bpi-home-coverage-row__label"><i t-att-class="dashboardMetricIcon(metric.key)"/><span t-esc="metric.label"/></span>
+                                            <span class="bpi-home-bar" aria-hidden="true"><span t-att-style="'width: ' + dashboardPercent(metric.percent) + '%;'"/></span>
+                                            <strong t-esc="dashboardPercent(metric.percent) + '%'"/><small t-esc="formatNumber(metric.count) + ' / ' + formatNumber(state.dashboardOverview.total)"/>
+                                        </button>
+                                    </div>
+                                    <p class="bpi-home-panel__note"><i class="fa fa-info-circle"/> El llenado de metadatos no mide el posicionamiento en Google ni en motores de IA.</p>
+                                </section>
                             </div>
-                            <div class="bpi-kpi-card">
-                                <div class="bpi-kpi-card__copy">
-                                    <span>Destacados</span>
-                                    <strong t-esc="state.dashboardStats.featured"/>
-                                </div>
-                                <div class="bpi-kpi-card__icon bpi-kpi-card__icon--yellow"><i class="fa fa-star-o"/></div>
+                            <div class="bpi-home-operation-grid">
+                                <section class="bpi-home-panel bpi-home-priorities">
+                                    <div class="bpi-home-panel__heading"><div><span class="bpi-home-overline">SIGUIENTE PASO</span><h2>Prioridades del catálogo</h2></div><span class="bpi-home-badge bpi-home-badge--amber"><i class="fa fa-bolt"/> Acciones recomendadas</span></div>
+                                    <div class="bpi-home-priority-list">
+                                        <button type="button" t-foreach="state.dashboardOverview.priorities" t-as="priority" t-key="priority.key" class="bpi-home-priority" t-att-data-priority-key="priority.key" t-on-click="() => this.openDashboardMetric(priority.filter)">
+                                            <span t-att-class="'bpi-home-priority__marker' + (priority.count ? '' : ' is-complete')"><i t-att-class="priority.count ? 'fa fa-arrow-up' : 'fa fa-check'"/></span>
+                                            <span class="bpi-home-priority__copy"><strong t-esc="priority.label"/><small t-esc="priority.description"/></span>
+                                            <span class="bpi-home-priority__count" t-esc="formatNumber(priority.count)"/><i class="fa fa-angle-right"/>
+                                        </button>
+                                    </div>
+                                    <p class="bpi-home-panel__note">Un producto puede aparecer en varias prioridades. Estas acciones no generan ni publican contenido automáticamente.</p>
+                                </section>
+                                <section class="bpi-home-panel bpi-home-jobs">
+                                    <div class="bpi-home-panel__heading"><div><span class="bpi-home-overline">NANCY AI</span><h2>Actividad SEO / GEO</h2></div><span class="bpi-home-ai-mark"><i class="fa fa-magic"/></span></div>
+                                    <div class="bpi-home-job-counts"><div><strong t-esc="formatNumber(state.dashboardOverview.jobs.pending)"/><span>Pendientes</span></div><div><strong t-esc="formatNumber(state.dashboardOverview.jobs.running)"/><span>En ejecución</span></div></div>
+                                    <div class="bpi-home-job-list" t-if="state.dashboardOverview.jobs.recent.length">
+                                        <div t-foreach="state.dashboardOverview.jobs.recent" t-as="job" t-key="job.id" class="bpi-home-job">
+                                            <span t-att-class="'bpi-home-job__status bpi-home-job__status--' + job.state"><i t-att-class="job.state === 'done' ? 'fa fa-check' : job.state === 'failed' ? 'fa fa-exclamation' : 'fa fa-clock-o'"/></span>
+                                            <div class="bpi-home-job__copy"><strong t-esc="job.productName"/><span><t t-esc="dashboardJobLabel(job.state)"/> <span aria-hidden="true">·</span> <t t-esc="dashboardJobDate(job)"/></span></div>
+                                        </div>
+                                    </div>
+                                    <div t-else="" class="bpi-home-jobs-empty"><i class="fa fa-check-circle-o"/><strong>Sin actividad para esta selección</strong><p>Los trabajos SEO/GEO solicitados desde un producto aparecerán aquí.</p></div>
+                                    <p class="bpi-home-panel__note">Últimos 5 trabajos registrados. Una propuesta concluida requiere revisión y guardado; no significa contenido publicado.</p>
+                                </section>
                             </div>
-                            <div class="bpi-kpi-card">
-                                <div class="bpi-kpi-card__copy">
-                                    <span>Pendientes</span>
-                                    <strong t-esc="state.dashboardStats.pending"/>
-                                </div>
-                                <div class="bpi-kpi-card__icon bpi-kpi-card__icon--orange"><i class="fa fa-exclamation-circle"/></div>
-                            </div>
-                            <div class="bpi-kpi-card">
-                                <div class="bpi-kpi-card__copy">
-                                    <span>Tipo de Cambio</span>
-                                    <t t-if="state.exchangeRateBusy">
-                                        <strong>Guardando...</strong>
-                                    </t>
-                                    <t t-else="">
-                                        <strong t-esc="formatNumber(state.exchangeRate) + ' ARS'"/>
-                                    </t>
-                                </div>
-                                <div class="bpi-rate-inline">
-                                    <input class="bpi-input bpi-input--small" type="number" t-model="state.exchangeRateInput"/>
-                                    <button type="button" class="bpi-link-button" t-on-click="saveExchangeRate">Editar</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div t-att-class="'bpi-panel bpi-panel--table' + (state.dashboardBusy ? ' is-busy' : '')">
+                            </fieldset>
+                        </t>
+                        <t t-else="">
+                            <div class="bpi-home-section-heading"><div><h2>Catálogo de productos</h2><p>Encuentra, revisa y mejora cada producto sin perder el contexto.</p></div><span class="bpi-home-context" t-esc="formatNumber(state.dashboardPager.total) + ' resultados'"/></div>
+                            <div t-if="state.error" class="bpi-home-feedback bpi-home-feedback--error" role="alert"><i class="fa fa-exclamation-circle"/><p t-esc="state.error"/><button type="button" class="bpi-button bpi-button--secondary" t-on-click="refreshDashboardHome">Reintentar</button></div>
+                            <div t-if="state.dashboardQualityFilter" class="bpi-home-active-filter"><i class="fa fa-filter"/><span t-esc="dashboardQualityLabel()"/><button type="button" t-on-click="clearDashboardQualityFilter" aria-label="Quitar filtro de indicador"><i class="fa fa-times"/></button></div>
+                            <div t-if="state.dashboardBusy" class="bpi-home-progress" role="status"><i class="fa fa-circle-o-notch fa-spin"/> Actualizando productos…</div>
+                        <div t-att-class="'bpi-panel bpi-panel--table bpi-home-catalog' + (state.dashboardBusy ? ' is-busy' : '')">
                             <div class="bpi-toolbar">
                                 <div class="bpi-filter-tabs">
                                     <button type="button" t-att-class="'bpi-filter-pill ' + (state.dashboardTab === 'all' ? 'is-active' : '')" t-on-click="() => this.changeDashboardTab('all')" t-att-disabled="state.dashboardBusy">
                                         <i class="fa fa-cube"/>
-                                        <span t-esc="'Todos (' + state.dashboardTabCounts.all + ')'"/>
+                                        <span t-esc="'Disponibles para venta (' + state.dashboardTabCounts.all + ')'"/>
                                     </button>
                                     <button type="button" t-att-class="'bpi-filter-pill ' + (state.dashboardTab === 'new' ? 'is-active' : '')" t-on-click="() => this.changeDashboardTab('new')" t-att-disabled="state.dashboardBusy">
                                         <i class="fa fa-clock-o"/>
-                                        <span t-esc="'Nuevos (' + state.dashboardTabCounts.new + ')'"/>
+                                        <span t-esc="'Sin publicar (' + state.dashboardTabCounts.new + ')'"/>
                                     </button>
                                     <button type="button" t-att-class="'bpi-filter-pill ' + (state.dashboardTab === 'discontinued' ? 'is-active' : '')" t-on-click="() => this.changeDashboardTab('discontinued')" t-att-disabled="state.dashboardBusy">
                                         <i class="fa fa-archive"/>
-                                        <span t-esc="'Descontinuados (' + state.dashboardTabCounts.discontinued + ')'"/>
+                                        <span t-esc="'Archivados / No disponibles para venta (' + state.dashboardTabCounts.discontinued + ')'"/>
                                     </button>
                                 </div>
                                 <div class="bpi-search">
                                     <i class="fa fa-search"/>
-                                    <input class="bpi-input" type="search" placeholder="Buscar producto..." t-att-value="state.searchTerm" t-on-input="onDashboardSearchInput"/>
+                                    <input class="bpi-input" type="search" placeholder="Nombre, SKU o marca…" aria-label="Buscar productos en el catálogo" t-att-value="state.searchTerm" t-on-input="onDashboardSearchInput"/>
                                 </div>
                             </div>
 
@@ -99,16 +148,16 @@
                                             <tr>
                                                 <th>Producto</th>
                                                 <th>Precio</th>
-                                                <th>Margen</th>
+                                                <th title="Margen comercial estimado, no beneficio realizado">Margen est.</th>
                                                 <th>Stock</th>
                                                 <th>Estado</th>
                                                 <th>Publicado</th>
                                                 <th>Destacado</th>
-                                                <th/>
+                                                <th><span class="bpi-home-sr-only">Acciones</span></th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr t-foreach="filteredDashboardProducts()" t-as="row" t-key="row.id" t-on-click="() => this.openDetail(row.id)">
+                                            <tr t-foreach="filteredDashboardProducts()" t-as="row" t-key="row.id" t-att-data-product-id="row.id" t-on-click="() => !state.dashboardBusy &amp;&amp; this.openDetail(row.id)">
                                                 <td>
                                                     <div class="bpi-row-product">
                                                         <t t-if="row.mainImageUrl">
@@ -118,7 +167,7 @@
                                                             <div class="bpi-row-product__image bpi-row-product__image--empty"><i class="fa fa-picture-o"/></div>
                                                         </t>
                                                         <div>
-                                                            <strong t-esc="row.name"/>
+                                                            <button type="button" class="bpi-home-product-link" t-att-disabled="state.dashboardBusy" t-on-click.stop="() => !state.dashboardBusy &amp;&amp; this.openDetail(row.id)" t-esc="row.name"/>
                                                             <p t-esc="row.sku || row.category || 'Sin codigo'"/>
                                                             <div class="bpi-product-kind-badges">
                                                                 <span t-if="row.productKind === 'pack' || row.productKind === 'pack_variants'" class="bpi-inline-badge bpi-inline-badge--green">
@@ -147,18 +196,18 @@
                                                 </td>
                                                 <td t-on-click.stop="() => {}">
                                                     <label class="bpi-toggle">
-                                                        <input type="checkbox" t-att-checked="row.isPublished" t-on-change="(ev) => this.toggleDashboardPublish(row.id, ev.target.checked)"/>
+                                                        <input type="checkbox" t-att-disabled="state.dashboardBusy" t-att-aria-label="'Publicar ' + row.name" t-att-checked="row.isPublished" t-on-change="(ev) => this.toggleDashboardPublish(row.id, ev.target.checked)"/>
                                                         <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
                                                     </label>
                                                 </td>
                                                 <td t-on-click.stop="() => {}">
                                                     <label class="bpi-toggle">
-                                                        <input type="checkbox" t-att-checked="row.featured" t-on-change="(ev) => this.toggleDashboardFeatured(row.id, ev.target.checked)"/>
+                                                        <input type="checkbox" t-att-disabled="state.dashboardBusy" t-att-aria-label="'Destacar ' + row.name" t-att-checked="row.featured" t-on-change="(ev) => this.toggleDashboardFeatured(row.id, ev.target.checked)"/>
                                                         <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
                                                     </label>
                                                 </td>
                                                 <td>
-                                                    <button type="button" class="bpi-icon-button"><i class="fa fa-ellipsis-v"/></button>
+                                                    <button type="button" class="bpi-icon-button" t-att-disabled="state.dashboardBusy" t-att-aria-label="'Abrir ' + row.name" t-on-click.stop="() => !state.dashboardBusy &amp;&amp; this.openDetail(row.id)"><i class="fa fa-arrow-right"/></button>
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -185,6 +234,7 @@
                                 </div>
                             </t>
                         </div>
+                        </t>
                     </div>
                 </t>
 
@@ -194,7 +244,7 @@
                     <div class="bpi-detail-shell">
                         <div class="bpi-detail-header">
                             <div class="bpi-detail-header__left">
-                                <button type="button" class="bpi-icon-button bpi-icon-button--ghost" t-on-click="goBack">
+                                <button type="button" class="bpi-icon-button bpi-icon-button--ghost" data-bpi-back="true" t-on-click="goBack">
                                     <i class="fa fa-arrow-left"/>
                                 </button>
                                 <t t-if="product.mainImageUrl">

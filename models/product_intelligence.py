@@ -1311,7 +1311,8 @@ Devolvé exclusivamente un JSON válido con esta estructura:
 
     @api.model
     def _dashboard_base_domain(self):
-        return []
+        # Administrators still operate in the explicitly selected companies.
+        return ["|", ("company_id", "=", False), ("company_id", "in", self.env.companies.ids)]
 
     @api.model
     def _dashboard_search_domain(self, search):
@@ -1335,67 +1336,6 @@ Devolvé exclusivamente un JSON válido con esta estructura:
         if tab == "discontinued":
             return expression.OR([[("active", "=", False)], [("sale_ok", "=", False)]])
         return active_sale_domain
-
-    @api.model
-    def _dashboard_stats(self):
-        PT = self.env["product.template"]
-        base_domain = self._dashboard_base_domain()
-        active_domain = expression.AND([base_domain, [('active', '=', True)]])
-        return {
-            "total": PT.search_count(active_domain),
-            "published": PT.search_count(expression.AND([active_domain, [("website_published", "=", True)]])),
-            "featured": PT.search_count(expression.AND([active_domain, [("bpi_featured", "=", True)]])),
-            "pending": PT.search_count(expression.AND([active_domain, [("website_published", "=", False)]])),
-        }
-
-    @api.model
-    def dashboard_payload(self, tab="all", search="", page=1, limit=40):
-        use_inactive = (tab == "discontinued")
-        product_model = self.env["product.template"]
-        if use_inactive:
-            product_model = product_model.with_context(active_test=False)
-        exchange_rate = product_model._bpi_exchange_rate()
-        safe_page = max(int(page or 1), 1)
-        safe_limit = min(max(int(limit or 40), 1), 120)
-        base_domain = self._dashboard_base_domain()
-        query_domain = expression.AND([base_domain, self._dashboard_tab_domain(tab), self._dashboard_search_domain(search)])
-        total_rows = product_model.search_count(query_domain)
-        if total_rows and (safe_page - 1) * safe_limit >= total_rows:
-            safe_page = max(1, int(math.ceil(total_rows / float(safe_limit))))
-        offset = (safe_page - 1) * safe_limit
-        products = product_model.search(
-            query_domain,
-            order="website_sequence asc, name asc, id desc",
-            offset=offset,
-            limit=safe_limit,
-        )
-        rows = [product.bpi_dashboard_payload(exchange_rate=exchange_rate) for product in products]
-        page_count = max(1, int(math.ceil(total_rows / float(safe_limit))) if total_rows else 1)
-
-        PT = self.env["product.template"]
-        PT_inactive = PT.with_context(active_test=False)
-        return {
-            "products": rows,
-            "exchangeRate": exchange_rate,
-            "stats": self._dashboard_stats(),
-            "tabCounts": {
-                "all": PT.search_count(expression.AND([base_domain, self._dashboard_tab_domain("all")])),
-                "new": PT.search_count(expression.AND([base_domain, self._dashboard_tab_domain("new")])),
-                "discontinued": PT_inactive.search_count(expression.AND([base_domain, self._dashboard_tab_domain("discontinued")])),
-            },
-            "pager": {
-                "page": safe_page,
-                "pageCount": page_count,
-                "total": total_rows,
-                "limit": safe_limit,
-                "hasNext": safe_page < page_count,
-                "hasPrevious": safe_page > 1,
-            },
-        }
-
-    @api.model
-    def sync_catalog(self, tab="all", search="", page=1, limit=40):
-        return self.dashboard_payload(tab=tab, search=search, page=page, limit=limit)
 
     @api.model
     def _ensure_manager(self):

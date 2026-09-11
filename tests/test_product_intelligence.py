@@ -180,7 +180,7 @@ class TestProductoIntelligence(TransactionCase):
     def test_dashboard_payload_is_paginated(self):
         payload = self.service.dashboard_payload(tab="all", search="", page=1, limit=1)
 
-        self.assertEqual(payload["stats"]["total"], self.dashboard_baseline_stats["total"] + 7)
+        self.assertEqual(payload["stats"]["total"], self.dashboard_baseline_stats["total"] + 6)
         self.assertEqual(payload["stats"]["published"], self.dashboard_baseline_stats["published"] + 1)
         self.assertEqual(payload["stats"]["featured"], self.dashboard_baseline_stats["featured"] + 1)
         self.assertEqual(payload["tabCounts"]["all"], self.dashboard_baseline_tab_counts["all"] + 6)

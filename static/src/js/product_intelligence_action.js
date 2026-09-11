@@ -180,6 +180,7 @@ const SUBCATEGORY_ALIASES = {
 export class ProductIntelligenceAction extends Component {
     setup() {
         this.rpc = useService("rpc");
+        this.user = useService("user");
         this.notification = useService("notification");
         this.action = useService("action");
 
@@ -207,6 +208,14 @@ export class ProductIntelligenceAction extends Component {
             origin: "menu",
             productId: null,
             dashboardBusy: false,
+            dashboardSection: "overview",
+            dashboardOverview: this.dashboardDefaultOverview(),
+            overviewBusy: false,
+            overviewError: "",
+            dashboardCategoryId: "",
+            dashboardQualityFilter: "",
+            dashboardCatalogUpdatedAt: "",
+            showDashboardSettings: false,
             dashboardTab: "all",
             searchTerm: "",
             exchangeRateInput: "1650",
@@ -291,7 +300,7 @@ export class ProductIntelligenceAction extends Component {
                 this.state.productId = productId;
                 await this.loadDetail(productId);
             } else {
-                await this.loadDashboard();
+                await this.loadDashboardOverview();
             }
         });
 
@@ -516,7 +525,7 @@ export class ProductIntelligenceAction extends Component {
         this.chatRequestSequence = (this.chatRequestSequence || 0) + 1;
         this.clearDashboardReloadTimer();
         this.clearSeoJobPollTimer();
-        for (const key of ["saveBusy", "seoBusy", "contentBusy", "faqBusy", "imageBusy", "competitorBusy", "strategyBusy", "categoryBusy", "chatBusy", "variantBusy", "packBusy", "componentSearchBusy", "dashboardBusy", "exchangeRateBusy"]) {
+        for (const key of ["saveBusy", "seoBusy", "contentBusy", "faqBusy", "imageBusy", "competitorBusy", "strategyBusy", "categoryBusy", "chatBusy", "variantBusy", "packBusy", "componentSearchBusy", "dashboardBusy", "overviewBusy", "exchangeRateBusy"]) {
             this.state[key] = false;
         }
         this.state.seoJobId = false;
@@ -602,7 +611,9 @@ export class ProductIntelligenceAction extends Component {
         this.clearDashboardReloadTimer();
         const request = this.beginRequest("dashboard");
         this.dashboardReloadTimer = setTimeout(() => {
-            if (this.isRequestCurrent(request)) this.loadDashboard({ page: 1 }, { showSpinner: false });
+            if (this.isRequestCurrent(request) && this.state.dashboardSection !== "overview") {
+                this.loadDashboard({ page: 1 }, { showSpinner: false });
+            }
         }, 300);
     }
 
@@ -679,6 +690,152 @@ export class ProductIntelligenceAction extends Component {
         return (error && (error.message || error.data && error.data.message)) || fallback;
     }
 
+    dashboardDefaultOverview() {
+        return {
+            generatedAt: "", categoryId: false, categories: [], total: 0,
+            kpis: [], coverage: [], priorities: [],
+            publication: { published: 0, unpublished: 0, total: 0, publishedPercent: 0 },
+            jobs: { pending: 0, running: 0, done: 0, failed: 0, recent: [] },
+        };
+    }
+
+    activateDashboardSection(section) {
+        if (this.state.viewMode !== "dashboard" || this.state.dashboardSection !== section) {
+            // Section switches are navigation too: A → B → A must invalidate old RPCs.
+            this.invalidateProductRequests();
+        }
+        this.clearDashboardReloadTimer();
+        this.state.viewMode = "dashboard";
+        this.state.productId = null;
+        this.state.dashboardSection = section;
+        this.state.loading = false;
+        this.state.error = "";
+    }
+
+    dashboardRequestContext() {
+        // Plain JSON RPC does not inject the user/selected-company context.
+        // Capture a snapshot so subsequent browser context changes cannot alter
+        // an already submitted dashboard request or its category drill-down.
+        return this.user ? { context: this.snapshotDraft(this.user.context || {}) } : {};
+    }
+
+    async loadDashboardOverview() {
+        this.activateDashboardSection("overview");
+        const request = this.beginRequest("dashboardOverview");
+        const categoryId = this.state.dashboardCategoryId || "";
+        this.state.overviewBusy = true;
+        this.state.overviewError = "";
+        try {
+            const data = await this.rpc("/bader_product_intelligence/dashboard_overview", {
+                category_id: categoryId ? Number(categoryId) : false,
+                ...this.dashboardRequestContext(),
+            });
+            if (!this.isRequestCurrent(request)) return;
+            const defaults = this.dashboardDefaultOverview();
+            this.state.dashboardOverview = {
+                ...defaults, ...data,
+                publication: { ...defaults.publication, ...(data.publication || {}) },
+                jobs: { ...defaults.jobs, ...(data.jobs || {}) },
+            };
+            this.state.exchangeRate = data.exchangeRate || this.state.exchangeRate || 1650;
+            this.state.exchangeRateInput = String(this.state.exchangeRate);
+        } catch (error) {
+            if (this.isRequestCurrent(request)) {
+                this.state.overviewError = this.errorMessage(error, "No se pudo cargar la visión general. Inténtalo de nuevo.");
+            }
+        } finally {
+            if (this.isRequestCurrent(request)) this.state.overviewBusy = false;
+        }
+    }
+
+    async selectDashboardSection(section) {
+        if (section !== "overview" && section !== "catalog") return;
+        if (section === "overview") return this.loadDashboardOverview();
+        return this.loadDashboard({}, { showSpinner: false });
+    }
+
+    async refreshDashboardHome() {
+        return this.selectDashboardSection(this.state.dashboardSection || "overview");
+    }
+
+    async changeDashboardCategory(ev) {
+        const categoryId = ev.target.value || "";
+        if (String(categoryId) === String(this.state.dashboardCategoryId || "")) return;
+        this.invalidateProductRequests();
+        this.state.dashboardCategoryId = String(categoryId);
+        this.state.dashboardPager = { ...this.dashboardDefaultPager(), ...this.state.dashboardPager, page: 1 };
+        // Keep category choices while hiding metrics from the previous category.
+        this.state.dashboardOverview = {
+            ...this.dashboardDefaultOverview(), categories: this.dashboardCategories(),
+        };
+        return this.refreshDashboardHome();
+    }
+
+    async openDashboardMetric(filter) {
+        this.state.dashboardQualityFilter = filter === "all" ? "" : filter || "";
+        return this.loadDashboard({ tab: "all", search: "", page: 1 }, { showSpinner: false });
+    }
+
+    async clearDashboardQualityFilter() {
+        this.state.dashboardQualityFilter = "";
+        return this.loadDashboard({ page: 1 }, { showSpinner: false });
+    }
+
+    dashboardCategories() {
+        return this.state.dashboardOverview?.categories || [];
+    }
+
+    dashboardQualityLabel() {
+        const labels = {
+            published: "Publicados", unpublished: "Sin publicar", content: "Contenido completo",
+            image: "Con imagen", seo: "Metadatos SEO completos", geo: "Metadatos GEO completos",
+            faq: "Con FAQs", competitor: "Con competidores registrados", category: "Con categoría",
+            published_missing_image: "Publicados sin imagen", published_missing_content: "Publicados sin descripción comercial",
+            missing_seo: "SEO incompleto", missing_geo: "GEO incompleto", missing_category: "Sin categoría",
+        };
+        return labels[this.state.dashboardQualityFilter] || "";
+    }
+
+    dashboardMetricIcon(key) {
+        const icon = {
+            all: "fa-cubes", published: "fa-globe", content: "fa-file-text-o", image: "fa-picture-o",
+            seo: "fa-search", geo: "fa-crosshairs", faq: "fa-comments-o", competitor: "fa-line-chart",
+        }[key] || "fa-bar-chart";
+        return `fa ${icon}`;
+    }
+
+    dashboardPercent(value) {
+        return Math.max(0, Math.min(100, Number(value) || 0));
+    }
+
+    dashboardPublicationStyle() {
+        const percent = this.dashboardPercent(this.state.dashboardOverview?.publication?.publishedPercent);
+        return `--publication-percent: ${percent}%;`;
+    }
+
+    dashboardDateLabel(value) {
+        if (!value) return "—";
+        // Odoo datetime strings are UTC; format in the browser's local timezone.
+        const normalized = String(value).replace(" ", "T");
+        const date = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized) ? normalized : `${normalized}Z`);
+        if (Number.isNaN(date.getTime())) return "—";
+        return date.toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    }
+
+    dashboardUpdatedLabel() {
+        const value = this.state.dashboardSection === "catalog"
+            ? this.state.dashboardCatalogUpdatedAt : this.state.dashboardOverview?.generatedAt;
+        return this.dashboardDateLabel(value);
+    }
+
+    dashboardJobDate(job) {
+        return this.dashboardDateLabel(job.finishedAt || job.createdAt);
+    }
+
+    dashboardJobLabel(state) {
+        return { pending: "Pendiente", running: "En ejecución", done: "Propuesta lista", failed: "Fallido" }[state] || "Sin estado";
+    }
+
     dashboardDefaultStats() {
         return {
             total: 0,
@@ -719,6 +876,9 @@ export class ProductIntelligenceAction extends Component {
             search: overrides.search !== undefined ? overrides.search : this.state.searchTerm,
             page,
             limit,
+            category_id: this.state.dashboardCategoryId ? Number(this.state.dashboardCategoryId) : false,
+            quality_filter: this.state.dashboardQualityFilter || false,
+            ...this.dashboardRequestContext(),
         };
     }
 
@@ -734,15 +894,12 @@ export class ProductIntelligenceAction extends Component {
         this.state.exchangeRateInput = String(this.state.exchangeRate || 1650);
         this.state.dashboardTab = params.tab;
         this.state.searchTerm = params.search || "";
-        this.state.viewMode = "dashboard";
+        this.state.dashboardCatalogUpdatedAt = data.generatedAt || new Date().toISOString();
     }
 
     async loadDashboard(overrides = {}, options = {}) {
         const params = this.resolveDashboardParams(overrides);
-        if (this.state.viewMode !== "dashboard") this.invalidateProductRequests();
-        this.clearDashboardReloadTimer();
-        this.state.viewMode = "dashboard";
-        this.state.productId = null;
+        this.activateDashboardSection("catalog");
         const request = this.beginRequest("dashboard");
         this.state.dashboardTab = params.tab;
         this.state.searchTerm = params.search || "";
@@ -875,7 +1032,7 @@ export class ProductIntelligenceAction extends Component {
     async loadDetail(productId = null) {
         const currentId = productId || this.state.productId;
         if (!currentId) {
-            await this.loadDashboard();
+            await this.refreshDashboardHome();
             return;
         }
         const differentProduct = String(currentId) !== String(this.state.productId || "");
@@ -1690,9 +1847,10 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async changeDashboardTab(tab) {
-        if (tab === this.state.dashboardTab && !this.state.error) {
+        if (tab === this.state.dashboardTab && !this.state.dashboardQualityFilter && !this.state.error) {
             return;
         }
+        this.state.dashboardQualityFilter = "";
         await this.loadDashboard({ tab, page: 1 }, { showSpinner: false });
     }
 
@@ -1721,7 +1879,8 @@ export class ProductIntelligenceAction extends Component {
             });
             if (!this.isRequestCurrent(request)) return;
             this.state.exchangeRate = result.exchangeRate || value;
-            await this.loadDashboard({}, { showSpinner: false });
+            this.state.exchangeRateInput = String(this.state.exchangeRate);
+            await this.refreshDashboardHome();
             if (this.isRequestCurrent(request)) this.notify("Tipo de cambio actualizado.");
         } catch (error) {
             if (!this.isRequestCurrent(request)) return;
@@ -1742,7 +1901,7 @@ export class ProductIntelligenceAction extends Component {
             this.openProductForm();
             return;
         }
-        await this.loadDashboard({}, { showSpinner: true });
+        await this.refreshDashboardHome();
     }
 
     openProductForm() {

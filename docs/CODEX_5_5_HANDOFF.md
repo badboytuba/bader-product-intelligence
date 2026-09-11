@@ -2,7 +2,19 @@
 
 _Last updated: 2026-09-11_
 
-## Current stabilization candidate — 16.0.1.3.1 (QAS only)
+## Executive home — 16.0.1.4.0 (QAS-only delivery)
+
+Branch: `feature/bpi-executive-dashboard`, based on certified QAS runtime `32b12c1` / `16.0.1.3.1`. The user approved an executive hybrid petroleum/light dashboard, separate **Visión general / Catálogo**, eight current-state coverage KPIs and exact catalog drill-down. Historical trends, sales integration, automatic generation and PROD are outside scope.
+
+- See `EXECUTIVE_DASHBOARD.md` for metric/filter semantics and validation invariants.
+- `/dashboard_overview` is read-only, admin-only and uses the same coverage predicates as `/dashboard` filters. Every primary KPI counts active saleable templates in selected companies/category; no historical series or real search-ranking claims.
+- Overview loads lazily without operational product payloads or external calls. Catalog remains paginated. Both reads forward a captured `user.context` so the selected Odoo companies are respected.
+- Section/category navigation invalidates stale operations. Detail return restores the originating home section, filters and page. Preserve the `16.0.1.3.1` atomic-save, draft and SEO-preview invariants.
+- New `dashboard.scss` is backend-only and scoped to `.bpi-home`; do not apply it to the product detail or storefront.
+- Delivery certification is recorded separately; do not infer deployment from this source version. Server Git directories/remotes must remain untouched.
+
+## Previous stabilization — 16.0.1.3.1 (certified QAS)
+
 
 Branch: `fix/bpi-qas-stabilization-20260911`. User authorized fixing the seven priority findings and updating QAS only; PROD is excluded. The older certification records below remain historical evidence.
 
@@ -12,7 +24,7 @@ Branch: `fix/bpi-qas-stabilization-20260911`. User authorized fixing the seven p
 - Jobs return `{"seoData": ...}` only. A partial unique index enforces one pending/running job per product/type/audience. Real SQLSTATE40001 lets Odoo retry conflicting creation. Session advisory locks survive visibility commits; terminal-state recovery only retries database persistence, never the provider. Unlocked jobs running over 30 minutes are failed by the next cron rather than replayed.
 - Video parsing validates supported hosts and query parameters. Invalid legacy URLs yield an empty embed; new invalid saves are rejected before writing.
 - Exchange-rate and bridge-sync public model methods validate `base.group_system` before `sudo()`.
-- Backend suite: 44 actual test methods passed on an isolated restored QAS DB, plus three real-transaction concurrency/final-commit/lock-release checks. Frontend suite expanded to 30 QUnit tests; integrated browser certification is tracked with release delivery evidence.
+- Backend suite: 45 actual test methods passed on an isolated restored QAS DB, plus three real-transaction concurrency/final-commit/lock-release checks. Frontend suite expanded to 30 QUnit tests; integrated browser certification is tracked with release delivery evidence.
 
 Do not replace the server Git directories or reset dirty runtime worktrees. The QAS runtime is a deployed file tree, not its old Git HEAD. Stage/backup/upgrade only `bader_product_intelligence`.
 

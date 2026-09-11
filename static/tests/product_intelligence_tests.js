@@ -1,5 +1,8 @@
 /** @odoo-module **/
 
+import { App } from "@odoo/owl";
+import { templates } from "@web/core/assets";
+
 import {
     ProductIntelligenceAction,
     canDeleteGalleryImage,
@@ -732,4 +735,326 @@ QUnit.test("saving a variant image retains its unsaved SKU and Pack composition"
     assert.strictEqual(action.currentVariants()[0].imageUrl, "/fresh-image");
     assert.ok(action.currentVariants()[0].hasOwnImage);
     assert.ok(action.state.packForm.modifiable);
+});
+
+function dashboardAction() {
+    const action = stabilizationAction();
+    Object.assign(action.state, {
+        productId: null, viewMode: "dashboard", dashboardSection: "overview",
+        dashboardOverview: action.dashboardDefaultOverview(), dashboardCategoryId: "",
+        dashboardQualityFilter: "", dashboardCatalogUpdatedAt: "", overviewError: "",
+        overviewBusy: false, dashboardBusy: false, loading: false,
+        dashboardPager: action.dashboardDefaultPager(), dashboardRows: [],
+    });
+    return action;
+}
+
+function dashboardOverviewPayload(total = 12) {
+    return {
+        generatedAt: "2026-09-11 12:00:00", total, exchangeRate: 1750,
+        categories: [{ id: 7, name: "Instrumental", completeName: "Dental / Instrumental" }],
+        publication: { published: 9, unpublished: 3, total, publishedPercent: 75 },
+        kpis: [{ key: "all", label: "Productos activos", count: total, percent: 100, filter: "all" }],
+    };
+}
+
+QUnit.test("overview-first home requests only read-only metrics and no catalog or IA", async (assert) => {
+    const action = dashboardAction();
+    const calls = [];
+    action.rpc = async (route, params) => { calls.push({ route, params }); return dashboardOverviewPayload(); };
+    await action.refreshDashboardHome();
+    assert.deepEqual(calls, [{ route: "/bader_product_intelligence/dashboard_overview", params: { category_id: false } }]);
+    assert.strictEqual(action.state.dashboardSection, "overview");
+    assert.strictEqual(action.state.dashboardOverview.total, 12);
+    assert.strictEqual(action.state.exchangeRateInput, "1750");
+    assert.deepEqual(action.state.dashboardRows, [], "stock/detail payload stays lazy");
+    assert.notOk(action.state.overviewBusy);
+    assert.notOk(action.state.loading);
+    assert.strictEqual(action.dashboardCategories()[0].id, 7);
+});
+
+QUnit.test("KPI drill-down clears search and page but preserves the shared category", async (assert) => {
+    const action = dashboardAction();
+    action.state.dashboardCategoryId = "7";
+    action.state.searchTerm = "bisturi";
+    action.state.dashboardTab = "new";
+    action.state.dashboardPager.page = 4;
+    const calls = [];
+    action.rpc = async (route, params) => { calls.push({ route, params }); return { products: [{ id: 19 }] }; };
+    await action.openDashboardMetric("published_missing_image");
+    assert.strictEqual(action.state.dashboardSection, "catalog");
+    assert.strictEqual(action.state.dashboardTab, "all");
+    assert.strictEqual(action.state.dashboardQualityFilter, "published_missing_image");
+    assert.strictEqual(action.state.searchTerm, "");
+    assert.deepEqual(calls[0], {
+        route: "/bader_product_intelligence/dashboard",
+        params: { tab: "all", search: "", page: 1, limit: 40, category_id: 7, quality_filter: "published_missing_image" },
+    });
+    assert.strictEqual(action.dashboardQualityLabel(), "Publicados sin imagen");
+    await action.openDashboardMetric("all");
+    assert.strictEqual(calls[1].params.quality_filter, false, "all removes quality restriction");
+});
+
+QUnit.test("category changes refresh the active section and reset only its page", async (assert) => {
+    const action = dashboardAction();
+    action.state.dashboardOverview = dashboardOverviewPayload();
+    const calls = [];
+    action.rpc = async (route, params) => {
+        calls.push({ route, params });
+        return route.endsWith("/dashboard_overview") ? dashboardOverviewPayload() : { products: [] };
+    };
+    await action.changeDashboardCategory({ target: { value: "7" } });
+    assert.deepEqual(calls[0].params, { category_id: 7 });
+    assert.strictEqual(action.state.dashboardCategoryId, "7");
+    await action.selectDashboardSection("catalog");
+    action.state.searchTerm = "pinza";
+    action.state.dashboardQualityFilter = "seo";
+    action.state.dashboardPager.page = 3;
+    await action.changeDashboardCategory({ target: { value: "8" } });
+    assert.strictEqual(calls[2].params.category_id, 8);
+    assert.strictEqual(calls[2].params.search, "pinza");
+    assert.strictEqual(calls[2].params.quality_filter, "seo");
+    assert.strictEqual(calls[2].params.page, 1);
+    assert.strictEqual(action.dashboardCategories()[0].id, 7, "choices survive category reset");
+    assert.strictEqual(action.state.dashboardOverview.total, 0, "old-category counters are hidden");
+});
+
+QUnit.test("overview category A-B-A and out-of-order refreshes discard every stale response", async (assert) => {
+    const action = dashboardAction();
+    const requests = [];
+    action.rpc = () => { const pending = stabilizationDeferred(); requests.push(pending); return pending.promise; };
+    const a = action.loadDashboardOverview();
+    const b = action.changeDashboardCategory({ target: { value: "7" } });
+    const c = action.changeDashboardCategory({ target: { value: "" } });
+    requests[2].resolve(dashboardOverviewPayload(33));
+    await c;
+    requests[0].resolve(dashboardOverviewPayload(11));
+    requests[1].resolve(dashboardOverviewPayload(22));
+    await Promise.all([a, b]);
+    assert.strictEqual(action.state.dashboardOverview.total, 33);
+    assert.strictEqual(action.state.dashboardCategoryId, "");
+    const old = action.loadDashboardOverview();
+    const latest = action.loadDashboardOverview();
+    requests[4].resolve(dashboardOverviewPayload(55));
+    await latest;
+    requests[3].reject(new Error("obsolete error"));
+    await old;
+    assert.strictEqual(action.state.dashboardOverview.total, 55);
+    assert.strictEqual(action.state.overviewError, "");
+    assert.notOk(action.state.overviewBusy);
+});
+
+QUnit.test("catalog and overview section switches cannot restore each other's pending responses", async (assert) => {
+    for (const first of ["catalog", "overview"]) {
+        const action = dashboardAction();
+        const pending = stabilizationDeferred();
+        const second = first === "catalog" ? "overview" : "catalog";
+        action.rpc = (route) => route.endsWith(first === "catalog" ? "/dashboard" : "/dashboard_overview")
+            ? pending.promise : Promise.resolve(second === "overview" ? dashboardOverviewPayload(22) : { products: [{ id: 22 }] });
+        const waiting = action.selectDashboardSection(first);
+        await action.selectDashboardSection(second);
+        pending.resolve(first === "overview" ? dashboardOverviewPayload(11) : { products: [{ id: 11 }] });
+        await waiting;
+        assert.strictEqual(action.state.dashboardSection, second);
+        assert.strictEqual(action.state.viewMode, "dashboard");
+        assert.strictEqual(second === "catalog" ? action.state.dashboardRows[0].id : action.state.dashboardOverview.total, 22);
+        assert.notOk(action.state.overviewBusy);
+        assert.notOk(action.state.dashboardBusy);
+    }
+});
+
+QUnit.test("overview responses and errors cannot replace product detail even after returning home", async (assert) => {
+    const action = dashboardAction();
+    const pending = stabilizationDeferred();
+    action.rpc = (route) => route.endsWith("/dashboard_overview") ? pending.promise : Promise.resolve(stabilizationPayload(2));
+    const loading = action.loadDashboardOverview();
+    await action.openDetail(2);
+    pending.resolve(dashboardOverviewPayload(88));
+    await loading;
+    assert.strictEqual(action.state.viewMode, "detail");
+    assert.strictEqual(action.state.detail.product.id, 2);
+    assert.strictEqual(action.state.dashboardOverview.total, 0);
+    assert.notOk(action.state.overviewBusy);
+    action.rpc = async () => dashboardOverviewPayload(99);
+    await action.goBack();
+    assert.strictEqual(action.state.dashboardSection, "overview", "Nancy job drill-down returns to overview");
+    assert.strictEqual(action.state.dashboardOverview.total, 99);
+});
+
+QUnit.test("returning from product detail preserves catalog category quality search and pagination", async (assert) => {
+    const action = dashboardAction();
+    Object.assign(action.state, { dashboardSection: "catalog", dashboardCategoryId: "7", dashboardQualityFilter: "faq", searchTerm: "pinza" });
+    action.state.dashboardPager = { ...action.dashboardDefaultPager(), page: 3, pageCount: 4 };
+    const calls = [];
+    action.rpc = async (route, params) => {
+        calls.push({ route, params });
+        return route.endsWith("/data") ? stabilizationPayload(2) : { products: [{ id: 2 }], pager: { page: 3, pageCount: 4 } };
+    };
+    await action.openDetail(2);
+    await action.goBack();
+    assert.strictEqual(action.state.dashboardSection, "catalog");
+    assert.deepEqual(calls[1].params, { tab: "all", search: "pinza", page: 3, limit: 40, category_id: 7, quality_filter: "faq" });
+    assert.strictEqual(action.state.dashboardPager.page, 3);
+    assert.strictEqual(action.state.searchTerm, "pinza");
+});
+
+QUnit.test("overview failure preserves the home shell and supports an explicit retry", async (assert) => {
+    const action = dashboardAction();
+    action.rpc = async () => { throw new Error("Metrics unavailable"); };
+    await action.refreshDashboardHome();
+    assert.strictEqual(action.state.viewMode, "dashboard");
+    assert.strictEqual(action.state.dashboardSection, "overview");
+    assert.strictEqual(action.state.overviewError, "Metrics unavailable");
+    assert.strictEqual(action.state.error, "", "top-level error never removes the home header");
+    assert.notOk(action.state.overviewBusy);
+    assert.notOk(action.state.loading);
+    action.rpc = async () => dashboardOverviewPayload();
+    await action.refreshDashboardHome();
+    assert.strictEqual(action.state.overviewError, "");
+    assert.strictEqual(action.state.dashboardOverview.total, 12);
+});
+
+QUnit.test("catalog base tabs and quality clear retain category and never restart IA jobs", async (assert) => {
+    const action = dashboardAction();
+    Object.assign(action.state, { dashboardSection: "catalog", dashboardCategoryId: "7", dashboardQualityFilter: "image", searchTerm: "pinza" });
+    const calls = [];
+    action.rpc = async (route, params) => { calls.push({ route, params }); return { products: [] }; };
+    await action.changeDashboardTab("new");
+    assert.strictEqual(calls[0].params.quality_filter, false);
+    assert.strictEqual(calls[0].params.category_id, 7);
+    assert.strictEqual(calls[0].params.tab, "new");
+    assert.strictEqual(calls[0].params.search, "pinza");
+    action.state.dashboardQualityFilter = "seo";
+    await action.clearDashboardQualityFilter();
+    assert.strictEqual(calls[1].params.quality_filter, false);
+    assert.strictEqual(calls[1].params.page, 1);
+    assert.ok(calls.every((call) => call.route.endsWith("/dashboard")));
+    action.state.dashboardTab = "all";
+    action.state.dashboardQualityFilter = "image";
+    await action.changeDashboardTab("all");
+    assert.strictEqual(calls[2].params.quality_filter, false, "clicking the selected base tab clears KPI filtering");
+});
+
+QUnit.test("pending catalog writes cannot pull the user back out of overview", async (assert) => {
+    for (const method of ["toggleDashboardPublish", "toggleDashboardFeatured", "saveExchangeRate"]) {
+        const action = dashboardAction();
+        action.state.dashboardSection = "catalog";
+        const pending = stabilizationDeferred();
+        const routes = [];
+        action.rpc = (route) => {
+            routes.push(route);
+            return route.endsWith("/dashboard_overview") ? Promise.resolve(dashboardOverviewPayload()) : pending.promise;
+        };
+        const saving = action[method](2, true);
+        await action.selectDashboardSection("overview");
+        pending.resolve({ exchangeRate: 1800 });
+        await saving;
+        assert.strictEqual(action.state.dashboardSection, "overview", method);
+        assert.strictEqual(routes.length, 2, "no unsolicited catalog reload");
+        assert.deepEqual(action.notifications, []);
+    }
+});
+
+QUnit.test("exchange-rate save refreshes the current overview without loading catalog rows", async (assert) => {
+    const action = dashboardAction();
+    action.state.exchangeRateInput = "1800";
+    const routes = [];
+    action.rpc = async (route) => { routes.push(route); return { ...dashboardOverviewPayload(), exchangeRate: 1800 }; };
+    await action.saveExchangeRate();
+    assert.deepEqual(routes, ["/bader_product_intelligence/update_exchange_rate", "/bader_product_intelligence/dashboard_overview"]);
+    assert.strictEqual(action.state.dashboardSection, "overview");
+    assert.strictEqual(action.state.exchangeRate, 1800);
+    assert.notOk(action.state.exchangeRateBusy);
+    assert.strictEqual(action.notifications.length, 1);
+});
+
+QUnit.test("dashboard helpers expose bounded current-state values and honest Nancy status", (assert) => {
+    const action = dashboardAction();
+    assert.strictEqual(action.dashboardPercent(-5), 0);
+    assert.strictEqual(action.dashboardPercent(150), 100);
+    assert.strictEqual(action.dashboardPercent("invalid"), 0);
+    assert.strictEqual(action.dashboardPublicationStyle(), "--publication-percent: 0%;");
+    assert.strictEqual(action.dashboardUpdatedLabel(), "—");
+    assert.strictEqual(action.dashboardDateLabel("malformed"), "—");
+    assert.strictEqual(action.dashboardJobLabel("done"), "Propuesta lista");
+    assert.strictEqual(action.dashboardJobLabel("running"), "En ejecución");
+    assert.ok(action.dashboardMetricIcon("image").startsWith("fa "));
+    assert.notOk(action.dashboardJobDate({ createdAt: "2026-09-11 12:00:00" }).includes("Invalid"));
+});
+
+
+QUnit.test("custom dashboard RPC forwards a captured selected-company user context", async (assert) => {
+    const action = dashboardAction();
+    action.user = { context: { allowed_company_ids: [7], lang: "es_AR", tz: "Europe/Madrid" } };
+    const pending = stabilizationDeferred();
+    const calls = [];
+    action.rpc = (route, params) => {
+        calls.push({ route, params });
+        return route.endsWith("/dashboard_overview") ? pending.promise : Promise.resolve({ products: [] });
+    };
+    const loading = action.loadDashboardOverview();
+    action.user.context.allowed_company_ids.push(8);
+    assert.deepEqual(calls[0].params.context.allowed_company_ids, [7], "in-flight overview snapshot is immutable");
+    assert.strictEqual(calls[0].params.context.lang, "es_AR");
+    assert.strictEqual(calls[0].params.context.tz, "Europe/Madrid");
+    pending.resolve(dashboardOverviewPayload());
+    await loading;
+    await action.openDashboardMetric("seo");
+    assert.deepEqual(calls[1].params.context.allowed_company_ids, [7, 8], "catalog carries current selected companies");
+    assert.strictEqual(calls[1].params.quality_filter, "seo");
+    action.user.context.allowed_company_ids = [9];
+    assert.deepEqual(calls[1].params.context.allowed_company_ids, [7, 8], "catalog request context is captured too");
+});
+
+
+QUnit.test("populated dashboard mounts its actual OWL template and supports category drill-down", async (assert) => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    const metrics = ["all", "published", "content", "image", "seo", "geo", "faq", "competitor"].map((key) => ({
+        key, filter: key, label: `Métrica ${key}`, count: 12, percent: 100, description: `Cobertura ${key}`,
+    }));
+    const overview = {
+        ...dashboardOverviewPayload(), kpis: metrics, coverage: metrics.slice(2),
+        priorities: [{ key: "missing_seo", filter: "missing_seo", label: "SEO incompleto", count: 2, description: "Falta metadatos" }],
+        jobs: { pending: 1, running: 0, done: 1, failed: 0, recent: [
+            { id: 5, productId: 2, productName: "Producto técnico", state: "done", createdAt: "2026-09-11T12:00:00Z", finishedAt: "2026-09-11T12:01:00Z" },
+        ] },
+    };
+    const calls = [];
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: {}, context: {} } },
+        env: { services: {
+            user: { context: { allowed_company_ids: [1], lang: "es_AR" } },
+            notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route, params) => {
+                calls.push({ route, params });
+                if (route.endsWith("/dashboard_overview")) return overview;
+                if (route.endsWith("/dashboard")) return { products: [], pager: { total: 12 } };
+                throw new Error(`Unexpected RPC in read-only home test: ${route}`);
+            },
+        } },
+    });
+    const patched = async () => {
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    try {
+        const action = await app.mount(target);
+        assert.strictEqual(target.querySelector(".bpi-home h1").textContent, "Inteligencia del catálogo");
+        assert.strictEqual(target.querySelectorAll("[data-kpi-key]").length, 8, "all KPI expressions render");
+        assert.strictEqual(target.querySelectorAll("#bpi-home-category option").length, 2, "populated category expressions render");
+        assert.ok(target.querySelector(".bpi-home-job-list").textContent.includes("Propuesta lista"), "job dates/status render");
+        assert.strictEqual(calls.length, 1, "overview opening never fetches catalog or paid services");
+        await action.changeDashboardCategory({ target: { value: "7" } });
+        await patched();
+        assert.strictEqual(target.querySelector("#bpi-home-category").value, "7", "numeric backend category matches selected string state");
+        target.querySelector('[data-kpi-key="seo"]').click();
+        await patched();
+        assert.ok(target.querySelector(".bpi-home-catalog"), "real event binding opens the catalog");
+        assert.strictEqual(calls[calls.length - 1].params.quality_filter, "seo");
+        assert.strictEqual(calls[calls.length - 1].params.category_id, 7);
+    } finally {
+        app.destroy();
+        target.remove();
+    }
 });
