@@ -190,3 +190,34 @@ See [Executive dashboard contract](docs/EXECUTIVE_DASHBOARD.md). This release is
 ## Release 16.0.1.5.0 — Catalog workbench (QAS only)
 
 Catálogo now has prominent search, preparation filters, safe sorting, visible category/Pack/variant context, a real seven-section checklist and inline quick review linking to existing editors. Mobile rows become cards without duplicate controls. Publication/feature toggles have per-row pending state and failed-checkbox rollback. The executive overview, detail and atomic save workflows are preserved. See [`docs/CATALOG_WORKBENCH.md`](docs/CATALOG_WORKBENCH.md) for field definitions and sort semantics.
+
+## Product workspace 16.0.1.6.0 (QAS)
+
+The product detail uses a grouped desktop sidebar and a mobile section selector.
+The seven editorial checks use canonical saved coverage; website publication is
+explicitly **Publicado en tienda**. Operational alerts are rules, not AI insights.
+Existing assessments are estimates, not search ranking. `analytics` remains a
+compatible alias for the competitor comparison section.
+
+**Guardar ficha** atomically saves Datos, Clasificación, Descripciones/FAQs and
+SEO/GEO. Each core section also has its contextual save. Images/video,
+competitors, variants and Packs retain explicit independent operations. Drafts
+survive section changes; leaving the product or native Odoo action asks to stay
+or discard, and offers save-and-leave only if all dirty scopes are covered by the
+atomic fiche action. Edits made while saving remain pending.
+
+Mercado Libre support is optional. Install `bader_product_intelligence_meli`
+16.0.1.0.0 explicitly alongside the existing integrator; BPI alone reports the
+missing extension without pretending zero products or successful verification.
+The existing eight KPIs and seven editorial checks stay unchanged. Six separate
+ML metrics and per-row status use normal-ACL batched local evidence, scoped by
+category, account and selected companies. KPI drill-down resets search/quality
+and page while preserving category/account.
+
+The monitoring surface never publishes or synchronizes listings. Single payment,
+3 and 6 installments are payment conditions, not marketplace commissions. Only
+a manually requested asynchronous product/account observation may read the ML
+API, when existing environment switches and manager permissions allow it. In QAS
+`read_enabled=False`, `write_enabled=False`, `dry_run=True` remain mandatory.
+No live API certification is implied. See the bridge README for evidence,
+identity/freshness contracts and isolated observer security.

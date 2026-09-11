@@ -2,6 +2,7 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { useSetupAction } from "@web/webclient/actions/action_hook";
 import { Component, onWillStart, onWillUnmount, onMounted, onPatched, useState, useRef } from "@odoo/owl";
 
 const DASHBOARD_PAGE_SIZE = 40;
@@ -77,16 +78,16 @@ export function productEffectivePriceRange(product) {
 }
 
 const DETAIL_TABS = [
-    { id: "overview", label: "Overview", icon: "fa-bar-chart" },
-    { id: "datos", label: "Datos", icon: "fa-cog" },
+    { id: "overview", label: "Resumen", icon: "fa-bar-chart" },
+    { id: "datos", label: "Datos y precios", icon: "fa-cog" },
     { id: "variants_pack", label: "Variantes y Pack", icon: "fa-cubes" },
-    { id: "categorization", label: "Categorization", icon: "fa-sitemap" },
-    { id: "content", label: "Content", icon: "fa-pencil" },
-    { id: "images", label: "Images", icon: "fa-picture-o" },
-    { id: "seo", label: "SEO", icon: "fa-search" },
-    { id: "competitors", label: "Competidores", icon: "fa-bullseye" },
-    { id: "analytics", label: "Analytics", icon: "fa-line-chart" },
-    { id: "chat", label: "Agente IA", icon: "fa-comments" },
+    { id: "categorization", label: "Clasificación", icon: "fa-sitemap" },
+    { id: "content", label: "Descripciones y FAQs", icon: "fa-pencil" },
+    { id: "images", label: "Imágenes y vídeo", icon: "fa-picture-o" },
+    { id: "seo", label: "SEO y GEO", icon: "fa-search" },
+    { id: "mercadolibre", label: "MercadoLibre", icon: "fa-shopping-bag" },
+    { id: "competitors", label: "Competidores y precios", icon: "fa-bullseye" },
+    { id: "chat", label: "Agente Nancy", icon: "fa-comments" },
 ];
 
 const CHAT_QUICK_ACTIONS = [
@@ -179,8 +180,9 @@ const SUBCATEGORY_ALIASES = {
 
 export class ProductIntelligenceAction extends Component {
     setup() {
-        this.rpc = useService("rpc");
+        this.rawRpc = useService("rpc");
         this.user = useService("user");
+        this.rpc = (route, params, settings) => this.rpcWithContext(route, params, settings);
         this.notification = useService("notification");
         this.action = useService("action");
 
@@ -245,6 +247,17 @@ export class ProductIntelligenceAction extends Component {
             },
             detail: null,
             activeTab: "overview",
+            detailLeavePrompt: false,
+            detailLeaveBusy: false,
+            meliAccountId: "",
+            meliFilter: "",
+            meliCatalogContext: {},
+            meliDetail: { available: false, groups: [], jobs: [], summary: {} },
+            meliBusy: false,
+            meliError: "",
+            meliRefreshBusy: false,
+            meliRefreshJob: false,
+            meliRefreshMessage: "",
             saveBusy: false,
             exchangeRateBusy: false,
             seoBusy: false,
@@ -291,10 +304,16 @@ export class ProductIntelligenceAction extends Component {
         this.playgroundMessagesRef = useRef("playgroundMessages");
         this.contentDescriptionEditorRef = useRef("contentDescriptionEditor");
         this.technicalDescriptionEditorRef = useRef("technicalDescriptionEditor");
+        this.detailLeaveDialogRef = useRef("detailLeaveDialog");
         this.lastContentDescriptionEditorHtml = "";
         this.lastTechnicalDescriptionEditorHtml = "";
         this.contentDescriptionSelection = null;
         this.technicalDescriptionSelection = null;
+
+        useSetupAction({
+            beforeLeave: () => this.confirmDetailLeave(),
+            beforeUnload: (ev) => this.onDetailBeforeUnload(ev),
+        });
 
         onWillStart(async () => {
             const productId = this.resolveProductId();
@@ -317,10 +336,12 @@ export class ProductIntelligenceAction extends Component {
         onPatched(() => {
             this.syncContentDescriptionEditor();
             this.syncTechnicalDescriptionEditor();
+            this.syncDetailLeaveFocus();
         });
 
         onWillUnmount(() => {
             this.destroyed = true;
+            if (this.detailLeaveResolver) this.detailLeaveResolver(false);
             this.invalidateProductRequests();
             clearTimeout(this.scrollSetupTimer);
             this._cleanupScrollListener();
@@ -365,7 +386,7 @@ export class ProductIntelligenceAction extends Component {
             if ((ev.ctrlKey || ev.metaKey) && ev.key === "s") {
                 ev.preventDefault();
                 if (this.state.viewMode === "detail" && !this.state.saveBusy) {
-                    this.saveAll();
+                    this.saveCurrentDetailSection();
                 }
             }
         };
@@ -483,6 +504,383 @@ export class ProductIntelligenceAction extends Component {
         return params.origin || "menu";
     }
 
+    meliContext() {
+        if (this.state.viewMode === 'detail') return this.state.meliDetail || {};
+        return this.state.dashboardSection === 'overview'
+            ? (this.state.dashboardOverview?.meliOverview || {}) : (this.state.meliCatalogContext || {});
+    }
+
+    meliOverviewMetrics() { return this.state.dashboardOverview?.meliOverview?.kpis || []; }
+    meliAccountOptions() { return this.meliContext().accounts || []; }
+    meliGroups() { return this.state.meliDetail?.groups || []; }
+    meliCanRefresh() { return !!this.state.meliDetail?.canRefresh && !this.state.meliRefreshBusy && !this.state.meliBusy && !['pending', 'running'].includes(this.state.meliRefreshJob?.state); }
+    meliDateLabel(value) { return value ? this.dashboardDateLabel(value) : 'Sin observación verificada'; }
+
+    meliValue(value, currency = false) {
+        if (value === null || value === undefined || value === '' || value === false || !Number.isFinite(Number(value))) return 'Sin verificar';
+        return currency ? this.formatCompetitorPrice(value, currency) : this.formatNumber(value);
+    }
+
+    meliStateLabel(value) {
+        return {
+            available: 'Datos locales disponibles', not_installed: 'Integración no instalada', no_access: 'Sin permiso de acceso',
+            no_account: 'Sin cuenta disponible', read_disabled: 'Consulta remota desactivada', unavailable: 'Sin verificar',
+            unlinked: 'Sin vincular', partial: 'Verificación parcial', verified: 'Verificado', review: 'Revisar',
+            pending: 'Pendiente', running: 'En curso', done: 'Completado', failed: 'Error de consulta', disabled: 'Consulta desactivada',
+            active: 'Activo', paused: 'Pausado', closed: 'Cerrado', under_review: 'En revisión', inactive: 'Inactivo',
+            unknown: 'Sin verificar', missing: 'Falta información', mismatch: 'Diferencia detectada', manual: 'Gestión manual',
+            complete: 'Completo', stale: 'Observación desactualizada', matched: 'Coincide', not_loaded: 'Pendiente de consulta local',
+            present: 'Registrado', incomplete: 'Incompleto', conflict: 'Conflicto de identidad', blocked: 'Bloqueado',
+            ambiguous: 'Vínculo ambiguo', not_applicable: 'No corresponde', unsupported: 'Condición no compatible',
+            retry: 'Reintento pendiente', manual_excluded: 'Manual / excluido', error: 'Error', known: 'Dato disponible',
+            stock: 'Stock / estado', price: 'Precios', single: 'Pago único', '3x': '3 cuotas', '6x': '6 cuotas',
+            fulfillment: 'Full · depósito de Mercado Libre', self_service: 'Envíos Flex',
+            drop_off: 'Entrega en punto de despacho', cross_docking: 'Distribución cruzada',
+            xd_drop_off: 'Punto de despacho y distribución', not_specified: 'Logística no especificada', default: 'Logística estándar',
+            local_cache: 'Datos locales', local_mirror: 'Espejo local', integrator_readback: 'Confirmación del integrador',
+            manual_observation: 'Consulta manual', stored_target: 'Objetivo guardado',
+        }[value] || (value ? String(value).replace(/_/g, ' ') : 'Sin verificar');
+    }
+
+    meliFilterOptions() {
+        return [
+            ['', 'Todos los estados ML'], ['linked', 'Con vínculo ML'], ['published', 'Con publicación activa'],
+            ['stock', 'Stock verificado'], ['prices', 'Precios verificados'], ['conditions', 'Condiciones completas'],
+            ['review', 'Revisar en ML'], ['unlinked', 'Sin vínculo ML'],
+        ].map(([value, label]) => ({ value, label }));
+    }
+
+    async changeMeliAccount(ev) {
+        const value = ev.target.value || '';
+        if (value && (!/^[1-9][0-9]*$/.test(String(value)) || !this.meliAccountOptions().some((account) => String(account.id) === String(value)))) return;
+        if (String(value) === String(this.state.meliAccountId || '')) return;
+        this.state.meliAccountId = String(value);
+        this.clearMeliPoll();
+        this.beginRequest('meliRefresh');
+        this.state.meliRefreshBusy = false;
+        this.state.meliRefreshJob = false;
+        this.state.meliRefreshMessage = '';
+        if (this.state.viewMode === 'detail') {
+            this.state.meliDetail = { available: false, state: 'not_loaded', accounts: this.meliAccountOptions(), groups: [], jobs: [], summary: {} };
+            return this.loadMeliDetail();
+        }
+        if (this.state.dashboardSection === 'overview') return this.loadDashboardOverview();
+        return this.loadDashboard({ page: 1 }, { showSpinner: false });
+    }
+
+    async changeMeliFilter(ev) {
+        const key = ev.target.value || '';
+        if (!this.meliFilterOptions().some((option) => option.value === key)) return;
+        this.state.meliFilter = key;
+        return this.loadDashboard({ page: 1 }, { showSpinner: false });
+    }
+
+    async openMeliFilter(key) {
+        if (!this.meliFilterOptions().some((option) => option.value === key)) return;
+        this.state.meliFilter = key;
+        this.state.dashboardQualityFilter = '';
+        return this.loadDashboard({ tab: 'all', search: '', page: 1 }, { showSpinner: false });
+    }
+
+    async openMeliProduct(row) {
+        if (!row?.id || this.catalogRowBusy(row)) return;
+        if (this.detailHasUnsavedChanges() && !await this.confirmDetailLeave()) return;
+        this.state.origin = 'dashboard';
+        this.state.activeTab = 'mercadolibre';
+        const loading = this.loadDetail(row.id);
+        const entry = this.beginRequest('meliEntry');
+        await loading;
+        if (this.isRequestCurrent(entry) && this.state.viewMode === 'detail' && this.state.activeTab === 'mercadolibre') await this.loadMeliDetail();
+    }
+
+    meliRequestCurrent(request) {
+        return this.isRequestCurrent(request) && String(request.meliAccountId || '') === String(this.state.meliAccountId || '');
+    }
+
+    async loadMeliDetail() {
+        if (!this.state.productId || this.state.viewMode !== 'detail') return;
+        const request = { ...this.beginRequest('meliDetail'), meliAccountId: this.state.meliAccountId || '' };
+        this.state.meliBusy = true;
+        this.state.meliError = '';
+        try {
+            const data = await this.rpc('/bader_product_intelligence/meli/product_status', {
+                product_tmpl_id: request.productId, meli_account_id: request.meliAccountId ? Number(request.meliAccountId) : false,
+            });
+            if (!this.meliRequestCurrent(request)) return;
+            if (data.productId && String(data.productId) !== String(request.productId)) throw new Error('La consulta no corresponde a este producto.');
+            this.state.meliDetail = { ...data, groups: data.groups || [], jobs: data.jobs || [], summary: data.summary || {} };
+            this.meliDetailAccountKey = String(request.meliAccountId || '');
+        } catch (error) {
+            if (this.meliRequestCurrent(request)) this.state.meliError = this.errorMessage(error, 'No se pudo consultar la información local de MercadoLibre.');
+        } finally {
+            if (this.meliRequestCurrent(request)) this.state.meliBusy = false;
+        }
+    }
+
+    clearMeliPoll() {
+        clearTimeout(this.meliPollTimer);
+        this.meliPollTimer = null;
+    }
+
+    async requestMeliRefresh() {
+        if (!this.meliCanRefresh() || !this.state.productId) return;
+        const request = { ...this.beginRequest('meliRefresh'), meliAccountId: this.state.meliAccountId || '' };
+        this.clearMeliPoll();
+        this.state.meliRefreshBusy = true;
+        this.state.meliError = '';
+        this.state.meliRefreshMessage = 'Solicitando consulta de solo lectura…';
+        try {
+            const result = await this.rpc('/bader_product_intelligence/meli/refresh', {
+                product_tmpl_id: request.productId, meli_account_id: request.meliAccountId ? Number(request.meliAccountId) : false,
+            });
+            if (!this.meliRequestCurrent(request)) return;
+            this.applyMeliRefreshResult(result, request);
+        } catch (error) {
+            if (this.meliRequestCurrent(request)) {
+                this.state.meliRefreshBusy = false;
+                this.state.meliError = this.errorMessage(error, 'No se pudo iniciar la consulta de MercadoLibre.');
+            }
+        }
+    }
+
+    applyMeliRefreshResult(result, request, attempt = 0) {
+        if (!this.meliRequestCurrent(request)) return;
+        this.state.meliRefreshJob = result.job || false;
+        this.state.meliRefreshMessage = result.message || result.job?.message || this.meliStateLabel(result.state);
+        const state = result.job?.state || result.state;
+        if (state === 'disabled') this.state.meliDetail = { ...this.state.meliDetail, canRefresh: false };
+        const running = ['pending', 'running'].includes(state);
+        this.state.meliRefreshBusy = running;
+        if (running && result.job?.id && attempt < 120) {
+            this.meliPollTimer = setTimeout(() => this.pollMeliRefresh(result.job.id, request, attempt + 1), 3000);
+        } else {
+            this.state.meliRefreshBusy = false;
+            if (running) this.state.meliRefreshMessage = 'La consulta sigue en segundo plano. Vuelve a abrir esta sección para consultar los datos locales.';
+            if (['done', 'partial'].includes(state)) this.loadMeliDetail();
+        }
+    }
+
+    async pollMeliRefresh(jobId, request, attempt = 1) {
+        if (!this.meliRequestCurrent(request)) return;
+        try {
+            const result = await this.rpc('/bader_product_intelligence/meli/refresh_status', { job_id: jobId });
+            if (!this.meliRequestCurrent(request)) return;
+            if (result.job?.id && String(result.job.id) !== String(jobId)) throw new Error('La consulta no corresponde al trabajo solicitado.');
+            this.applyMeliRefreshResult(result, request, attempt);
+        } catch (error) {
+            if (this.meliRequestCurrent(request)) {
+                this.state.meliRefreshBusy = false;
+                this.state.meliError = this.errorMessage(error, 'No se pudo consultar el progreso. El trabajo no se reinicia automáticamente.');
+            }
+        }
+    }
+
+    rpcWithContext(route, params = {}, settings) {
+        if (!route.startsWith('/bader_product_intelligence/')) return this.rawRpc(route, params, settings);
+        const context = this.snapshotDraft({ ...(this.user?.context || {}), ...(params.context || {}),
+            ...(this.state.meliAccountId ? { bpi_meli_account_id: Number(this.state.meliAccountId) } : {}),
+        });
+        return this.rawRpc(route, { ...params, context }, settings);
+    }
+
+    detailNavGroups() {
+        const groups = [
+            ['Inicio', ['overview']], ['Producto', ['datos', 'variants_pack', 'categorization']],
+            ['Contenido', ['content', 'images', 'seo']], ['Canales', ['mercadolibre']],
+            ['Inteligencia', ['competitors', 'chat']],
+        ];
+        const tabs = this.visibleDetailTabs();
+        return groups.map(([label, ids]) => ({ label, tabs: tabs.filter((tab) => ids.includes(tab.id)) }));
+    }
+
+    detailSectionTitle() {
+        return DETAIL_TABS.find((tab) => tab.id === this.state.activeTab)?.label || 'Resumen';
+    }
+
+    detailSectionDescription() {
+        return {
+            overview: 'Información guardada y prioridades de esta ficha. Sin puntuaciones artificiales.',
+            datos: 'Datos nativos, categoría de la tienda y precio base. El stock es de solo lectura.',
+            variants_pack: 'Datos de variantes y composición de Packs; cada operación tiene su propio guardado.',
+            categorization: 'Nichos y clasificación comercial; independientes de la categoría de MercadoLibre.',
+            content: 'Descripción comercial, ficha técnica y preguntas frecuentes. Revisa antes de guardar.',
+            images: 'Galería, referencias y vídeo. Generar una propuesta no la guarda ni publica.',
+            seo: 'Metadatos SEO y GEO. Su presencia no equivale a posicionamiento.',
+            mercadolibre: 'Consulta local del canal. Actualizar consulta MercadoLibre, sin publicar ni modificar anuncios.',
+            competitors: 'Precios registrados y observaciones de competidores, con su fuente y fecha.',
+            chat: 'Conversación por producto. Las sugerencias no modifican la ficha automáticamente.',
+        }[this.state.activeTab] || '';
+    }
+
+    async selectDetailSection(value) {
+        const id = typeof value === 'string' ? value : value?.target?.value;
+        const resolved = id === 'analytics' ? 'competitors' : id;
+        if (!this.visibleDetailTabs().some((tab) => tab.id === resolved)) return;
+        this.state.activeTab = resolved;
+        if (resolved === 'mercadolibre') await this.loadMeliDetail();
+    }
+
+    detailChecklistItems() {
+        return this.catalogHealthItems(this.currentProduct());
+    }
+
+    detailCurrentMarginKnown() {
+        const product = this.currentProduct();
+        const costMin = Number(product.effectiveCostMinUsd ?? product.costUsd);
+        const costMax = Number(product.effectiveCostMaxUsd ?? costMin);
+        const price = this.effectivePriceRange(product);
+        return [costMin, costMax, price.min, price.max].every((value) => Number.isFinite(value) && value > 0);
+    }
+
+    detailDraftSnapshot() {
+        const pick = (value, keys) => Object.fromEntries(keys.map((key) => [key, value?.[key] ?? '']));
+        return this.snapshotDraft({
+            datos: pick(this.state.productForm, ['name', 'sku', 'slug', 'brand', 'categoryId', 'priceUsd', 'previousPriceUsd', 'costUsd', 'featured', 'isPublished']),
+            categorization: pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory']),
+            content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs']),
+            seo: pick(this.state.seoForm, ['seoTitle', 'seoDescription', 'seoKeywords', 'geoTitle', 'geoDescription', 'geoKeywords', 'geoFeatures', 'seoScore', 'geoScore', 'competitivenessScore']),
+            variants_pack: {
+                variants: (this.state.variantDrafts || []).map((v) => pick(v, ['id', 'sku', 'barcode', 'costUsdInput', 'active', 'imageReferenceToken', 'imageUploadDataUrl'])),
+                pack: {
+                    ...pick(this.state.packForm, ['isPack', 'packType', 'componentPriceMode', 'modifiable']),
+                    compositions: (this.state.packForm?.compositions || []).map((c) => ({ variantId: c.variantId, components: (c.components || []).map((line) => pick(line, ['lineId', 'productVariantId', 'quantityInput', 'saleDiscountInput'])) })),
+                },
+            },
+            images: { ...pick(this.state.imageForm, ['videoUrl', 'addImageUrl', 'uploadedRefUrl', 'generatedPreviewUrl']), input: this.state.playground?.inputText || '' },
+            competitors: pick(this.state.competitorForm, ['competitorName', 'competitorUrl']),
+            chat: { input: this.state.chatInput || '' },
+        });
+    }
+
+    detailDirtySections() {
+        if (!this.detailBaseline || this.state.viewMode !== 'detail' || !this.state.detail?.product ||
+            String(this.state.detail.product.id) !== String(this.state.productId)) return [];
+        const now = this.detailDraftSnapshot();
+        return DETAIL_TABS.filter((tab) => Object.prototype.hasOwnProperty.call(now, tab.id) &&
+            JSON.stringify(now[tab.id]) !== JSON.stringify(this.detailBaseline[tab.id]))
+            .map((tab) => ({ id: tab.id, label: tab.label }));
+    }
+
+    detailHasUnsavedChanges() {
+        return this.detailDirtySections().length > 0;
+    }
+
+    detailBaseSaveBusy() {
+        return !!(this.state.saveBusy || this.state.contentBusy || this.state.faqBusy || this.state.seoBusy || this.state.categoryBusy);
+    }
+
+    detailSaveLabel() { return this.state.saveBusy ? 'Guardando ficha…' : 'Guardar ficha'; }
+
+    detailSaveDisabled() { return !this.state.productId || this.detailBaseSaveBusy(); }
+
+    detailCanSaveBeforeLeave() {
+        return this.detailDirtySections().every((section) => ['datos', 'categorization', 'content', 'seo'].includes(section.id));
+    }
+
+    onDetailBeforeUnload(ev) {
+        if (this.detailHasUnsavedChanges() || (this.state.viewMode === 'detail' && this.detailBaseSaveBusy())) {
+            ev.preventDefault();
+            ev.returnValue = '';
+        }
+    }
+
+    confirmDetailLeave() {
+        if (this.state.viewMode !== 'detail' || !this.detailHasUnsavedChanges()) return Promise.resolve(true);
+        if (this.detailLeavePromise) return this.detailLeavePromise;
+        this.detailLeaveFocusElement = document.activeElement;
+        this.detailLeaveFocusReady = false;
+        this.state.detailLeavePrompt = {
+            title: 'Cambios sin guardar',
+            message: 'Puedes seguir editando o descartar los cambios. Las operaciones ya enviadas no se cancelan al salir.',
+            sections: this.detailDirtySections(), canSave: this.detailCanSaveBeforeLeave(),
+        };
+        this.detailLeavePromise = new Promise((resolve) => { this.detailLeaveResolver = resolve; });
+        return this.detailLeavePromise;
+    }
+
+    async resolveDetailLeave(choice) {
+        if (!this.detailLeaveResolver || this.state.detailLeaveBusy) return;
+        if (choice === 'save') {
+            if (!this.detailCanSaveBeforeLeave() || this.detailBaseSaveBusy()) return;
+            this.state.detailLeaveBusy = true;
+            await this.saveAll();
+            this.state.detailLeaveBusy = false;
+            if (this.detailHasUnsavedChanges()) {
+                this.state.detailLeavePrompt = { ...this.state.detailLeavePrompt, sections: this.detailDirtySections(), canSave: this.detailCanSaveBeforeLeave(), message: 'Todavía hay cambios sin guardar. Revisa el resultado antes de salir.' };
+                return;
+            }
+        } else if (choice !== 'discard' && choice !== 'stay') return;
+        if (choice === 'discard') this.discardDetailChanges();
+        const resolve = this.detailLeaveResolver;
+        this.detailLeaveResolver = null;
+        this.detailLeavePromise = null;
+        this.state.detailLeavePrompt = false;
+        resolve(choice !== 'stay');
+        if (choice === 'stay' && this.detailLeaveFocusElement?.isConnected) this.detailLeaveFocusElement.focus({ preventScroll: true });
+    }
+
+    syncDetailLeaveFocus() {
+        const dialog = this.detailLeaveDialogRef?.el;
+        if (!this.state.detailLeavePrompt || !dialog || this.detailLeaveFocusReady) return;
+        this.detailLeaveFocusReady = true;
+        (dialog.querySelector('button:not(:disabled)') || dialog).focus();
+    }
+
+    onDetailLeaveKeydown(ev) {
+        if (ev.key === 'Escape') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (!this.state.detailLeaveBusy) this.resolveDetailLeave('stay');
+        } else if (ev.key === 'Tab') {
+            const dialog = ev.currentTarget;
+            const buttons = [...dialog.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')];
+            const first = buttons[0];
+            const last = buttons[buttons.length - 1];
+            if (!first) { ev.preventDefault(); dialog.focus(); }
+            else if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+            else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+        }
+    }
+
+    async requestDetailLeave(callback) {
+        if (await this.confirmDetailLeave()) return callback();
+        return false;
+    }
+
+    discardDetailChanges() {
+        this.state.playground = { messages: [], canvasUrl: '', inputText: '' };
+        if (this.state.detail) this.applyDetailPayload(this.state.detail);
+        this.state.seoPreviewPending = false;
+    }
+
+    async saveCurrentDetailSection() {
+        if (this.detailBaseSaveBusy()) return false;
+        const method = { datos: 'saveProductOnly', categorization: 'saveCategoryOnly', content: 'saveContentOnly', seo: 'saveSeoOnly', images: 'saveVideo' }[this.state.activeTab];
+        if (!method) {
+            this.notify('Esta sección utiliza sus acciones de guardado específicas.', 'info');
+            return false;
+        }
+        return this[method]();
+    }
+
+    async saveProductOnly() {
+        if (this.detailBaseSaveBusy()) return false;
+        const request = this.beginRequest('save', true);
+        this.state.saveBusy = true;
+        try {
+            const result = await this.saveProductData();
+            if (!this.isRequestCurrent(request)) return false;
+            this.applyDetailUpdate(result, request, { productForm: true, contentForm: ['name'] });
+            this.notify('Datos y precios guardados. No se modificaron MercadoLibre ni otras secciones.');
+            return true;
+        } catch (error) {
+            if (this.isRequestCurrent(request)) this.notify(this.errorMessage(error, 'No se pudieron guardar los datos.'), 'danger');
+            return false;
+        } finally {
+            if (this.isRequestCurrent(request)) this.state.saveBusy = false;
+        }
+    }
+
     snapshotDraft(value) {
         if (Array.isArray(value)) return value.map((item) => this.snapshotDraft(item));
         if (value && typeof value === "object") {
@@ -510,6 +908,7 @@ export class ProductIntelligenceAction extends Component {
             sequence,
             generation: this.viewGeneration || 0,
             productId: this.state.productId,
+            companies: JSON.stringify(this.user?.context?.allowed_company_ids || []),
             seoPreviewVersion: this.seoPreviewVersion || 0,
             ...(withDrafts ? { drafts: this.captureDrafts() } : {}),
         };
@@ -517,6 +916,7 @@ export class ProductIntelligenceAction extends Component {
 
     isRequestCurrent(request) {
         return !!request && !this.destroyed &&
+            (request.companies === undefined || request.companies === JSON.stringify(this.user?.context?.allowed_company_ids || [])) &&
             request.generation === (this.viewGeneration || 0) &&
             request.sequence === (this.requestSequences || {})[request.scope] &&
             String(request.productId || "") === String(this.state.productId || "");
@@ -528,6 +928,12 @@ export class ProductIntelligenceAction extends Component {
         this.chatRequestSequence = (this.chatRequestSequence || 0) + 1;
         this.clearDashboardReloadTimer();
         this.clearSeoJobPollTimer();
+        this.clearMeliPoll();
+        this.state.meliBusy = false;
+        this.state.meliRefreshBusy = false;
+        this.state.meliRefreshJob = false;
+        this.state.meliRefreshMessage = "";
+        this.state.meliDetail = { available: false, state: "not_loaded", groups: [], jobs: [], summary: {} };
         for (const key of ["saveBusy", "seoBusy", "contentBusy", "faqBusy", "imageBusy", "competitorBusy", "strategyBusy", "categoryBusy", "chatBusy", "variantBusy", "packBusy", "componentSearchBusy", "dashboardBusy", "overviewBusy", "exchangeRateBusy"]) {
             this.state[key] = false;
         }
@@ -733,6 +1139,7 @@ export class ProductIntelligenceAction extends Component {
         try {
             const data = await this.rpc("/bader_product_intelligence/dashboard_overview", {
                 category_id: categoryId ? Number(categoryId) : false,
+                ...(this.state.meliAccountId ? { meli_account_id: Number(this.state.meliAccountId) } : {}),
                 ...this.dashboardRequestContext(),
             });
             if (!this.isRequestCurrent(request)) return;
@@ -777,6 +1184,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async openDashboardMetric(filter) {
+        this.state.meliFilter = "";
         this.state.dashboardQualityFilter = filter === "all" ? "" : filter || "";
         return this.loadDashboard({ tab: "all", search: "", page: 1 }, { showSpinner: false });
     }
@@ -885,12 +1293,15 @@ export class ProductIntelligenceAction extends Component {
             category_id: this.state.dashboardCategoryId ? Number(this.state.dashboardCategoryId) : false,
             quality_filter: this.state.dashboardQualityFilter || false,
             sort_key: this.state.dashboardSortKey || "catalog",
+            ...(this.state.meliAccountId ? { meli_account_id: Number(this.state.meliAccountId) } : {}),
+            ...(this.state.meliFilter ? { meli_filter: this.state.meliFilter } : {}),
             ...this.dashboardRequestContext(),
         };
     }
 
     applyDashboardPayload(data, params) {
         this.state.dashboardRows = data.products || [];
+        this.state.meliCatalogContext = data.meli || {};
         this.state.dashboardStats = data.stats || this.dashboardDefaultStats();
         this.state.dashboardTabCounts = data.tabCounts || this.dashboardDefaultTabCounts();
         this.state.dashboardPager = {
@@ -933,6 +1344,19 @@ export class ProductIntelligenceAction extends Component {
         const seoData = data.seoData || {};
         const variants = data.variants || [];
         const pack = data.pack || this.emptyPackForm();
+
+        if (product.meliSummary && data.meli) {
+            const accountMatches = !this.state.meliAccountId || String(data.meli.accountId) === String(this.state.meliAccountId);
+            if (accountMatches) {
+                const sameScope = String(this.state.meliDetail?.productId) === String(product.id) &&
+                    String(this.meliDetailAccountKey || '') === String(this.state.meliAccountId || '');
+                this.state.meliDetail = { ...data.meli, productId: product.id, summary: this.snapshotDraft(product.meliSummary),
+                    groups: sameScope ? this.state.meliDetail.groups || [] : [],
+                    jobs: sameScope ? this.state.meliDetail.jobs || [] : [],
+                };
+                this.meliDetailAccountKey = String(this.state.meliAccountId || '');
+            }
+        }
 
         this.state.detail = data;
         this.state.productForm = {
@@ -1035,6 +1459,8 @@ export class ProductIntelligenceAction extends Component {
         this.state.chatBusy = false;
         this.state.exchangeRate = data.exchangeRate || this.state.exchangeRate || 1650;
         this.state.exchangeRateInput = String(this.state.exchangeRate || 1650);
+        this.detailBaseline = this.detailDraftSnapshot();
+        this.detailBaseline.images.input = '';
     }
 
     async loadDetail(productId = null) {
@@ -1167,6 +1593,10 @@ export class ProductIntelligenceAction extends Component {
 
     dismissGeneratedPreview() {
         this.state.imageForm.generatedPreviewUrl = "";
+    }
+
+    acknowledgeImagePreview(url) {
+        if (url && this.state.imageForm.generatedPreviewUrl === url) this.state.imageForm.generatedPreviewUrl = '';
     }
 
     toInput(value) {
@@ -1904,13 +2334,14 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async clearCatalogFilters() {
+        this.state.meliFilter = "";
         this.state.dashboardQualityFilter = "";
         this.state.dashboardSortKey = "catalog";
         return this.loadDashboard({ search: "", page: 1 }, { showSpinner: false });
     }
 
     catalogHasFilters() {
-        return !!(this.state.searchTerm || this.state.dashboardQualityFilter ||
+        return !!(this.state.searchTerm || this.state.dashboardQualityFilter || this.state.meliFilter ||
             (this.state.dashboardSortKey && this.state.dashboardSortKey !== "catalog"));
     }
 
@@ -2037,6 +2468,7 @@ export class ProductIntelligenceAction extends Component {
 
     async openCatalogProduct(row, section = "datos") {
         if (!row?.id || this.catalogRowBusy(row)) return;
+        if (this.detailHasUnsavedChanges() && !await this.confirmDetailLeave()) return;
         const allowed = new Set(["datos", "content", "seo", "images", "competitors"]);
         this.state.origin = "dashboard";
         // Set the tab before loading; never apply it after awaiting a request
@@ -2090,12 +2522,14 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async openDetail(productId) {
+        if (this.detailHasUnsavedChanges() && !await this.confirmDetailLeave()) return;
         this.state.origin = "dashboard";
         this.state.activeTab = "overview";
         await this.loadDetail(productId);
     }
 
     async goBack() {
+        if (this.detailHasUnsavedChanges() && !await this.confirmDetailLeave()) return;
         if (this.state.origin === "product_form") {
             this.openProductForm();
             return;
@@ -2103,7 +2537,8 @@ export class ProductIntelligenceAction extends Component {
         await this.refreshDashboardHome();
     }
 
-    openProductForm() {
+    async openProductForm() {
+        if (this.detailHasUnsavedChanges() && !await this.confirmDetailLeave()) return;
         if (!this.state.productId) {
             return;
         }
@@ -2116,7 +2551,8 @@ export class ProductIntelligenceAction extends Component {
         });
     }
 
-    openVariantForm(variantId) {
+    async openVariantForm(variantId) {
+        if (this.detailHasUnsavedChanges() && !await this.confirmDetailLeave()) return;
         if (!variantId) {
             return;
         }
@@ -2250,7 +2686,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     selectTab(tabId) {
-        this.state.activeTab = tabId;
+        return this.selectDetailSection(tabId);
     }
 
     updateProductField(field, value) {
@@ -2286,7 +2722,7 @@ export class ProductIntelligenceAction extends Component {
                 },
             });
             if (!this.isRequestCurrent(request)) return;
-            this.applyDetailUpdate(payload, request, { variantDrafts: variant.id });
+            this.applyDetailUpdate(payload, request, { variantDrafts: { id: variant.id, fields: ['sku', 'barcode', 'costUsdInput', 'costUsd', 'active'] } });
             this.state.activeTab = "variants_pack";
             this.state.selectedVariantId = variant.id;
             this.notify("Variante actualizada.");
@@ -2612,7 +3048,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveAll() {
-        if (!this.state.productId || this.state.saveBusy) return;
+        if (!this.state.productId || this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("save", true);
         const drafts = request.drafts;
         const payload = {
@@ -2637,7 +3073,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async analyzeSeo() {
-        if (!this.state.productId || this.state.seoBusy) return;
+        if (!this.state.productId || this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("seoJob", true);
         this.state.seoBusy = true;
         this.state.seoJobMessage = "Iniciando trabajo de Nancy AI...";
@@ -2663,6 +3099,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveSeoOnly() {
+        if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("seoSave", true);
         this.state.seoBusy = true;
         try {
@@ -2681,6 +3118,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async generateContent() {
+        if (this.state.saveBusy || this.state.categoryBusy || this.state.seoBusy) return;
         const request = this.beginRequest("content", true);
         this.state.contentBusy = true;
         try {
@@ -2710,6 +3148,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async generateFaq() {
+        if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("faq", true);
         this.state.faqBusy = true;
         try {
@@ -2733,6 +3172,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveContentOnly() {
+        if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("content", true);
         this.state.contentBusy = true;
         try {
@@ -2750,6 +3190,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async reclassifyCategory() {
+        if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("category", true);
         this.state.categoryBusy = true;
         try {
@@ -2768,6 +3209,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveCategoryOnly() {
+        if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("category", true);
         this.state.categoryBusy = true;
         try {
@@ -2839,6 +3281,7 @@ export class ProductIntelligenceAction extends Component {
                 prompt: this.state.imageForm.prompt,
             });
             if (!this.isRequestCurrent(request)) return;
+            this.acknowledgeImagePreview(request.drafts.imageForm.generatedPreviewUrl);
             await this.refreshDetail(request, {});
             if (!this.isRequestCurrent(request)) return;
             this.notify("Imagen aprobada y guardada.");
@@ -3006,6 +3449,7 @@ export class ProductIntelligenceAction extends Component {
 
     async saveCanvasToGallery() {
         if (!this.state.playground.canvasUrl) return;
+        const previewUrl = this.state.playground.canvasUrl;
         const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
@@ -3015,6 +3459,7 @@ export class ProductIntelligenceAction extends Component {
                 prompt: "Nancy AI Studio",
             });
             if (!this.isRequestCurrent(request)) return;
+            this.acknowledgeImagePreview(previewUrl);
             await this.refreshDetail(request, {});
             if (!this.isRequestCurrent(request)) return;
             this.notify("Imagen guardada en la galería.");
@@ -3094,6 +3539,7 @@ export class ProductIntelligenceAction extends Component {
                 prompt: this.state.imageForm.prompt || "Nancy AI Studio",
             });
             if (!this.isRequestCurrent(request)) return;
+            this.acknowledgeImagePreview(imageUrl);
             await this.refreshDetail(request, {});
             if (!this.isRequestCurrent(request)) return;
             this.notify("Imagen guardada en la galería del producto.");
@@ -3339,7 +3785,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     quickAction(tabId) {
-        this.state.activeTab = tabId;
+        return this.selectDetailSection(tabId);
     }
 
     priceMarkerStyle() {

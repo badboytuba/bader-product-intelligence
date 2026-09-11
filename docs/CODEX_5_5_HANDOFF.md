@@ -1,3 +1,33 @@
+## 2026-09-11 — Product workspace + optional Mercado Libre bridge
+
+Release target: BPI `16.0.1.6.0` plus explicitly installed
+`bader_product_intelligence_meli` `16.0.1.0.0`, **QAS only**.
+
+- Product detail: corporate compact hero, desktop sidebar/mobile selector,
+  canonical seven-check editorial status, operational alerts, contextual saves,
+  native Odoo leave guard and independent media/Pack/variant/competitor actions.
+- ML projection: six separate home metrics, catalog summaries and account-aware
+  detail grouping by variant / User Product / category / payment conditions.
+  Existing eight BPI KPIs and seven editorial checklist items are unchanged.
+- Base `models/meli_provider.py` supplies optional hooks; without the bridge the
+  interface reports unavailable rather than fabricating zeros. Canonical saved
+  product payload includes ML context/summary; stale account permission errors
+  cannot roll back otherwise valid BPI saves.
+- Bridge performs batched normal-ACL local projections only on navigation.
+  Manual async observer has isolated protected cache/jobs, strict source identity
+  and source-record permissions, bounded GET requests, no importer/task ACK or
+  integration writes. Read/write ML settings are never changed by the addon.
+- Keep QAS `read_enabled=False`, `write_enabled=False`, `dry_run=True`.
+  Test external paths with controlled responses, not live marketplace calls.
+  Stock and prices need individual current-generation evidence <=60min; expected
+  values displayed are explicitly last stored integrator targets, not draft or
+  new pricelist/free_qty calculations. ML publication is distinct from website.
+- Deployment evidence belongs to workspace artifact directory
+  `audit_outputs/bpi_detail_meli_20260911/`. Never commit private credentials,
+  database dumps, filestore backups or `.env`.
+
+---
+
 # Codex Handoff — Bader Product Intelligence
 
 _Last updated: 2026-09-11_

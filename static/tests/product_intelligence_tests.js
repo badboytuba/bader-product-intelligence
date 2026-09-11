@@ -2,6 +2,7 @@
 
 import { App } from "@odoo/owl";
 import { templates } from "@web/core/assets";
+import { CallbackRecorder } from "@web/webclient/actions/action_hook";
 
 import {
     ProductIntelligenceAction,
@@ -1529,4 +1530,472 @@ QUnit.test("actual catalog checkbox binds busy state and restores visual value o
         app.destroy();
         target.remove();
     }
+});
+
+QUnit.test('detail navigation groups preserve real keys and Analytics resolves to competitors without fetching providers', async (assert) => {
+    const action = stabilizationAction();
+    // Read labels from the real component through its group builder, not a mock callback.
+    action.detailTabs = ['overview', 'datos', 'variants_pack', 'categorization', 'content', 'images', 'seo', 'mercadolibre', 'competitors', 'chat'].map((id) => ({ id, label: id }));
+    let calls = 0;
+    action.rpc = async () => { calls++; return { productId: 1, available: false, state: 'not_installed' }; };
+    assert.strictEqual(action.detailNavGroups().length, 5);
+    assert.strictEqual(action.detailNavGroups().flatMap((group) => group.tabs).length, 10);
+    action.state.detail.product.isPack = false;
+    action.state.detail.product.variantCount = 1;
+    assert.strictEqual(action.detailNavGroups().flatMap((group) => group.tabs).length, 9);
+    action.state.contentForm.description = 'Borrador retenido';
+    await action.selectTab('analytics');
+    assert.strictEqual(action.state.activeTab, 'competitors');
+    await action.selectDetailSection({ target: { value: 'content' } });
+    assert.strictEqual(action.state.contentForm.description, 'Borrador retenido');
+    assert.strictEqual(calls, 0, 'normal internal section changes are local');
+    await action.selectDetailSection('mercadolibre');
+    assert.strictEqual(calls, 1, 'ML opens only its local read projection');
+    await action.selectDetailSection('invalid');
+    assert.strictEqual(action.state.activeTab, 'mercadolibre');
+});
+
+QUnit.test('detail completeness uses persisted server flags and unknown margin is not a zero score', (assert) => {
+    const action = stabilizationAction();
+    assert.deepEqual(action.detailChecklistItems(), [], 'metadata title fallback does not fabricate completeness');
+    action.state.detail.product.catalogHealth = catalogRow().catalogHealth;
+    assert.strictEqual(action.detailChecklistItems().length, 7);
+    assert.strictEqual(action.detailChecklistItems().filter((item) => item.complete).length, 2);
+    action.state.detail.product.costUsd = 0;
+    assert.notOk(action.detailCurrentMarginKnown());
+    Object.assign(action.state.detail.product, { effectiveCostMinUsd: 10, effectiveCostMaxUsd: 15, effectivePriceMinUsd: 20, effectivePriceMaxUsd: 30 });
+    assert.ok(action.detailCurrentMarginKnown());
+    action.state.detail.product.effectiveCostMinUsd = 0;
+    assert.notOk(action.detailCurrentMarginKnown(), 'an unknown end of a variant/Pack range stays unknown');
+});
+
+QUnit.test('canonical draft baseline excludes display fields and retains edits made during a save', async (assert) => {
+    const action = stabilizationAction();
+    assert.notOk(action.detailHasUnsavedChanges());
+    action.state.activeTab = 'images';
+    action.state.selectedVariantId = 10;
+    action.state.imageForm.selectedGalleryUrl = '/selected-image';
+    assert.notOk(action.detailHasUnsavedChanges(), 'navigation and image selection are not persistent edits');
+    action.state.contentForm.description = 'Submitted';
+    assert.deepEqual(action.detailDirtySections().map((section) => section.id), ['content']);
+    const pending = stabilizationDeferred();
+    action.rpc = () => pending.promise;
+    const saving = action.saveAll();
+    action.state.contentForm.description = 'Typed while saving';
+    pending.resolve(stabilizationPayload());
+    await saving;
+    assert.strictEqual(action.state.contentForm.description, 'Typed while saving');
+    assert.ok(action.detailHasUnsavedChanges());
+    action.rpc = async () => { throw new Error('Rejected'); };
+    await action.saveAll();
+    assert.strictEqual(action.state.contentForm.description, 'Typed while saving');
+    assert.ok(action.detailHasUnsavedChanges(), 'failed saves do not reset baseline');
+});
+
+QUnit.test('detail leave stays or discards every independent draft without saving or automatically generating', async (assert) => {
+    const action = stabilizationAction();
+    action.state.contentForm.description = 'Pending description';
+    action.state.variantDrafts[0].sku = 'Pending variant';
+    action.state.packForm.modifiable = true;
+    action.state.imageForm.generatedPreviewUrl = '/unsaved-preview';
+    action.state.playground.inputText = 'Unsent image request';
+    action.state.competitorForm.competitorUrl = 'https://example.com/pending';
+    action.state.chatInput = 'Unsent chat';
+    let calls = 0;
+    action.rpc = async () => { calls++; return {}; };
+    const staying = action.confirmDetailLeave();
+    assert.notOk(action.state.detailLeavePrompt.canSave, 'atomic base save cannot commit independent operations');
+    assert.ok(action.state.detailLeavePrompt.sections.some((section) => section.id === 'variants_pack'));
+    await action.resolveDetailLeave('stay');
+    assert.notOk(await staying);
+    assert.ok(action.detailHasUnsavedChanges());
+    const leaving = action.confirmDetailLeave();
+    await action.resolveDetailLeave('discard');
+    assert.ok(await leaving);
+    assert.notOk(action.detailHasUnsavedChanges());
+    assert.strictEqual(action.state.chatInput, '');
+    assert.strictEqual(action.state.playground.inputText, '');
+    assert.strictEqual(calls, 0);
+});
+
+QUnit.test('save and leave uses the atomic fiche and never leaves with newer or rejected drafts', async (assert) => {
+    const action = stabilizationAction();
+    action.state.productForm.brand = 'Pending';
+    const pending = stabilizationDeferred();
+    const calls = [];
+    action.rpc = (route, params) => { calls.push({ route, params }); return pending.promise; };
+    const leaving = action.confirmDetailLeave();
+    assert.ok(action.state.detailLeavePrompt.canSave);
+    const saving = action.resolveDetailLeave('save');
+    action.state.productForm.brand = 'Newer';
+    pending.resolve(stabilizationPayload());
+    await saving;
+    assert.ok(action.state.detailLeavePrompt, 'new edit blocks leaving');
+    assert.strictEqual(calls[0].route, '/bader_product_intelligence/save_all');
+    assert.strictEqual(calls[0].params.product_values.brand, 'Pending');
+    await action.resolveDetailLeave('stay');
+    assert.notOk(await leaving);
+    action.rpc = async () => stabilizationPayload();
+    const cleanLeave = action.confirmDetailLeave();
+    await action.resolveDetailLeave('save');
+    assert.ok(await cleanLeave);
+    assert.notOk(action.detailHasUnsavedChanges());
+});
+
+QUnit.test('contextual save commits only the selected scope and blocks overlapping fiche writes', async (assert) => {
+    const action = stabilizationAction();
+    action.state.activeTab = 'datos';
+    action.state.productForm.brand = 'Changed brand';
+    action.state.contentForm.description = 'Unrelated draft';
+    const calls = [];
+    const pending = stabilizationDeferred();
+    action.rpc = (route, params) => { calls.push({ route, params }); return pending.promise; };
+    const saving = action.saveCurrentDetailSection();
+    await action.saveAll();
+    await action.saveSeoOnly();
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].route, '/bader_product_intelligence/update_product');
+    assert.notOk(calls[0].params.content_values);
+    pending.resolve(stabilizationPayload());
+    await saving;
+    assert.strictEqual(action.state.contentForm.description, 'Unrelated draft');
+    assert.ok(action.detailDirtySections().some((section) => section.id === 'content'));
+    action.state.activeTab = 'mercadolibre';
+    await action.saveCurrentDetailSection();
+    assert.strictEqual(calls.length, 1, 'Ctrl+S on read-only ML cannot submit product or channel data');
+});
+
+QUnit.test('all BPI calls capture selected company context and old-company requests cannot update state', async (assert) => {
+    const action = stabilizationAction();
+    action.user = { context: { allowed_company_ids: [2], lang: 'es_AR' } };
+    const calls = [];
+    action.rawRpc = async (route, params) => { calls.push({ route, params }); return {}; };
+    const request = action.beginRequest('proof');
+    for (const route of ['data', 'save_all', 'update_variant', 'meli/product_status', 'meli/refresh_status']) {
+        await action.rpcWithContext(`/bader_product_intelligence/${route}`, { product_tmpl_id: 1 });
+    }
+    action.user.context.allowed_company_ids.push(3);
+    assert.ok(calls.every((call) => JSON.stringify(call.params.context.allowed_company_ids) === '[2]'));
+    assert.ok(calls.every((call) => call.params.context.lang === 'es_AR'));
+    assert.notOk(action.isRequestCurrent(request));
+    await action.rpcWithContext('/unrelated', { untouched: true });
+    assert.deepEqual(calls[calls.length - 1].params, { untouched: true });
+});
+
+QUnit.test('ML filters account category quality search sort and pagination compose without changing existing KPI universe', async (assert) => {
+    const action = dashboardAction();
+    Object.assign(action.state, { meliAccountId: '8', meliFilter: 'review', dashboardCategoryId: '7', dashboardQualityFilter: 'needs_attention', searchTerm: 'SKU', dashboardSortKey: 'name_asc' });
+    const calls = [];
+    action.rpc = async (route, params) => { calls.push({ route, params }); return { products: [], meli: { available: true, accounts: [{ id: 8 }, { id: 9 }] } }; };
+    await action.loadDashboard({ page: 2 });
+    assert.deepEqual([calls[0].params.meli_account_id, calls[0].params.meli_filter, calls[0].params.category_id, calls[0].params.quality_filter, calls[0].params.search, calls[0].params.sort_key, calls[0].params.page], [8, 'review', 7, 'needs_attention', 'SKU', 'name_asc', 2]);
+    await action.openDashboardMetric('seo');
+    assert.notOk(calls[1].params.meli_filter, 'existing overview KPI drilldown clears independent ML filter');
+    assert.strictEqual(calls[1].params.meli_account_id, 8);
+    await action.openMeliFilter('prices');
+    assert.strictEqual(calls[2].params.meli_filter, 'prices');
+    assert.notOk(calls[2].params.quality_filter);
+    assert.strictEqual(calls[2].params.search, '');
+    await action.clearCatalogFilters();
+    assert.notOk(action.state.meliFilter);
+    assert.strictEqual(action.state.meliAccountId, '8', 'reset retains account and category');
+    assert.strictEqual(action.state.dashboardCategoryId, '7');
+});
+
+QUnit.test('ML local read preserves drafts and unknown values never become zero or automatic refresh', async (assert) => {
+    const action = stabilizationAction();
+    action.state.contentForm.description = 'Draft';
+    const calls = [];
+    action.rpc = async (route, params) => { calls.push({ route, params }); return { productId: 1, available: true, canRefresh: false, state: 'read_disabled', groups: [], summary: { linked: true } }; };
+    await action.loadMeliDetail();
+    await action.requestMeliRefresh();
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].route, '/bader_product_intelligence/meli/product_status');
+    assert.strictEqual(action.state.contentForm.description, 'Draft');
+    assert.ok(action.detailHasUnsavedChanges());
+    assert.strictEqual(action.meliValue(null), 'Sin verificar');
+    assert.strictEqual(action.meliValue(undefined, 'ARS'), 'Sin verificar');
+    assert.strictEqual(action.meliValue(0), '0', 'observed zero is a valid known stock value');
+    assert.notOk(action.meliCanRefresh());
+    assert.deepEqual(
+        ['present', 'incomplete', 'conflict', 'blocked', 'ambiguous', 'not_applicable', 'retry', 'manual_excluded', 'stock', 'price', 'fulfillment', 'done', 'local_mirror'].map((value) => action.meliStateLabel(value)),
+        ['Registrado', 'Incompleto', 'Conflicto de identidad', 'Bloqueado', 'Vínculo ambiguo', 'No corresponde', 'Reintento pendiente', 'Manual / excluido', 'Stock / estado', 'Precios', 'Full · depósito de Mercado Libre', 'Completado', 'Espejo local'],
+        'bridge evidence, native task flow and logistics codes have explicit Spanish labels'
+    );
+});
+
+QUnit.test('out-of-order ML account product and company responses cannot contaminate another scope', async (assert) => {
+    const action = stabilizationAction();
+    action.state.meliAccountId = '8';
+    const first = stabilizationDeferred();
+    action.rpc = (_route, params) => params.meli_account_id === 8 ? first.promise : Promise.resolve({ productId: 1, accountId: 9, groups: [] });
+    const old = action.loadMeliDetail();
+    action.state.meliAccountId = '9';
+    await action.loadMeliDetail();
+    first.resolve({ productId: 1, accountId: 8, groups: [{ key: 'OLD' }] });
+    await old;
+    assert.strictEqual(action.state.meliDetail.accountId, 9);
+    assert.deepEqual(action.state.meliDetail.groups, []);
+    const pending = stabilizationDeferred();
+    action.rpc = () => pending.promise;
+    const stale = action.loadMeliDetail();
+    action.invalidateProductRequests();
+    action.state.productId = 2;
+    action.state.meliBusy = true;
+    pending.reject(new Error('Old product failure'));
+    await stale;
+    assert.ok(action.state.meliBusy, 'old finally cannot clear a new request');
+    assert.notOk(action.state.meliError);
+});
+
+QUnit.test('manual ML refresh polls only the requested local job and never restarts on failure or navigation', async (assert) => {
+    const action = stabilizationAction();
+    Object.assign(action.state, { meliAccountId: '8', meliDetail: { canRefresh: true }, meliRefreshBusy: false });
+    const calls = [];
+    action.rpc = async (route, params) => {
+        calls.push({ route, params });
+        if (route.endsWith('/refresh')) return { state: 'pending', job: { id: 12, state: 'pending' } };
+        if (route.endsWith('/refresh_status')) return { state: 'failed', job: { id: 12, state: 'failed' }, message: 'Consulta fallida' };
+        throw new Error('Unexpected route');
+    };
+    await action.requestMeliRefresh();
+    assert.ok(action.state.meliRefreshBusy);
+    assert.ok(action.meliPollTimer);
+    action.clearMeliPoll();
+    const request = { ...action.beginRequest('meliRefresh'), meliAccountId: '8' };
+    await action.pollMeliRefresh(12, request);
+    assert.notOk(action.state.meliRefreshBusy);
+    assert.strictEqual(calls.length, 2);
+    assert.strictEqual(calls[1].params.job_id, 12);
+    action.invalidateProductRequests();
+    await action.pollMeliRefresh(12, request);
+    assert.strictEqual(calls.length, 2);
+    assert.notOk(action.meliPollTimer);
+});
+
+async function workspacePatched() {
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function workspaceMeliPayload() {
+    return {
+        productId: 1, available: true, canRefresh: true, state: 'available', generatedAt: '2026-09-11T12:00:00Z', observedAt: false,
+        accountId: 8, accounts: [{ id: 8, name: 'Cuenta QAS', companyId: 2, canRefresh: true }],
+        summary: { label: 'Revisar', reason: 'Falta evidencia de precio', linked: true }, jobs: [],
+        groups: [{ key: '8:10:UP1', accountId: 8, accountName: 'Cuenta QAS', productVariantId: 10, sku: 'VAR-1', userProductId: 'UP1', categoryId: 'MLA1', conditionState: 'partial',
+            conditions: ['single', '3x', '6x'].map((key) => ({ key, label: key, state: key === 'single' ? 'present' : 'missing', itemIds: key === 'single' ? ['MLA1'] : [] })),
+            items: [{ itemId: 'MLA1', variationId: false, title: 'Producto ML', url: '', status: 'active', subStatus: '', logisticType: 'self_service', manual: false,
+                stock: { expected: 0, observed: 0, full: null, state: 'verified', observedAt: '2026-09-11T12:00:00Z', source: 'Observador', reason: 'Coincide' },
+                price: { expected: 100, standard: null, sale: null, currency: 'ARS', state: 'unknown', observedAt: false, source: '', reason: 'Sin observar' },
+                task: { state: 'pending', flow: 'stock', reason: 'Pendiente del integrador', checkedAt: false },
+            }],
+        }],
+    };
+}
+
+QUnit.test('actual workspace sidebar mobile and ML controls retain draft state and request only local reads until explicit refresh', async (assert) => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    const calls = [];
+    const detail = stabilizationPayload();
+    detail.product.catalogHealth = catalogRow().catalogHealth;
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: {
+            user: { context: { allowed_company_ids: [2] } }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route, params) => {
+                calls.push({ route, params });
+                if (route.endsWith('/data')) return detail;
+                if (route.endsWith('/meli/product_status')) return workspaceMeliPayload();
+                if (route.endsWith('/meli/refresh')) return { state: 'disabled', message: 'Consulta desactivada en fixture', job: false };
+                throw new Error(`Unexpected provider or write: ${route}`);
+            },
+        } },
+    });
+    try {
+        const action = await app.mount(target);
+        assert.strictEqual(target.querySelectorAll('[data-detail-section]').length, 10);
+        assert.strictEqual(target.querySelectorAll('.bpi-workspace-check').length, 7);
+        assert.strictEqual(calls.length, 1, 'opening product does not request channel refresh or providers');
+        target.querySelector('[data-detail-section="content"]').click();
+        await workspacePatched();
+        assert.strictEqual(action.state.activeTab, 'content');
+        action.state.contentForm.description = 'Draft retained across navigation';
+        await workspacePatched();
+        assert.ok(target.querySelector('[data-detail-section="content"] .bpi-draft-dot'));
+        const select = target.querySelector('#bpi-detail-section');
+        select.value = 'seo';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await workspacePatched();
+        assert.strictEqual(action.state.activeTab, 'seo');
+        assert.strictEqual(calls.length, 1);
+        target.querySelector('[data-detail-section="mercadolibre"]').click();
+        await workspacePatched();
+        assert.strictEqual(action.state.activeTab, 'mercadolibre');
+        assert.strictEqual(calls[calls.length - 1].route, '/bader_product_intelligence/meli/product_status');
+        assert.strictEqual(target.querySelectorAll('[data-meli-group]').length, 1);
+        assert.strictEqual(target.querySelectorAll('.bpi-meli-condition').length, 3);
+        assert.ok(target.querySelector('.bpi-meli-dimensions').textContent.includes('Sin verificar'));
+        assert.strictEqual(action.state.contentForm.description, 'Draft retained across navigation');
+        assert.notOk(target.querySelector('[data-meli-refresh]').disabled);
+        target.querySelector('[data-meli-refresh]').click();
+        await workspacePatched();
+        assert.strictEqual(calls.filter((call) => call.route.endsWith('/meli/refresh')).length, 1);
+        assert.ok(calls.every((call) => JSON.stringify(call.params.context.allowed_company_ids) === '[2]'));
+        assert.notOk(action.meliPollTimer, 'disabled refresh does not begin automatic polling or retries');
+    } finally { app.destroy(); target.remove(); }
+});
+
+QUnit.test('actual Odoo action beforeLeave and workspace dialog trap focus support Escape and protect native navigation', async (assert) => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    const beforeLeave = new CallbackRecorder();
+    let writes = 0;
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { __beforeLeave__: beforeLeave, services: {
+            user: { context: {} }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route) => {
+                if (route.endsWith('/data')) return stabilizationPayload();
+                if (route.endsWith('/save_all')) { writes++; return stabilizationPayload(); }
+                throw new Error(`Unexpected RPC: ${route}`);
+            },
+        } },
+    });
+    try {
+        const action = await app.mount(target);
+        await workspacePatched();
+        assert.strictEqual(beforeLeave.callbacks.length, 1, 'native action recorder registered by real useSetupAction');
+        action.state.productForm.brand = 'Pending brand';
+        const origin = target.querySelector('[data-bpi-back]');
+        origin.focus();
+        const stay = beforeLeave.callbacks[0]();
+        await workspacePatched();
+        const first = target.querySelector('[data-detail-leave="stay"]');
+        const last = target.querySelector('[data-detail-leave="save"]');
+        assert.ok(target.querySelector('[role="alertdialog"]'));
+        assert.strictEqual(document.activeElement, first);
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        assert.strictEqual(document.activeElement, last);
+        last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        assert.strictEqual(document.activeElement, first);
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        assert.notOk(await stay);
+        await workspacePatched();
+        assert.strictEqual(document.activeElement, origin);
+        assert.ok(action.detailHasUnsavedChanges());
+        const ev = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(ev);
+        assert.ok(ev.defaultPrevented, 'browser reload/close warns while draft exists');
+        const save = beforeLeave.callbacks[0]();
+        await workspacePatched();
+        target.querySelector('[data-detail-leave="save"]').click();
+        assert.ok(await save);
+        await workspacePatched();
+        assert.strictEqual(writes, 1);
+        assert.notOk(target.querySelector('[role="alertdialog"]'));
+        action.state.variantDrafts[0].sku = 'Independent draft';
+        const discard = beforeLeave.callbacks[0]();
+        await workspacePatched();
+        assert.notOk(target.querySelector('[data-detail-leave="save"]'));
+        target.querySelector('[data-detail-leave="discard"]').click();
+        assert.ok(await discard);
+        assert.strictEqual(writes, 1, 'discard never invokes independent mutations');
+    } finally {
+        app.destroy(); target.remove();
+        assert.strictEqual(beforeLeave.callbacks.length, 0, 'native navigation callback is cleaned up');
+    }
+});
+
+QUnit.test('canonical ML summary reuses selected account context while preserving already loaded same-scope groups', async (assert) => {
+    const action = stabilizationAction();
+    action.state.meliAccountId = '8';
+    action.state.meliDetail = workspaceMeliPayload();
+    action.meliDetailAccountKey = '8';
+    const data = stabilizationPayload();
+    data.product.meliSummary = { label: 'Resumen actualizado', linked: true };
+    data.meli = { accountId: 8, available: true, accounts: [{ id: 8 }], canRefresh: true };
+    action.applyDetailPayload(data);
+    assert.strictEqual(action.state.meliDetail.summary.label, 'Resumen actualizado');
+    assert.strictEqual(action.meliGroups().length, 1);
+    let captured;
+    action.rawRpc = async (_route, params) => { captured = params; };
+    await action.rpcWithContext('/bader_product_intelligence/data', { product_tmpl_id: 1 });
+    assert.strictEqual(captured.context.bpi_meli_account_id, 8);
+    data.meli.accountId = 9;
+    data.product.meliSummary.label = 'Otro ámbito';
+    action.applyDetailPayload(data);
+    assert.strictEqual(action.state.meliDetail.summary.label, 'Resumen actualizado', 'another account projection cannot replace selected-account summary');
+    action.state.productId = 2;
+    data.product.id = 2;
+    data.meli.accountId = 8;
+    action.applyDetailPayload(data);
+    assert.deepEqual(action.meliGroups(), [], 'new product cannot retain prior listing groups');
+});
+
+QUnit.test('saving variant fields preserves its independent image draft and approved previews no longer look unsaved', async (assert) => {
+    const action = stabilizationAction();
+    const variant = action.currentVariants()[0];
+    variant.sku = 'Submitted SKU';
+    variant.imageUploadDataUrl = 'data:image/png;base64,pending';
+    action.rpc = async () => stabilizationPayload();
+    await action.saveVariant(variant);
+    assert.strictEqual(action.currentVariants()[0].imageUploadDataUrl, 'data:image/png;base64,pending');
+    assert.ok(action.detailDirtySections().some((section) => section.id === 'variants_pack'));
+    action.discardDetailChanges();
+    action.state.imageForm.generatedPreviewUrl = '/preview';
+    await action.approveImage();
+    assert.strictEqual(action.state.imageForm.generatedPreviewUrl, '');
+    assert.notOk(action.detailDirtySections().some((section) => section.id === 'images'));
+    action.state.imageForm.generatedPreviewUrl = '/newer-preview';
+    action.acknowledgeImagePreview('/older-preview');
+    assert.strictEqual(action.state.imageForm.generatedPreviewUrl, '/newer-preview');
+});
+
+QUnit.test('actual ML overview drilldown account filter and catalog link compose scope without channel mutations', async (assert) => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    const calls = [];
+    const context = { available: true, state: 'available', accounts: [{ id: 8, name: 'Cuenta 8' }, { id: 9, name: 'Cuenta 9' }] };
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: {}, context: {} } },
+        env: { services: {
+            user: { context: { allowed_company_ids: [2] } }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route, params) => {
+                calls.push({ route, params });
+                if (route.endsWith('/dashboard_overview')) return { ...dashboardOverviewPayload(), meliOverview: { ...context, total: 1, kpis: ['linked', 'published', 'stock', 'prices', 'conditions', 'review'].map((key) => ({ key, filter: key, count: 1, percent: 100, label: key, description: key })) } };
+                if (route.endsWith('/dashboard')) return { products: [{ ...catalogRow(1), meliSummary: workspaceMeliPayload().summary }], pager: { total: 1 }, meli: context };
+                if (route.endsWith('/data')) return stabilizationPayload();
+                if (route.endsWith('/meli/product_status')) return workspaceMeliPayload();
+                throw new Error(`Unexpected ML write or refresh: ${route}`);
+            },
+        } },
+    });
+    try {
+        const action = await app.mount(target);
+        assert.strictEqual(target.querySelectorAll('[data-meli-kpi]').length, 6);
+        const account = target.querySelector('#bpi-home-meli-account');
+        account.value = '8';
+        account.dispatchEvent(new Event('change', { bubbles: true }));
+        await workspacePatched();
+        assert.strictEqual(calls[calls.length - 1].params.meli_account_id, 8);
+        target.querySelector('[data-meli-kpi="prices"]').click();
+        await workspacePatched();
+        assert.strictEqual(action.state.dashboardSection, 'catalog');
+        assert.strictEqual(calls[calls.length - 1].params.meli_filter, 'prices');
+        const filter = target.querySelector('#bpi-catalog-meli');
+        filter.value = 'review';
+        filter.dispatchEvent(new Event('change', { bubbles: true }));
+        await workspacePatched();
+        assert.strictEqual(calls[calls.length - 1].params.meli_filter, 'review');
+        const count = calls.length;
+        target.querySelector('[data-catalog-meli="1"]').click();
+        await workspacePatched();
+        assert.strictEqual(action.state.activeTab, 'mercadolibre');
+        assert.strictEqual(action.state.productId, 1);
+        assert.deepEqual(calls.slice(count).map((call) => call.route), ['/bader_product_intelligence/data', '/bader_product_intelligence/meli/product_status'], 'one detail plus one local ML read, without row bubbling');
+        assert.strictEqual(calls[calls.length - 1].params.meli_account_id, 8);
+        assert.ok(calls.every((call) => call.route.indexOf('/refresh') === -1));
+    } finally { app.destroy(); target.remove(); }
 });

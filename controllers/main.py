@@ -12,10 +12,7 @@ class BaderProductIntelligenceController(http.Controller):
 
     def _product(self, product_tmpl_id):
         self._ensure_manager()
-        product = request.env["product.template"].browse(int(product_tmpl_id)).exists()
-        if not product:
-            raise MissingError("Producto no encontrado.")
-        return product
+        return request.env["bpi.service"]._meli_product(product_tmpl_id)
 
     def _competitor(self, product, competitor_id):
         self._ensure_manager()
@@ -58,24 +55,24 @@ class BaderProductIntelligenceController(http.Controller):
         return job
 
     @http.route("/bader_product_intelligence/dashboard", type="json", auth="user")
-    def dashboard(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", **kwargs):
+    def dashboard(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False, **kwargs):
         self._ensure_manager()
         return request.env["bpi.service"].dashboard_payload(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
-            sort_key=sort_key,
+            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter,
         )
 
     @http.route("/bader_product_intelligence/dashboard_overview", type="json", auth="user")
-    def dashboard_overview(self, category_id=False, **kwargs):
+    def dashboard_overview(self, category_id=False, meli_account_id=False, **kwargs):
         self._ensure_manager()
-        return request.env["bpi.service"].dashboard_overview(category_id=category_id)
+        return request.env["bpi.service"].dashboard_overview(category_id=category_id, meli_account_id=meli_account_id)
 
     @http.route("/bader_product_intelligence/sync_catalog", type="json", auth="user")
-    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", **kwargs):
+    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False, **kwargs):
         self._ensure_manager()
         payload = request.env["bpi.service"].sync_catalog(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
-            sort_key=sort_key,
+            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter,
         )
         return {"success": True, **payload}
 
@@ -87,6 +84,21 @@ class BaderProductIntelligenceController(http.Controller):
     @http.route("/bader_product_intelligence/data", type="json", auth="user")
     def data(self, product_tmpl_id, **kwargs):
         return self._product(product_tmpl_id).bpi_build_payload()
+
+    @http.route("/bader_product_intelligence/meli/product_status", type="json", auth="user")
+    def meli_product_status(self, product_tmpl_id, meli_account_id=False, **kwargs):
+        self._ensure_manager()
+        return request.env["bpi.service"].meli_detail(product_tmpl_id, account_id=meli_account_id)
+
+    @http.route("/bader_product_intelligence/meli/refresh", type="json", auth="user")
+    def meli_refresh(self, product_tmpl_id, meli_account_id=False, **kwargs):
+        self._ensure_manager()
+        return request.env["bpi.service"].meli_request_refresh(product_tmpl_id, account_id=meli_account_id)
+
+    @http.route("/bader_product_intelligence/meli/refresh_status", type="json", auth="user")
+    def meli_refresh_status(self, job_id, **kwargs):
+        self._ensure_manager()
+        return request.env["bpi.service"].meli_refresh_status(job_id)
 
     @http.route("/bader_product_intelligence/update_product", type="json", auth="user")
     def update_product(self, product_tmpl_id, values=None, **kwargs):

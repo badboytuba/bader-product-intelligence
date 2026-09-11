@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from markupsafe import escape
 
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 from odoo.tools import html2plaintext
 
 
@@ -779,6 +779,20 @@ class ProductTemplate(models.Model):
 
     def bpi_build_payload(self):
         self.ensure_one()
+        service = self.env["bpi.service"]
+        service._ensure_manager()
+        self.check_access_rights("read")
+        self.check_access_rule("read")
+        coverage = service._dashboard_coverage_sets(self)
+        try:
+            meli = service._meli_projection(self, account_id=self.env.context.get("bpi_meli_account_id", False))
+        except (AccessError, UserError):
+            # An optional, stale account selection must not roll back a valid
+            # core fiche save. Product ACL/admin checks above remain strict;
+            # explicit ML routes and dashboard filters still fail closed.
+            message = _("La cuenta ML seleccionada ya no está disponible en este contexto. Revisa la cuenta y las empresas.")
+            meli = {**service._meli_unavailable("no_access", message),
+                    "rows": {self.id: service._meli_summary_default(reason=message)}}
         category = self._bpi_main_category()
         exchange_rate = self._bpi_exchange_rate()
         description_payload = self._bpi_description_payload()
@@ -832,8 +846,12 @@ class ProductTemplate(models.Model):
         }
 
         return {
+            "meli": service._meli_public_context(meli),
             "product": {
                 "id": self.id,
+                "meliSummary": meli["rows"].get(self.id, service._meli_summary_default()),
+                "catalogHealth": service._dashboard_catalog_health(coverage, self.id),
+                **coverage["row_metadata"][self.id],
                 "name": self.name or "",
                 "description": description_payload["contentDescription"],
                 "contentDescription": description_payload["contentDescription"],

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <templates xml:space="preserve">
     <t t-name="bader_product_intelligence.ProductIntelligenceAction" owl="1">
         <div class="o_action bpi-app">
@@ -32,8 +32,8 @@
                         </header>
                         <div class="bpi-home-navigation">
                             <nav class="bpi-home-tabs" aria-label="Secciones de inteligencia del catálogo">
-                                <button type="button" data-bpi-section="overview" t-att-class="'bpi-home-tab' + (state.dashboardSection === 'overview' ? ' is-active' : '')" t-att-aria-current="state.dashboardSection === 'overview' ? 'page' : false" t-on-click="() => this.selectDashboardSection('overview')"><i class="fa fa-pie-chart"/> Visión general</button>
-                                <button type="button" data-bpi-section="catalog" t-att-class="'bpi-home-tab' + (state.dashboardSection === 'catalog' ? ' is-active' : '')" t-att-aria-current="state.dashboardSection === 'catalog' ? 'page' : false" t-on-click="() => this.selectDashboardSection('catalog')"><i class="fa fa-th-list"/> Catálogo</button>
+                                <button type="button" data-bpi-section="overview" t-att-class="'bpi-home-tab' + (state.dashboardSection === 'overview' ? ' is-active' : '')" t-att-aria-current="state.dashboardSection === 'overview' ? 'page' : false" t-on-click="() =&gt; this.selectDashboardSection('overview')"><i class="fa fa-pie-chart"/> Visión general</button>
+                                <button type="button" data-bpi-section="catalog" t-att-class="'bpi-home-tab' + (state.dashboardSection === 'catalog' ? ' is-active' : '')" t-att-aria-current="state.dashboardSection === 'catalog' ? 'page' : false" t-on-click="() =&gt; this.selectDashboardSection('catalog')"><i class="fa fa-th-list"/> Catálogo</button>
                             </nav>
                             <div class="bpi-home-controls">
                                 <label for="bpi-home-category"><i class="fa fa-folder-open-o"/> Categoría</label>
@@ -41,8 +41,8 @@
                                     <option value="">Todas las categorías</option>
                                     <option t-foreach="dashboardCategories()" t-as="category" t-key="category.id" t-att-value="category.id" t-att-selected="templateString(category.id) === templateString(state.dashboardCategoryId)" t-esc="category.completeName || category.name"/>
                                 </select>
-                                <button type="button" class="bpi-home-settings-button" aria-label="Configuración del tipo de cambio" title="Tipo de cambio" t-att-aria-expanded="state.showDashboardSettings ? 'true' : 'false'" aria-controls="bpi-home-settings" t-on-click="() => state.showDashboardSettings = !state.showDashboardSettings"><i class="fa fa-sliders"/></button>
-                            </div>
+                                <button type="button" class="bpi-home-settings-button" aria-label="Configuración del tipo de cambio" title="Tipo de cambio" t-att-aria-expanded="state.showDashboardSettings ? 'true' : 'false'" aria-controls="bpi-home-settings" t-on-click="() =&gt; state.showDashboardSettings = !state.showDashboardSettings"><i class="fa fa-sliders"/></button>
+                            <div t-if="meliAccountOptions().length" class="bpi-meli-account"><label for="bpi-home-meli-account">Cuenta ML</label><select id="bpi-home-meli-account" t-att-value="state.meliAccountId" t-on-change="changeMeliAccount"><option value="">Todas las cuentas</option><option t-foreach="meliAccountOptions()" t-as="account" t-key="account.id" t-att-value="account.id" t-att-selected="templateString(account.id) === templateString(state.meliAccountId)" t-esc="account.name"/></select></div></div>
                         </div>
                         <section t-if="state.showDashboardSettings" id="bpi-home-settings" class="bpi-home-settings" aria-label="Configuración del tipo de cambio">
                             <div><h2>Tipo de cambio</h2><p>Conversión de los precios del catálogo de USD a ARS.</p></div>
@@ -55,13 +55,13 @@
                             <fieldset t-if="state.dashboardOverview.generatedAt and !state.overviewError" class="bpi-home-overview-content" t-att-disabled="state.overviewBusy">
                             <div class="bpi-home-section-heading"><div><h2>Tu catálogo, en cifras</h2><p>Productos activos disponibles para venta · La categoría seleccionada se aplica a todos los indicadores.</p></div><span class="bpi-home-context"><span/> Situación actual</span></div>
                             <div class="bpi-home-kpis" t-att-aria-busy="state.overviewBusy ? 'true' : 'false'">
-                                <button type="button" t-foreach="state.dashboardOverview.kpis" t-as="metric" t-key="metric.key" class="bpi-home-kpi" t-att-data-kpi-key="metric.key" t-att-data-quality-filter="metric.filter" t-att-title="metric.description" t-att-aria-label="metric.label + ': ' + formatNumber(metric.count) + '. ' + metric.description + '. Ver productos.'" t-on-click="() => this.openDashboardMetric(metric.filter)" t-att-disabled="state.overviewBusy">
+                                <button type="button" t-foreach="state.dashboardOverview.kpis" t-as="metric" t-key="metric.key" class="bpi-home-kpi" t-att-data-kpi-key="metric.key" t-att-data-quality-filter="metric.filter" t-att-title="metric.description" t-att-aria-label="metric.label + ': ' + formatNumber(metric.count) + '. ' + metric.description + '. Ver productos.'" t-on-click="() =&gt; this.openDashboardMetric(metric.filter)" t-att-disabled="state.overviewBusy">
                                     <div class="bpi-home-kpi__top"><span t-esc="metric.label"/><span t-att-class="'bpi-home-kpi__icon bpi-home-kpi__icon--' + metric.key"><i t-att-class="dashboardMetricIcon(metric.key)"/></span></div>
                                     <div class="bpi-home-kpi__value"><strong t-att-data-kpi-value="metric.count" t-esc="formatNumber(metric.count)"/><span t-if="metric.key !== 'all'" class="bpi-home-kpi__percent" t-esc="dashboardPercent(metric.percent) + '%'"/><span t-else="" class="bpi-home-kpi__unit">productos</span></div>
                                     <div class="bpi-home-kpi__foot"><small t-esc="metric.description"/><i class="fa fa-arrow-right"/></div>
                                 </button>
                             </div>
-                            <div class="bpi-home-chart-grid">
+                            <section class="bpi-meli-overview" aria-label="Indicadores Mercado Libre"><div class="bpi-home-section-heading"><div><h2><span class="bpi-meli-mark">ML</span> Mercado Libre</h2><p>Productos activos distintos · Lectura local del integrador · No altera anuncios</p></div><span class="bpi-home-badge" t-esc="meliStateLabel(meliContext().state)"/></div><div t-if="meliOverviewMetrics().length" class="bpi-meli-kpis"><button type="button" t-foreach="meliOverviewMetrics()" t-as="metric" t-key="metric.key" class="bpi-meli-kpi" t-att-data-meli-kpi="metric.key" t-att-title="metric.description" t-on-click="() =&gt; this.openMeliFilter(metric.filter)"><span t-esc="metric.label"/><strong t-esc="formatNumber(metric.count)"/><small><t t-esc="dashboardPercent(metric.percent)"/>% del catálogo</small><p t-esc="metric.description"/><i class="fa fa-arrow-right"/></button></div><p t-if="meliContext().message" class="bpi-workspace-scope-note" t-esc="meliContext().message"/><p class="bpi-meli-provenance">Origen: espejo local y evidencias individuales del integrador/observador · Última observación: <t t-esc="meliDateLabel(meliContext().observedAt)"/>. Stock y precios dejan de ser recientes tras 60 minutos. Sin vínculo local no prueba ausencia de un anuncio.</p></section><div class="bpi-home-chart-grid">
                                 <section class="bpi-home-panel bpi-home-publication">
                                     <div class="bpi-home-panel__heading"><div><span class="bpi-home-overline">VISIBILIDAD</span><h2>Estado de publicación</h2></div><i class="fa fa-globe bpi-home-panel__symbol"/></div>
                                     <div class="bpi-home-publication__body">
@@ -69,8 +69,8 @@
                                             <div class="bpi-home-donut__center"><strong t-esc="dashboardPercent(state.dashboardOverview.publication.publishedPercent) + '%'"/><span>publicado</span></div>
                                         </div>
                                         <div class="bpi-home-legend">
-                                            <button type="button" t-on-click="() => this.openDashboardMetric('published')"><span class="bpi-home-dot bpi-home-dot--published"/><span>Publicados</span><strong t-esc="formatNumber(state.dashboardOverview.publication.published)"/><i class="fa fa-angle-right"/></button>
-                                            <button type="button" t-on-click="() => this.openDashboardMetric('unpublished')"><span class="bpi-home-dot"/><span>Sin publicar</span><strong t-esc="formatNumber(state.dashboardOverview.publication.unpublished)"/><i class="fa fa-angle-right"/></button>
+                                            <button type="button" t-on-click="() =&gt; this.openDashboardMetric('published')"><span class="bpi-home-dot bpi-home-dot--published"/><span>Publicados</span><strong t-esc="formatNumber(state.dashboardOverview.publication.published)"/><i class="fa fa-angle-right"/></button>
+                                            <button type="button" t-on-click="() =&gt; this.openDashboardMetric('unpublished')"><span class="bpi-home-dot"/><span>Sin publicar</span><strong t-esc="formatNumber(state.dashboardOverview.publication.unpublished)"/><i class="fa fa-angle-right"/></button>
                                         </div>
                                     </div>
                                     <p class="bpi-home-panel__note">Publicación actual, no visitas ni ventas. Selecciona un estado para revisar sus productos.</p>
@@ -78,7 +78,7 @@
                                 <section class="bpi-home-panel bpi-home-coverage">
                                     <div class="bpi-home-panel__heading"><div><span class="bpi-home-overline">PREPARACIÓN DEL CATÁLOGO</span><h2>Cobertura de información</h2></div><span class="bpi-home-badge">Campos completos</span></div>
                                     <div class="bpi-home-coverage__rows">
-                                        <button type="button" t-foreach="state.dashboardOverview.coverage" t-as="metric" t-key="metric.key" class="bpi-home-coverage-row" t-on-click="() => this.openDashboardMetric(metric.filter)" t-att-title="metric.description">
+                                        <button type="button" t-foreach="state.dashboardOverview.coverage" t-as="metric" t-key="metric.key" class="bpi-home-coverage-row" t-on-click="() =&gt; this.openDashboardMetric(metric.filter)" t-att-title="metric.description">
                                             <span class="bpi-home-coverage-row__label"><i t-att-class="dashboardMetricIcon(metric.key)"/><span t-esc="metric.label"/></span>
                                             <span class="bpi-home-bar" aria-hidden="true"><span t-att-style="'width: ' + dashboardPercent(metric.percent) + '%;'"/></span>
                                             <strong t-esc="dashboardPercent(metric.percent) + '%'"/><small t-esc="formatNumber(metric.count) + ' / ' + formatNumber(state.dashboardOverview.total)"/>
@@ -91,7 +91,7 @@
                                 <section class="bpi-home-panel bpi-home-priorities">
                                     <div class="bpi-home-panel__heading"><div><span class="bpi-home-overline">SIGUIENTE PASO</span><h2>Prioridades del catálogo</h2></div><span class="bpi-home-badge bpi-home-badge--amber"><i class="fa fa-bolt"/> Acciones recomendadas</span></div>
                                     <div class="bpi-home-priority-list">
-                                        <button type="button" t-foreach="state.dashboardOverview.priorities" t-as="priority" t-key="priority.key" class="bpi-home-priority" t-att-data-priority-key="priority.key" t-on-click="() => this.openDashboardMetric(priority.filter)">
+                                        <button type="button" t-foreach="state.dashboardOverview.priorities" t-as="priority" t-key="priority.key" class="bpi-home-priority" t-att-data-priority-key="priority.key" t-on-click="() =&gt; this.openDashboardMetric(priority.filter)">
                                             <span t-att-class="'bpi-home-priority__marker' + (priority.count ? '' : ' is-complete')"><i t-att-class="priority.count ? 'fa fa-arrow-up' : 'fa fa-check'"/></span>
                                             <span class="bpi-home-priority__copy"><strong t-esc="priority.label"/><small t-esc="priority.description"/></span>
                                             <span class="bpi-home-priority__count" t-esc="formatNumber(priority.count)"/><i class="fa fa-angle-right"/>
@@ -123,20 +123,20 @@
                                     </div>
                                     <div class="bpi-catalog-select"><label for="bpi-catalog-quality">Preparación de la ficha</label><select id="bpi-catalog-quality" data-catalog-filter="quality" t-att-value="state.dashboardQualityFilter || ''" t-on-change="changeDashboardQualityFilter"><option t-foreach="catalogQualityOptions()" t-as="option" t-key="option.value" t-att-value="option.value" t-att-selected="option.value === (state.dashboardQualityFilter || '')" t-esc="option.label"/></select></div>
                                     <div class="bpi-catalog-select"><label for="bpi-catalog-sort">Ordenar por</label><select id="bpi-catalog-sort" data-catalog-filter="sort" t-att-value="state.dashboardSortKey" t-on-change="changeDashboardSort"><option t-foreach="catalogSortOptions()" t-as="option" t-key="option.value" t-att-value="option.value" t-att-selected="option.value === state.dashboardSortKey" t-esc="option.label"/></select></div>
-                                </section>
+                                <div class="bpi-catalog-select"><label for="bpi-catalog-meli">Mercado Libre</label><select id="bpi-catalog-meli" t-att-value="state.meliFilter" t-on-change="changeMeliFilter" t-att-disabled="!meliContext().available"><option t-foreach="meliFilterOptions()" t-as="option" t-key="option.value" t-att-value="option.value" t-att-selected="option.value === state.meliFilter" t-esc="option.label"/></select></div></section>
                                 <div t-if="state.error" class="bpi-home-feedback bpi-home-feedback--error" role="alert"><i class="fa fa-exclamation-circle"/><div><strong>No se pudo actualizar el catálogo</strong><p t-esc="state.error"/></div><button type="button" class="bpi-button bpi-button--secondary" t-on-click="refreshDashboardHome">Reintentar</button></div>
                                 <section t-att-class="'bpi-home-catalog bpi-catalog-board' + (state.dashboardBusy ? ' is-busy' : '')" t-att-aria-busy="state.dashboardBusy ? 'true' : 'false'" aria-label="Productos del catálogo">
                                     <div class="bpi-catalog-board__header">
                                         <div class="bpi-filter-tabs bpi-catalog-segments" aria-label="Estado del producto">
-                                            <button type="button" t-att-class="'bpi-filter-pill' + (state.dashboardTab === 'all' ? ' is-active' : '')" t-att-aria-pressed="state.dashboardTab === 'all' ? 'true' : 'false'" title="Productos activos y disponibles para venta" t-on-click="() => this.changeDashboardTab('all')" t-att-disabled="state.dashboardBusy"><i class="fa fa-cubes"/><span>Activos vendibles</span><b t-esc="formatNumber(state.dashboardTabCounts.all)"/></button>
-                                            <button type="button" t-att-class="'bpi-filter-pill' + (state.dashboardTab === 'new' ? ' is-active' : '')" t-att-aria-pressed="state.dashboardTab === 'new' ? 'true' : 'false'" t-on-click="() => this.changeDashboardTab('new')" t-att-disabled="state.dashboardBusy"><i class="fa fa-eye-slash"/><span>Sin publicar</span><b t-esc="formatNumber(state.dashboardTabCounts.new)"/></button>
-                                            <button type="button" t-att-class="'bpi-filter-pill' + (state.dashboardTab === 'discontinued' ? ' is-active' : '')" t-att-aria-pressed="state.dashboardTab === 'discontinued' ? 'true' : 'false'" title="Archivados o no disponibles para venta" t-on-click="() => this.changeDashboardTab('discontinued')" t-att-disabled="state.dashboardBusy"><i class="fa fa-archive"/><span>Archivados / no vendibles</span><b t-esc="formatNumber(state.dashboardTabCounts.discontinued)"/></button>
+                                            <button type="button" t-att-class="'bpi-filter-pill' + (state.dashboardTab === 'all' ? ' is-active' : '')" t-att-aria-pressed="state.dashboardTab === 'all' ? 'true' : 'false'" title="Productos activos y disponibles para venta" t-on-click="() =&gt; this.changeDashboardTab('all')" t-att-disabled="state.dashboardBusy"><i class="fa fa-cubes"/><span>Activos vendibles</span><b t-esc="formatNumber(state.dashboardTabCounts.all)"/></button>
+                                            <button type="button" t-att-class="'bpi-filter-pill' + (state.dashboardTab === 'new' ? ' is-active' : '')" t-att-aria-pressed="state.dashboardTab === 'new' ? 'true' : 'false'" t-on-click="() =&gt; this.changeDashboardTab('new')" t-att-disabled="state.dashboardBusy"><i class="fa fa-eye-slash"/><span>Sin publicar</span><b t-esc="formatNumber(state.dashboardTabCounts.new)"/></button>
+                                            <button type="button" t-att-class="'bpi-filter-pill' + (state.dashboardTab === 'discontinued' ? ' is-active' : '')" t-att-aria-pressed="state.dashboardTab === 'discontinued' ? 'true' : 'false'" title="Archivados o no disponibles para venta" t-on-click="() =&gt; this.changeDashboardTab('discontinued')" t-att-disabled="state.dashboardBusy"><i class="fa fa-archive"/><span>Archivados / no vendibles</span><b t-esc="formatNumber(state.dashboardTabCounts.discontinued)"/></button>
                                         </div>
                                         <button t-if="catalogHasFilters()" type="button" class="bpi-catalog-clear" data-catalog-clear="true" t-on-click="clearCatalogFilters" t-att-disabled="state.dashboardBusy"><i class="fa fa-times"/> Limpiar filtros</button>
                                     </div>
                                     <div class="bpi-catalog-resultbar">
                                         <div class="bpi-catalog-resultbar__context"><span t-esc="catalogResultLabel()"/><span t-if="state.dashboardQualityFilter" class="bpi-catalog-applied"><i class="fa fa-filter"/><t t-esc="dashboardQualityLabel()"/><button type="button" t-on-click="clearDashboardQualityFilter" aria-label="Quitar filtro de preparación"><i class="fa fa-times"/></button></span></div>
-                                        <div class="bpi-catalog-page-controls"><span t-esc="'Página ' + state.dashboardPager.page + ' / ' + state.dashboardPager.pageCount"/><button type="button" aria-label="Página anterior" t-on-click="() => this.changeDashboardPage(state.dashboardPager.page - 1)" t-att-disabled="state.dashboardBusy || !state.dashboardPager.hasPrevious"><i class="fa fa-angle-left"/></button><button type="button" aria-label="Página siguiente" t-on-click="() => this.changeDashboardPage(state.dashboardPager.page + 1)" t-att-disabled="state.dashboardBusy || !state.dashboardPager.hasNext"><i class="fa fa-angle-right"/></button></div>
+                                        <div class="bpi-catalog-page-controls"><span t-esc="'Página ' + state.dashboardPager.page + ' / ' + state.dashboardPager.pageCount"/><button type="button" aria-label="Página anterior" t-on-click="() =&gt; this.changeDashboardPage(state.dashboardPager.page - 1)" t-att-disabled="state.dashboardBusy || !state.dashboardPager.hasPrevious"><i class="fa fa-angle-left"/></button><button type="button" aria-label="Página siguiente" t-on-click="() =&gt; this.changeDashboardPage(state.dashboardPager.page + 1)" t-att-disabled="state.dashboardBusy || !state.dashboardPager.hasNext"><i class="fa fa-angle-right"/></button></div>
                                     </div>
                                     <div t-if="state.dashboardBusy" class="bpi-catalog-loading" role="status"><i class="fa fa-circle-o-notch fa-spin"/> Actualizando productos…</div>
                                     <t t-if="filteredDashboardProducts().length">
@@ -146,16 +146,16 @@
                                                 <thead><tr><th scope="col">Producto</th><th scope="col" title="Presencia de datos en siete secciones. No mide posicionamiento ni calidad del contenido.">Ficha del producto</th><th scope="col">Precio y margen</th><th scope="col">Existencias</th><th scope="col">Visibilidad</th><th scope="col"><span class="bpi-home-sr-only">Acciones</span></th></tr></thead>
                                                 <tbody>
                                                     <t t-foreach="filteredDashboardProducts()" t-as="row" t-key="row.id">
-                                                        <tr t-att-data-product-id="row.id" t-att-class="'bpi-catalog-row' + (state.catalogReviewId === row.id ? ' is-reviewing' : '')" t-on-click="() => !this.catalogRowBusy(row) &amp;&amp; this.openDetail(row.id)">
+                                                        <tr t-att-data-product-id="row.id" t-att-class="'bpi-catalog-row' + (state.catalogReviewId === row.id ? ' is-reviewing' : '')" t-on-click="() =&gt; !this.catalogRowBusy(row) &amp;&amp; this.openDetail(row.id)">
                                                             <td class="bpi-catalog-product-cell">
                                                                 <div class="bpi-row-product"><img t-if="row.mainImageUrl" class="bpi-row-product__image" t-att-src="row.mainImageUrl" t-att-alt="row.name"/><div t-else="" class="bpi-row-product__image bpi-row-product__image--empty"><i class="fa fa-picture-o"/></div><div class="bpi-catalog-product-copy">
-                                                                    <div class="bpi-catalog-product-heading"><button type="button" class="bpi-home-product-link" t-att-disabled="catalogRowBusy(row)" t-on-click.stop="() => !this.catalogRowBusy(row) &amp;&amp; this.openDetail(row.id)" t-esc="row.name"/><span t-if="row.isArchived || row.isDiscontinued" t-att-class="'bpi-catalog-product-state ' + catalogStatusClass(row)" t-esc="catalogProductStatusLabel(row)"/></div>
+                                                                    <div class="bpi-catalog-product-heading"><button type="button" class="bpi-home-product-link" t-att-disabled="catalogRowBusy(row)" t-on-click.stop="() =&gt; !this.catalogRowBusy(row) &amp;&amp; this.openDetail(row.id)" t-esc="row.name"/><span t-if="row.isArchived || row.isDiscontinued" t-att-class="'bpi-catalog-product-state ' + catalogStatusClass(row)" t-esc="catalogProductStatusLabel(row)"/></div>
                                                                     <div class="bpi-catalog-product-meta"><span class="bpi-catalog-sku" t-esc="row.sku || 'Sin SKU'"/><span t-esc="row.brand || 'Bader'"/><span t-if="row.productKind === 'pack' || row.productKind === 'pack_variants'" class="bpi-catalog-type"><i class="fa fa-cubes"/> Pack · <t t-esc="row.packComponentCount || 0"/> componentes</span><span t-if="row.variantCount &gt; 1" class="bpi-catalog-type"><i class="fa fa-tags"/> <t t-esc="row.variantCount"/> variantes</span></div>
                                                                     <div t-att-class="'bpi-catalog-category' + (row.category ? '' : ' is-missing')" t-att-title="row.categoryPath || row.category || 'Sin categoría asignada'"><i class="fa fa-folder-o"/><span t-esc="row.categoryPath || row.category || 'Sin categoría asignada'"/></div>
                                                                 </div></div>
                                                             </td>
-                                                            <td class="bpi-catalog-health-cell" t-on-click.stop="() => {}">
-                                                                <button type="button" class="bpi-catalog-health" t-att-data-catalog-review="row.id" t-att-data-catalog-completed="row.catalogHealth ? row.catalogHealth.completed : false" t-att-data-catalog-total="row.catalogHealth ? row.catalogHealth.total : false" t-att-aria-expanded="state.catalogReviewId === row.id ? 'true' : 'false'" t-att-aria-controls="'bpi-catalog-inspector-' + row.id" t-att-disabled="catalogRowBusy(row)" t-on-click="() => this.toggleCatalogReview(row)">
+                                                            <td class="bpi-catalog-health-cell" t-on-click.stop="() =&gt; {}">
+                                                                <button type="button" class="bpi-catalog-health" t-att-data-catalog-review="row.id" t-att-data-catalog-completed="row.catalogHealth ? row.catalogHealth.completed : false" t-att-data-catalog-total="row.catalogHealth ? row.catalogHealth.total : false" t-att-aria-expanded="state.catalogReviewId === row.id ? 'true' : 'false'" t-att-aria-controls="'bpi-catalog-inspector-' + row.id" t-att-disabled="catalogRowBusy(row)" t-on-click="() =&gt; this.toggleCatalogReview(row)">
                                                                     <span class="bpi-catalog-health__title"><strong t-esc="catalogHealthLabel(row)"/><i t-att-class="state.catalogReviewId === row.id ? 'fa fa-angle-up' : 'fa fa-angle-down'"/></span>
                                                                     <span t-if="row.catalogHealth" class="bpi-catalog-health__segments" aria-hidden="true"><span t-foreach="catalogHealthItems(row)" t-as="check" t-key="check.key" t-att-class="check.complete ? 'is-complete' : ''"/></span>
                                                                     <span class="bpi-catalog-health__next"><i t-att-class="row.catalogHealth &amp;&amp; row.catalogHealth.completed === 7 ? 'fa fa-check-circle' : 'fa fa-circle-o'"/><span t-esc="catalogNextAction(row).reason"/></span>
@@ -163,18 +163,18 @@
                                                             </td>
                                                             <td class="bpi-catalog-price-cell" data-label="Precio y margen" t-att-title="'Orden por precio base: ' + formatUSD(row.priceUsd)"><strong t-esc="formatProductPriceLocal(row)"/><p t-esc="formatProductPrice(row)"/><span t-if="catalogMarginKnown(row)" t-att-class="'bpi-catalog-margin' + (row.margin &lt; 0 ? ' is-negative' : '')">Margen est. <b t-esc="formatPercent(row.margin)"/></span><span t-else="" class="bpi-catalog-cost-missing">Margen no disponible</span></td>
                                                             <td class="bpi-catalog-stock-cell" data-label="Existencias"><strong t-esc="formatNumber(row.qtyAvailable)"/><span t-att-class="'bpi-catalog-stock ' + catalogStockClass(row)"><i class="fa fa-circle"/><t t-esc="catalogStockLabel(row)"/></span><small t-if="row.variantCount &gt; 1">Total de variantes</small><small t-else="">Cantidad en inventario</small></td>
-                                                            <td class="bpi-catalog-visibility-cell" data-label="Visibilidad" t-on-click.stop="() => {}">
-                                                                <label class="bpi-catalog-switch"><span class="bpi-toggle"><input type="checkbox" t-att-disabled="catalogRowBusy(row)" t-att-aria-label="'Publicar ' + row.name" t-att-checked="row.isPublished" t-on-change="(ev) => this.toggleDashboardPublish(row.id, ev.target.checked, ev)"/><span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span></span><span t-att-class="catalogPublicationClass(row)" t-esc="catalogPublicationLabel(row)"/></label>
-                                                                <label class="bpi-catalog-switch bpi-catalog-switch--featured"><span class="bpi-toggle"><input type="checkbox" t-att-disabled="catalogRowBusy(row)" t-att-aria-label="'Destacar ' + row.name" t-att-checked="row.featured" t-on-change="(ev) => this.toggleDashboardFeatured(row.id, ev.target.checked, ev)"/><span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span></span><span><i class="fa fa-star-o"/> Destacado</span></label>
-                                                            </td>
-                                                            <td class="bpi-catalog-action-cell" t-on-click.stop="() => {}"><button type="button" class="bpi-catalog-open" t-att-disabled="catalogRowBusy(row)" t-att-aria-label="'Abrir ' + row.name" t-on-click="() => this.openDetail(row.id)"><span>Abrir</span><i class="fa fa-arrow-up"/></button><small t-if="catalogRowBusy(row)"><i class="fa fa-circle-o-notch fa-spin"/> Guardando…</small></td>
+                                                            <td class="bpi-catalog-visibility-cell" data-label="Visibilidad" t-on-click.stop="() =&gt; {}">
+                                                                <label class="bpi-catalog-switch"><span class="bpi-toggle"><input type="checkbox" t-att-disabled="catalogRowBusy(row)" t-att-aria-label="'Publicar ' + row.name" t-att-checked="row.isPublished" t-on-change="(ev) =&gt; this.toggleDashboardPublish(row.id, ev.target.checked, ev)"/><span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span></span><span t-att-class="catalogPublicationClass(row)" t-esc="catalogPublicationLabel(row)"/></label>
+                                                                <label class="bpi-catalog-switch bpi-catalog-switch--featured"><span class="bpi-toggle"><input type="checkbox" t-att-disabled="catalogRowBusy(row)" t-att-aria-label="'Destacar ' + row.name" t-att-checked="row.featured" t-on-change="(ev) =&gt; this.toggleDashboardFeatured(row.id, ev.target.checked, ev)"/><span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span></span><span><i class="fa fa-star-o"/> Destacado</span></label>
+                                                            <button type="button" class="bpi-catalog-meli" t-att-data-catalog-meli="row.id" t-on-click="() =&gt; this.openMeliProduct(row)" t-att-title="(row.meliSummary &amp;&amp; row.meliSummary.reason) || 'Abrir seguimiento Mercado Libre'"><span class="bpi-catalog-meli__title"><b class="bpi-meli-mark">ML</b><span t-esc="row.meliSummary ? row.meliSummary.label : 'Sin información'"/><i class="fa fa-angle-right"/></span><span t-if="row.meliSummary &amp;&amp; row.meliSummary.linked" class="bpi-catalog-meli__states"><span t-att-class="row.meliSummary.published ? 'is-confirmed' : ''">Anuncio <i t-att-class="row.meliSummary.published ? 'fa fa-check' : 'fa fa-minus'"/></span><span t-att-class="row.meliSummary.stockVerified ? 'is-confirmed' : ''">Stock <i t-att-class="row.meliSummary.stockVerified ? 'fa fa-check' : 'fa fa-question'"/></span><span t-att-class="row.meliSummary.pricesVerified ? 'is-confirmed' : ''">Precio <i t-att-class="row.meliSummary.pricesVerified ? 'fa fa-check' : 'fa fa-question'"/></span><span t-att-class="row.meliSummary.conditionsComplete ? 'is-confirmed' : ''">1/3/6 <i t-att-class="row.meliSummary.conditionsComplete ? 'fa fa-check' : 'fa fa-question'"/></span></span><small>Local · <t t-esc="meliDateLabel(row.meliSummary &amp;&amp; row.meliSummary.observedAt)"/></small></button></td>
+                                                            <td class="bpi-catalog-action-cell" t-on-click.stop="() =&gt; {}"><button type="button" class="bpi-catalog-open" t-att-disabled="catalogRowBusy(row)" t-att-aria-label="'Abrir ' + row.name" t-on-click="() =&gt; this.openDetail(row.id)"><span>Abrir</span><i class="fa fa-arrow-up"/></button><small t-if="catalogRowBusy(row)"><i class="fa fa-circle-o-notch fa-spin"/> Guardando…</small></td>
                                                         </tr>
                                                         <tr t-if="state.catalogReviewId === row.id" class="bpi-catalog-inspector-row" t-att-data-catalog-inspector="row.id"><td colspan="6">
                                                             <section class="bpi-catalog-inspector" t-on-keydown="onCatalogReviewKeydown" t-att-id="'bpi-catalog-inspector-' + row.id" t-att-aria-label="'Revisar ficha de ' + row.name">
                                                                 <div class="bpi-catalog-inspector__heading"><div><span class="bpi-catalog-overline">REVISIÓN RÁPIDA</span><h3 t-esc="row.name"/><p>Comprueba lo que falta y abre directamente la sección que quieres mejorar.</p></div><button type="button" class="bpi-catalog-close" t-on-click="closeCatalogReview" aria-label="Cerrar revisión rápida"><i class="fa fa-times"/></button></div>
-                                                                <div t-if="row.catalogHealth" class="bpi-catalog-checks"><button type="button" t-foreach="catalogHealthItems(row)" t-as="check" t-key="check.key" t-att-class="'bpi-catalog-check' + (check.complete ? ' is-complete' : '')" t-att-data-catalog-check="check.key" t-att-data-catalog-present="check.complete ? 'true' : 'false'" t-att-disabled="catalogRowBusy(row)" t-att-data-catalog-section="check.section" t-on-click="() => this.openCatalogProduct(row, check.section)"><span class="bpi-catalog-check__icon"><i t-att-class="check.icon"/></span><span class="bpi-catalog-check__copy"><strong t-esc="check.label"/><small><t t-if="check.complete">Completo · Revisar</t><t t-else="">Pendiente · Completar</t></small></span><i t-att-class="check.complete ? 'fa fa-check-circle' : 'fa fa-angle-right'"/></button></div>
+                                                                <div t-if="row.catalogHealth" class="bpi-catalog-checks"><button type="button" t-foreach="catalogHealthItems(row)" t-as="check" t-key="check.key" t-att-class="'bpi-catalog-check' + (check.complete ? ' is-complete' : '')" t-att-data-catalog-check="check.key" t-att-data-catalog-present="check.complete ? 'true' : 'false'" t-att-disabled="catalogRowBusy(row)" t-att-data-catalog-section="check.section" t-on-click="() =&gt; this.openCatalogProduct(row, check.section)"><span class="bpi-catalog-check__icon"><i t-att-class="check.icon"/></span><span class="bpi-catalog-check__copy"><strong t-esc="check.label"/><small><t t-if="check.complete">Completo · Revisar</t><t t-else="">Pendiente · Completar</t></small></span><i t-att-class="check.complete ? 'fa fa-check-circle' : 'fa fa-angle-right'"/></button></div>
                                                                 <p t-else="" class="bpi-catalog-unavailable">La preparación todavía no está disponible. Actualiza el catálogo o abre la ficha.</p>
-                                                                <div class="bpi-catalog-inspector__footer"><div class="bpi-catalog-inspector__facts"><button type="button" t-att-disabled="catalogRowBusy(row)" data-catalog-section="competitors" t-on-click="() => this.openCatalogProduct(row, 'competitors')"><i class="fa fa-line-chart"/><span t-if="row.catalogHealth &amp;&amp; row.catalogHealth.competitor">Con competidor registrado</span><span t-else="">Revisar competidores</span><i class="fa fa-angle-right"/></button><span t-if="row.updatedAt"><i class="fa fa-clock-o"/> Última modificación: <t t-esc="dashboardDateLabel(row.updatedAt)"/></span><span>Precio base: <t t-esc="formatUSD(row.priceUsd)"/></span></div><button type="button" class="bpi-catalog-next" t-att-disabled="catalogRowBusy(row)" t-att-data-catalog-next="row.id" t-att-data-catalog-section="catalogNextAction(row).section" t-on-click="() => this.openCatalogProduct(row, this.catalogNextAction(row).section)"><t t-esc="catalogNextAction(row).label"/><i class="fa fa-arrow-right"/></button></div>
+                                                                <div class="bpi-catalog-inspector__footer"><div class="bpi-catalog-inspector__facts"><button type="button" t-att-disabled="catalogRowBusy(row)" data-catalog-section="competitors" t-on-click="() =&gt; this.openCatalogProduct(row, 'competitors')"><i class="fa fa-line-chart"/><span t-if="row.catalogHealth &amp;&amp; row.catalogHealth.competitor">Con competidor registrado</span><span t-else="">Revisar competidores</span><i class="fa fa-angle-right"/></button><span t-if="row.updatedAt"><i class="fa fa-clock-o"/> Última modificación: <t t-esc="dashboardDateLabel(row.updatedAt)"/></span><span>Precio base: <t t-esc="formatUSD(row.priceUsd)"/></span></div><button type="button" class="bpi-catalog-next" t-att-disabled="catalogRowBusy(row)" t-att-data-catalog-next="row.id" t-att-data-catalog-section="catalogNextAction(row).section" t-on-click="() =&gt; this.openCatalogProduct(row, this.catalogNextAction(row).section)"><t t-esc="catalogNextAction(row).label"/><i class="fa fa-arrow-right"/></button></div>
                                                                 <p class="bpi-catalog-inspector__note"><i class="fa fa-info-circle"/> Estos 7 controles indican presencia de información, no calidad, posicionamiento ni aprobación para publicar. Los competidores son opcionales. No se genera ni guarda contenido al revisar.</p>
                                                             </section>
                                                         </td></tr>
@@ -182,7 +182,7 @@
                                                 </tbody>
                                             </table>
                                         </div>
-                                        <div class="bpi-pagination"><span class="bpi-muted" t-esc="catalogResultLabel()"/><div class="bpi-footer-actions"><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.changeDashboardPage(state.dashboardPager.page - 1)" t-att-disabled="state.dashboardBusy || !state.dashboardPager.hasPrevious"><i class="fa fa-angle-left"/><span>Anterior</span></button><span class="bpi-catalog-page-label" t-esc="dashboardPageLabel()"/><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.changeDashboardPage(state.dashboardPager.page + 1)" t-att-disabled="state.dashboardBusy || !state.dashboardPager.hasNext"><span>Siguiente</span><i class="fa fa-angle-right"/></button></div></div>
+                                        <div class="bpi-pagination"><span class="bpi-muted" t-esc="catalogResultLabel()"/><div class="bpi-footer-actions"><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.changeDashboardPage(state.dashboardPager.page - 1)" t-att-disabled="state.dashboardBusy || !state.dashboardPager.hasPrevious"><i class="fa fa-angle-left"/><span>Anterior</span></button><span class="bpi-catalog-page-label" t-esc="dashboardPageLabel()"/><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.changeDashboardPage(state.dashboardPager.page + 1)" t-att-disabled="state.dashboardBusy || !state.dashboardPager.hasNext"><span>Siguiente</span><i class="fa fa-angle-right"/></button></div></div>
                                     </t>
                                     <div t-elif="!state.dashboardBusy and !state.error" class="bpi-catalog-empty" role="status"><span><i class="fa fa-search"/></span><h3>No encontramos productos con esta selección</h3><p>Prueba otro nombre o SKU, cambia la categoría o ajusta los filtros de preparación.</p><button t-if="catalogHasFilters()" type="button" class="bpi-catalog-next" data-catalog-clear="true" t-on-click="clearCatalogFilters">Limpiar búsqueda y filtros <i class="fa fa-arrow-right"/></button></div>
                                 </section>
@@ -195,10 +195,10 @@
                 <t t-if="state.viewMode === 'detail'">
                     <t t-set="product" t-value="currentProduct()"/>
                     <t t-set="seoData" t-value="currentSeoData()"/>
-                    <div class="bpi-detail-shell">
-                        <div class="bpi-detail-header">
+                    <div class="bpi-detail-shell bpi-detail-workspace">
+                        <div class="bpi-detail-header bpi-workspace-hero">
                             <div class="bpi-detail-header__left">
-                                <button type="button" class="bpi-icon-button bpi-icon-button--ghost" data-bpi-back="true" t-on-click="goBack">
+                                <button type="button" class="bpi-icon-button bpi-icon-button--ghost" data-bpi-back="true" t-on-click="goBack" aria-label="Volver al catálogo">
                                     <i class="fa fa-arrow-left"/>
                                 </button>
                                 <t t-if="product.mainImageUrl">
@@ -217,48 +217,29 @@
                             </div>
                             <div class="bpi-detail-header__right">
                                 <div class="bpi-inline-switch">
-                                    <span>Publicado</span>
+                                    <span>Publicado en tienda</span>
                                     <label class="bpi-toggle">
-                                        <input type="checkbox" t-model="state.productForm.isPublished"/>
+                                        <input type="checkbox" t-model="state.productForm.isPublished" aria-label="Publicado en tienda, se aplica al guardar ficha"/>
                                         <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
                                     </label>
                                 </div>
-                                <button type="button" class="bpi-button bpi-button--success" t-on-click="saveAll" t-att-disabled="state.saveBusy">
+                                <button type="button" class="bpi-button bpi-button--success" t-on-click="saveAll" t-att-disabled="detailSaveDisabled()" title="Guarda Datos, Clasificación, Descripciones y SEO. Otras secciones tienen acciones propias.">
                                     <i class="fa fa-floppy-o"/>
-                                    <span t-if="!state.saveBusy">Guardar Cambios</span>
+                                    <span t-if="!state.saveBusy">Guardar ficha</span>
                                     <span t-else="">Guardando...</span>
                                 </button>
-                                <button type="button" class="bpi-icon-button" t-on-click="openProductForm">
+                                <button type="button" class="bpi-icon-button" t-on-click="openProductForm" aria-label="Abrir formulario nativo de Odoo">
                                     <i class="fa fa-ellipsis-v"/>
                                 </button>
                             </div>
                         </div>
 
-                        <div class="bpi-score-strip">
-                            <div t-att-data-level="sc.level" class="bpi-score-card" t-foreach="detailScoreCards()" t-as="sc" t-key="sc.label" t-on-click="() => this.scoreCardClick(sc.tab)">
-                                <div class="bpi-score-card__head">
-                                    <span t-esc="sc.label"/>
-                                    <strong t-esc="sc.score + '/100'"/>
-                                </div>
-                                <div class="bpi-score-bar">
-                                    <span t-att-class="'bpi-score-bar__fill bpi-score-bar__fill--' + sc.color" t-att-style="'width: ' + sc.score + '%;'"/>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="bpi-tab-strip">
-                            <button t-foreach="visibleDetailTabs()" t-as="tab" t-key="tab.id" type="button" t-att-class="'bpi-tab-pill ' + (state.activeTab === tab.id ? 'is-active' : '')" t-on-click="() => this.selectTab(tab.id)">
-                                <i t-att-class="'fa ' + tab.icon"/>
-                                <span t-esc="tab.label"/>
-                            </button>
-                        </div>
-
-                        <div class="bpi-detail-content">
-                            <t t-if="state.activeTab === 'overview'">
+                        <div class="bpi-workspace-save-status" role="status"><span t-if="detailHasUnsavedChanges()" class="bpi-workspace-pending"><i class="fa fa-circle"/> Cambios pendientes · <t t-esc="detailDirtySections().map(section =&gt; section.label).join(', ')"/></span><span t-else=""><i class="fa fa-check-circle-o"/> Ficha sin cambios pendientes</span><small>Guardar ficha: Datos, Clasificación, Descripciones y SEO. Imágenes, variantes, Packs y competidores: acciones propias.</small></div><div class="bpi-workspace-mobile-nav"><label for="bpi-detail-section">Sección del producto</label><select id="bpi-detail-section" t-att-value="state.activeTab" t-on-change="selectDetailSection"><optgroup t-foreach="detailNavGroups()" t-as="group" t-key="group.label" t-att-label="group.label"><option t-foreach="group.tabs" t-as="tab" t-key="tab.id" t-att-value="tab.id" t-att-selected="state.activeTab === tab.id" t-esc="tab.label"/></optgroup></select></div><div class="bpi-workspace-layout"><aside class="bpi-workspace-sidebar" aria-label="Secciones de la ficha"><div class="bpi-workspace-nav-group" t-foreach="detailNavGroups()" t-as="group" t-key="group.label"><span t-esc="group.label"/><button type="button" t-foreach="group.tabs" t-as="tab" t-key="tab.id" t-att-data-detail-section="tab.id" t-att-class="'bpi-workspace-nav-link' + (state.activeTab === tab.id ? ' is-active' : '')" t-att-aria-current="state.activeTab === tab.id ? 'page' : false" t-on-click="() =&gt; this.selectDetailSection(tab.id)"><i t-att-class="'fa ' + tab.icon"/><span t-esc="tab.label"/><span t-if="detailDirtySections().some(section =&gt; section.id === tab.id)" class="bpi-draft-dot" aria-label="Con cambios pendientes"/></button></div><p class="bpi-workspace-nav-note"><i class="fa fa-lock"/> Tus borradores se conservan al cambiar de sección.</p></aside><div class="bpi-detail-content">
+                            <div class="bpi-workspace-section-heading"><div><span class="bpi-workspace-eyebrow">FICHA DE PRODUCTO</span><h2 t-esc="detailSectionTitle()"/><p t-esc="detailSectionDescription()"/></div><button t-if="['datos', 'categorization', 'content', 'seo'].includes(state.activeTab)" type="button" class="bpi-button bpi-button--primary" t-on-click="saveCurrentDetailSection" t-att-disabled="detailSaveDisabled()"><i class="fa fa-floppy-o"/> Guardar sección</button></div><t t-if="state.activeTab === 'overview'">
                                 <div class="bpi-kpi-grid">
                                     <div class="bpi-kpi-card">
                                         <div class="bpi-kpi-card__copy">
-                                            <span>Precio</span>
+                                            <span>Precio guardado</span>
                                             <strong t-esc="formatProductPriceLocal(product)"/>
                                             <small t-esc="formatProductPrice(product)"/>
                                         </div>
@@ -266,37 +247,37 @@
                                     </div>
                                     <div class="bpi-kpi-card">
                                         <div class="bpi-kpi-card__copy">
-                                            <span>Stock</span>
+                                            <span>Existencias Odoo</span>
                                             <strong t-esc="formatNumber(product.qtyAvailable || 0)"/>
                                         </div>
                                         <div class="bpi-kpi-card__icon bpi-kpi-card__icon--dark"><i class="fa fa-cube"/></div>
                                     </div>
                                     <div class="bpi-kpi-card bpi-kpi-card--success">
                                         <div class="bpi-kpi-card__copy">
-                                            <span>Margen</span>
-                                            <strong t-esc="formatPercent(detailMargin())"/>
+                                            <span>Margen estimado</span>
+                                            <strong t-esc="detailCurrentMarginKnown() ? formatPercent(detailMargin()) : 'No disponible'"/>
                                         </div>
                                         <div class="bpi-kpi-card__icon bpi-kpi-card__icon--green"><i class="fa fa-line-chart"/></div>
                                     </div>
                                 </div>
 
-                                <div class="bpi-section-head">
+                                <div class="bpi-workspace-overview-grid"><section class="bpi-panel"><div class="bpi-panel__title"><h3><i class="fa fa-check-square-o"/> Preparación de la ficha</h3><p>Siete controles sobre la información guardada. No son una puntuación de calidad.</p></div><div class="bpi-workspace-checklist"><button t-foreach="detailChecklistItems()" t-as="check" t-key="check.key" type="button" t-att-class="'bpi-workspace-check' + (check.complete ? ' is-complete' : '')" t-on-click="() =&gt; this.selectDetailSection(check.section)"><i t-att-class="check.complete ? 'fa fa-check-circle' : 'fa fa-circle-o'"/><span t-esc="check.label"/><small t-esc="check.complete ? 'Completo' : 'Completar'"/><i class="fa fa-angle-right"/></button></div></section><section class="bpi-panel bpi-workspace-channel"><div class="bpi-panel__title"><h3><span class="bpi-meli-mark">ML</span> Mercado Libre</h3><p>Publicación en el canal, independiente de tu tienda.</p></div><strong t-esc="state.meliDetail.summary.label || 'Consulta el vínculo y la integración'"/><p t-esc="state.meliDetail.summary.reason || 'Datos del espejo local. Abrir esta sección no consulta la API externa.'"/><p class="bpi-muted">Stock del integrador y condiciones de pago único, 3 y 6 cuotas.</p><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.selectDetailSection('mercadolibre')">Revisar Mercado Libre <i class="fa fa-arrow-right"/></button></section></div><div class="bpi-section-head">
                                     <h3><i class="fa fa-star-o"/> Acciones Rápidas Nancy AI</h3>
                                 </div>
                                 <div class="bpi-quick-grid">
-                                    <button type="button" class="bpi-quick-card" t-on-click="() => this.quickAction('content')">
+                                    <button type="button" class="bpi-quick-card" t-on-click="() =&gt; this.quickAction('content')">
                                         <span class="bpi-quick-card__icon bpi-quick-card__icon--green"><i class="fa fa-pencil"/></span>
                                         <strong>Generar Descripcion Nancy AI</strong>
                                     </button>
-                                    <button type="button" class="bpi-quick-card" t-on-click="() => this.quickAction('images')">
+                                    <button type="button" class="bpi-quick-card" t-on-click="() =&gt; this.quickAction('images')">
                                         <span class="bpi-quick-card__icon bpi-quick-card__icon--dark"><i class="fa fa-magic"/></span>
                                         <strong>Generar Imagen Nancy AI</strong>
                                     </button>
-                                    <button type="button" class="bpi-quick-card" t-on-click="() => this.quickAction('seo')">
+                                    <button type="button" class="bpi-quick-card" t-on-click="() =&gt; this.quickAction('seo')">
                                         <span class="bpi-quick-card__icon bpi-quick-card__icon--green"><i class="fa fa-search"/></span>
                                         <strong>Optimizar SEO Nancy AI</strong>
                                     </button>
-                                    <button type="button" class="bpi-quick-card" t-on-click="() => this.quickAction('competitors')">
+                                    <button type="button" class="bpi-quick-card" t-on-click="() =&gt; this.quickAction('competitors')">
                                         <span class="bpi-quick-card__icon bpi-quick-card__icon--dark"><i class="fa fa-bullseye"/></span>
                                         <strong>Anadir Competidor</strong>
                                     </button>
@@ -304,8 +285,8 @@
 
                                 <div class="bpi-panel bpi-panel--insights">
                                     <div class="bpi-panel__title">
-                                        <h3><i class="fa fa-sun-o"/> Nancy AI Insights</h3>
-                                        <p>Analisis inteligente basado en tus datos</p>
+                                        <h3><i class="fa fa-sun-o"/> Alertas operativas</h3>
+                                        <p>Reglas sobre precio, margen y existencias. No es un análisis de IA.</p>
                                     </div>
                                     <t t-if="overviewInsights().length">
                                         <div class="bpi-insight-list">
@@ -319,7 +300,7 @@
                                         </div>
                                     </t>
                                     <t t-else="">
-                                        <p class="bpi-muted">Agrega mas datos para obtener insights personalizados.</p>
+                                        <p class="bpi-muted">Sin alertas con los datos disponibles.</p>
                                     </t>
                                 </div>
                             </t>
@@ -334,7 +315,7 @@
                                             <label>Slug (URL)</label>
                                             <div class="bpi-inline-field">
                                                 <input class="bpi-input" t-model="state.productForm.slug"/>
-                                                <button type="button" class="bpi-icon-button" t-on-click="() => this.regenerateSlug('name')"><i class="fa fa-refresh"/></button>
+                                                <button type="button" class="bpi-icon-button" t-on-click="() =&gt; this.regenerateSlug('name')"><i class="fa fa-refresh"/></button>
                                             </div>
                                             <label>Marca</label>
                                             <input class="bpi-input" t-model="state.productForm.brand"/>
@@ -387,7 +368,7 @@
                                     <div class="bpi-margin-card">
                                         <div>
                                             <span>Margen Calculado</span>
-                                            <strong t-esc="formatPercent(detailMargin())"/>
+                                            <strong t-esc="detailCurrentMarginKnown() ? formatPercent(detailMargin()) : 'No disponible'"/>
                                         </div>
                                         <div class="bpi-margin-card__aside">
                                             <p t-esc="marginBenefitLabel()"/>
@@ -410,9 +391,7 @@
                                 </div>
 
                                 <div class="bpi-variant-selector" t-if="currentVariants().length &gt; 1">
-                                    <button type="button" t-foreach="currentVariants()" t-as="variant" t-key="variant.id"
-                                            t-att-class="'bpi-variant-chip ' + (state.selectedVariantId === variant.id ? 'is-active' : '')"
-                                            t-on-click="() => this.selectVariant(variant.id)">
+                                    <button type="button" t-foreach="currentVariants()" t-as="variant" t-key="variant.id" t-att-class="'bpi-variant-chip ' + (state.selectedVariantId === variant.id ? 'is-active' : '')" t-on-click="() =&gt; this.selectVariant(variant.id)">
                                         <span t-esc="variant.attributeLabel || variant.sku || variant.name"/>
                                         <small t-esc="variant.sku || 'Sin SKU'"/>
                                         <i t-att-class="'fa ' + (variant.active ? 'fa-check-circle' : 'fa-archive')"/>
@@ -427,15 +406,15 @@
                                                 <h3><i class="fa fa-tag"/> <t t-esc="variant.attributeLabel || variant.name"/></h3>
                                                 <p t-esc="'Precio efectivo: ' + formatUSD(variant.effectivePriceUsd) + ' · Stock: ' + formatNumber(variant.qtyAvailable)"/>
                                             </div>
-                                            <button type="button" class="bpi-icon-button" t-on-click="() => this.openVariantForm(variant.id)" title="Abrir variante en Odoo"><i class="fa fa-external-link"/></button>
+                                            <button type="button" class="bpi-icon-button" t-on-click="() =&gt; this.openVariantForm(variant.id)" title="Abrir variante en Odoo"><i class="fa fa-external-link"/></button>
                                         </div>
                                         <div class="bpi-form-grid">
                                             <label>SKU</label>
-                                            <input class="bpi-input" t-att-value="variant.sku" t-on-input="(ev) => this.updateVariantDraft(variant.id, 'sku', ev.target.value)"/>
+                                            <input class="bpi-input" t-att-value="variant.sku" t-on-input="(ev) =&gt; this.updateVariantDraft(variant.id, 'sku', ev.target.value)"/>
                                             <label>Codigo de barras</label>
-                                            <input class="bpi-input" t-att-value="variant.barcode" t-on-input="(ev) => this.updateVariantDraft(variant.id, 'barcode', ev.target.value)"/>
+                                            <input class="bpi-input" t-att-value="variant.barcode" t-on-input="(ev) =&gt; this.updateVariantDraft(variant.id, 'barcode', ev.target.value)"/>
                                             <label>Costo (USD)</label>
-                                            <input class="bpi-input" type="number" min="0" step="0.01" t-att-value="variant.costUsdInput" t-on-input="(ev) => this.updateVariantDraft(variant.id, 'costUsdInput', ev.target.value)"/>
+                                            <input class="bpi-input" type="number" min="0" step="0.01" t-att-value="variant.costUsdInput" t-on-input="(ev) =&gt; this.updateVariantDraft(variant.id, 'costUsdInput', ev.target.value)"/>
                                             <label>Precio adicional</label>
                                             <input class="bpi-input" type="text" t-att-value="formatUSD(variant.priceExtraUsd)" disabled="disabled"/>
                                             <label>Stock disponible</label>
@@ -443,13 +422,13 @@
                                             <div class="bpi-inline-switch bpi-inline-switch--spread">
                                                 <span>Variante activa</span>
                                                 <label class="bpi-toggle">
-                                                    <input type="checkbox" t-att-checked="variant.active" t-on-change="(ev) => this.updateVariantDraft(variant.id, 'active', ev.target.checked)"/>
+                                                    <input type="checkbox" t-att-checked="variant.active" t-on-change="(ev) =&gt; this.updateVariantDraft(variant.id, 'active', ev.target.checked)"/>
                                                     <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
                                                 </label>
                                             </div>
                                         </div>
                                         <div class="bpi-footer-actions">
-                                            <button type="button" class="bpi-button bpi-button--success" t-on-click="() => this.saveVariant(variant)" t-att-disabled="state.variantBusy">
+                                            <button type="button" class="bpi-button bpi-button--success" t-on-click="() =&gt; this.saveVariant(variant)" t-att-disabled="state.variantBusy">
                                                 <i class="fa fa-floppy-o"/> Guardar variante
                                             </button>
                                         </div>
@@ -467,19 +446,19 @@
                                         </div>
                                         <div class="bpi-form-grid">
                                             <label>Copiar desde galeria</label>
-                                            <select class="bpi-input" t-att-value="variant.imageReferenceToken" t-on-change="(ev) => this.updateVariantDraft(variant.id, 'imageReferenceToken', ev.target.value)">
+                                            <select class="bpi-input" t-att-value="variant.imageReferenceToken" t-on-change="(ev) =&gt; this.updateVariantDraft(variant.id, 'imageReferenceToken', ev.target.value)">
                                                 <option value="">Seleccionar imagen</option>
                                                 <option t-foreach="referenceableImages()" t-as="image" t-key="image.referenceToken" t-att-value="image.referenceToken" t-esc="image.name"/>
                                             </select>
                                             <div class="bpi-footer-actions">
-                                                <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.setVariantImage(variant, 'reference')" t-att-disabled="state.variantBusy">Copiar</button>
+                                                <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.setVariantImage(variant, 'reference')" t-att-disabled="state.variantBusy">Copiar</button>
                                             </div>
                                             <label>Subir PNG/JPEG/WebP</label>
-                                            <input class="bpi-input" type="file" accept="image/png,image/jpeg,image/webp" t-on-change="(ev) => this.handleVariantImageUpload(variant.id, ev)"/>
+                                            <input class="bpi-input" type="file" accept="image/png,image/jpeg,image/webp" t-on-change="(ev) =&gt; this.handleVariantImageUpload(variant.id, ev)"/>
                                             <small t-if="variant.imageUploadName" t-esc="variant.imageUploadName"/>
                                             <div class="bpi-footer-actions">
-                                                <button type="button" class="bpi-button bpi-button--success" t-on-click="() => this.setVariantImage(variant, 'upload')" t-att-disabled="state.variantBusy || !variant.imageUploadDataUrl">Subir imagen</button>
-                                                <button type="button" class="bpi-button bpi-button--danger" t-if="variant.hasOwnImage" t-on-click="() => this.setVariantImage(variant, 'remove')" t-att-disabled="state.variantBusy">Eliminar propia</button>
+                                                <button type="button" class="bpi-button bpi-button--success" t-on-click="() =&gt; this.setVariantImage(variant, 'upload')" t-att-disabled="state.variantBusy || !variant.imageUploadDataUrl">Subir imagen</button>
+                                                <button type="button" class="bpi-button bpi-button--danger" t-if="variant.hasOwnImage" t-on-click="() =&gt; this.setVariantImage(variant, 'remove')" t-att-disabled="state.variantBusy">Eliminar propia</button>
                                             </div>
                                         </div>
                                     </div>
@@ -501,14 +480,14 @@
                                     <div class="bpi-grid bpi-grid--3">
                                         <div>
                                             <label>Tipo de Pack</label>
-                                            <select class="bpi-input" t-att-value="currentPack().packType" t-on-change="(ev) => this.updatePackField('packType', ev.target.value)">
+                                            <select class="bpi-input" t-att-value="currentPack().packType" t-on-change="(ev) =&gt; this.updatePackField('packType', ev.target.value)">
                                                 <option value="detailed">Detallado</option>
                                                 <option value="non_detailed">No detallado</option>
                                             </select>
                                         </div>
                                         <div>
                                             <label>Precio de componentes</label>
-                                            <select class="bpi-input" t-att-value="currentPack().componentPriceMode" t-on-change="(ev) => this.updatePackField('componentPriceMode', ev.target.value)">
+                                            <select class="bpi-input" t-att-value="currentPack().componentPriceMode" t-on-change="(ev) =&gt; this.updatePackField('componentPriceMode', ev.target.value)">
                                                 <option value="ignored">Ignorado: precio del Pack</option>
                                                 <option value="totalized">Totalizado en el Pack</option>
                                                 <option value="detailed">Detallado por componente</option>
@@ -517,7 +496,7 @@
                                         <div class="bpi-inline-switch bpi-inline-switch--spread">
                                             <span>Componentes modificables</span>
                                             <label class="bpi-toggle">
-                                                <input type="checkbox" t-att-checked="currentPack().modifiable" t-att-disabled="currentPack().packType !== 'detailed' || currentPack().componentPriceMode !== 'detailed'" t-on-change="(ev) => this.updatePackField('modifiable', ev.target.checked)"/>
+                                                <input type="checkbox" t-att-checked="currentPack().modifiable" t-att-disabled="currentPack().packType !== 'detailed' || currentPack().componentPriceMode !== 'detailed'" t-on-change="(ev) =&gt; this.updatePackField('modifiable', ev.target.checked)"/>
                                                 <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
                                             </label>
                                         </div>
@@ -539,11 +518,11 @@
                                                             <p t-esc="component.sku || 'Sin SKU'"/>
                                                             <span t-if="!component.active" class="bpi-status-pill">Archivado</span>
                                                         </td>
-                                                        <td><input class="bpi-input bpi-input--compact" type="number" min="0.0001" step="0.01" t-att-value="component.quantityInput" t-on-input="(ev) => this.updatePackComponent(component, 'quantityInput', ev.target.value)"/></td>
-                                                        <td><input class="bpi-input bpi-input--compact" type="number" min="0" max="100" step="0.01" t-att-value="component.saleDiscountInput" t-on-input="(ev) => this.updatePackComponent(component, 'saleDiscountInput', ev.target.value)"/></td>
+                                                        <td><input class="bpi-input bpi-input--compact" type="number" min="0.0001" step="0.01" t-att-value="component.quantityInput" t-on-input="(ev) =&gt; this.updatePackComponent(component, 'quantityInput', ev.target.value)"/></td>
+                                                        <td><input class="bpi-input bpi-input--compact" type="number" min="0" max="100" step="0.01" t-att-value="component.saleDiscountInput" t-on-input="(ev) =&gt; this.updatePackComponent(component, 'saleDiscountInput', ev.target.value)"/></td>
                                                         <td><span t-esc="formatNumber(component.qtyAvailable)"/><p t-esc="'Hasta ' + formatNumber(component.possiblePackQty) + ' Packs'"/></td>
                                                         <td><span t-esc="formatUSD(component.lineCostUsd)"/></td>
-                                                        <td><button type="button" class="bpi-icon-button bpi-icon-button--danger" t-on-click="() => this.removePackComponent(composition, component_index)"><i class="fa fa-trash"/></button></td>
+                                                        <td><button type="button" class="bpi-icon-button bpi-icon-button--danger" t-on-click="() =&gt; this.removePackComponent(composition, component_index)"><i class="fa fa-trash"/></button></td>
                                                     </tr>
                                                 </tbody>
                                             </table>
@@ -556,7 +535,7 @@
                                                 <button type="button" class="bpi-button bpi-button--secondary" t-on-click="searchPackComponents" t-att-disabled="state.componentSearchBusy"><i class="fa fa-search"/> Buscar</button>
                                             </div>
                                             <div class="bpi-pack-search-results" t-if="state.componentSearch.results.length">
-                                                <button type="button" class="bpi-pack-search-result" t-foreach="state.componentSearch.results" t-as="candidate" t-key="candidate.productVariantId" t-on-click="() => this.addPackComponent(candidate)">
+                                                <button type="button" class="bpi-pack-search-result" t-foreach="state.componentSearch.results" t-as="candidate" t-key="candidate.productVariantId" t-on-click="() =&gt; this.addPackComponent(candidate)">
                                                     <span><strong t-esc="candidate.name"/><small t-esc="candidate.sku || 'Sin SKU'"/></span>
                                                     <span t-esc="formatUSD(candidate.effectivePriceUsd)"/>
                                                     <i class="fa fa-plus-circle"/>
@@ -568,7 +547,7 @@
                             </t>
 
                             <t t-if="state.activeTab === 'categorization'">
-                                <div class="bpi-section-head bpi-section-head--between">
+                                <p class="bpi-workspace-scope-note"><i class="fa fa-info-circle"/> Los nichos y la taxonomía configurados para una categoría son compartidos. El vínculo de este producto y el modo manual se guardan en esta ficha.</p><div class="bpi-section-head bpi-section-head--between">
                                     <div>
                                         <h3><i class="fa fa-sitemap"/> Categorizacion Inteligente</h3>
                                         <span t-att-class="'bpi-inline-badge ' + (state.categoryForm.manualMode ? 'bpi-inline-badge--amber' : 'bpi-inline-badge--green')" t-esc="state.categoryForm.manualMode ? 'Manual' : 'Automatico'"/>
@@ -589,7 +568,7 @@
                                             <p>Selecciona los nichos donde se vendera este producto</p>
                                         </div>
                                         <div class="bpi-stack">
-                                            <button type="button" t-foreach="nicheOptions" t-as="niche" t-key="niche.id" t-att-class="'bpi-choice-card ' + (state.categoryForm.niches.includes(niche.id) ? 'is-selected' : '')" t-on-click="() => this.toggleNiche(niche.id)">
+                                            <button type="button" t-foreach="nicheOptions" t-as="niche" t-key="niche.id" t-att-class="'bpi-choice-card ' + (state.categoryForm.niches.includes(niche.id) ? 'is-selected' : '')" t-on-click="() =&gt; this.toggleNiche(niche.id)">
                                                 <span class="bpi-choice-card__icon"><i t-att-class="'fa ' + niche.icon"/></span>
                                                 <span t-esc="niche.label"/>
                                                 <i class="fa fa-circle-o bpi-choice-card__radio"/>
@@ -664,42 +643,30 @@
                                     </button>
                                         <div class="bpi-form-grid">
                                             <label>Nombre del Producto</label>
-                                            <input class="bpi-input" t-att-value="state.contentForm.name" t-on-input="(ev) => this.updateContentField('name', ev.target.value)"/>
+                                            <input class="bpi-input" t-att-value="state.contentForm.name" t-on-input="(ev) =&gt; this.updateContentField('name', ev.target.value)"/>
                                             <label>Descripcion Optimizada <span class="bpi-label-hint">(resumen corto)</span></label>
                                         <div class="bpi-rich-editor-shell">
                                             <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion">
                                                 <div class="bpi-rich-editor-toolbar__group">
-                                                    <select class="bpi-editor-select bpi-editor-select--block"
-                                                            title="Estilo de parrafo"
-                                                            aria-label="Estilo de parrafo"
-                                                            t-on-mousedown="saveContentDescriptionSelection"
-                                                            t-on-change="onContentDescriptionBlockChange">
+                                                    <select class="bpi-editor-select bpi-editor-select--block" title="Estilo de parrafo" aria-label="Estilo de parrafo" t-on-mousedown="saveContentDescriptionSelection" t-on-change="onContentDescriptionBlockChange">
                                                         <option value="">Formato</option>
                                                         <option t-foreach="descriptionBlockFormats" t-as="block" t-key="block.value" t-att-value="block.value" t-esc="block.label"/>
                                                     </select>
-                                                    <select class="bpi-editor-select bpi-editor-select--font"
-                                                            title="Fuente"
-                                                            aria-label="Fuente"
-                                                            t-on-mousedown="saveContentDescriptionSelection"
-                                                            t-on-change="onContentDescriptionFontChange">
+                                                    <select class="bpi-editor-select bpi-editor-select--font" title="Fuente" aria-label="Fuente" t-on-mousedown="saveContentDescriptionSelection" t-on-change="onContentDescriptionFontChange">
                                                         <option value="">Fuente</option>
                                                         <option t-foreach="descriptionFontFamilies" t-as="font" t-key="font.value" t-att-value="font.value" t-att-style="'font-family: ' + font.value" t-esc="font.label"/>
                                                     </select>
-                                                    <select class="bpi-editor-select bpi-editor-select--size"
-                                                            title="Tamano de fuente"
-                                                            aria-label="Tamano de fuente"
-                                                            t-on-mousedown="saveContentDescriptionSelection"
-                                                            t-on-change="onContentDescriptionFontSizeChange">
+                                                    <select class="bpi-editor-select bpi-editor-select--size" title="Tamano de fuente" aria-label="Tamano de fuente" t-on-mousedown="saveContentDescriptionSelection" t-on-change="onContentDescriptionFontSizeChange">
                                                         <option value="">Tamano</option>
                                                         <option t-foreach="descriptionFontSizes" t-as="fontSize" t-key="fontSize.value" t-att-value="fontSize.value" t-esc="fontSize.label"/>
                                                     </select>
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group">
-                                                    <button type="button" class="bpi-editor-tool" title="Negrita" aria-label="Negrita" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('bold')"><i class="fa fa-bold"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Cursiva" aria-label="Cursiva" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('italic')"><i class="fa fa-italic"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Subrayado" aria-label="Subrayado" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('underline')"><i class="fa fa-underline"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Tachado" aria-label="Tachado" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('strikeThrough')"><i class="fa fa-strikethrough"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Negrita" aria-label="Negrita" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('bold')"><i class="fa fa-bold"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Cursiva" aria-label="Cursiva" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('italic')"><i class="fa fa-italic"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Subrayado" aria-label="Subrayado" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('underline')"><i class="fa fa-underline"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Tachado" aria-label="Tachado" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('strikeThrough')"><i class="fa fa-strikethrough"/></button>
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group bpi-rich-editor-toolbar__group--colors">
@@ -714,36 +681,28 @@
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group">
-                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la izquierda" aria-label="Alinear a la izquierda" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('justifyLeft')"><i class="fa fa-align-left"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Centrar" aria-label="Centrar" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('justifyCenter')"><i class="fa fa-align-center"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la derecha" aria-label="Alinear a la derecha" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('justifyRight')"><i class="fa fa-align-right"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Justificar" aria-label="Justificar" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('justifyFull')"><i class="fa fa-align-justify"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la izquierda" aria-label="Alinear a la izquierda" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('justifyLeft')"><i class="fa fa-align-left"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Centrar" aria-label="Centrar" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('justifyCenter')"><i class="fa fa-align-center"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la derecha" aria-label="Alinear a la derecha" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('justifyRight')"><i class="fa fa-align-right"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Justificar" aria-label="Justificar" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('justifyFull')"><i class="fa fa-align-justify"/></button>
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group">
-                                                    <button type="button" class="bpi-editor-tool" title="Lista con vinetas" aria-label="Lista con vinetas" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('insertUnorderedList')"><i class="fa fa-list-ul"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Lista numerada" aria-label="Lista numerada" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('insertOrderedList')"><i class="fa fa-list-ol"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Reducir sangria" aria-label="Reducir sangria" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('outdent')"><i class="fa fa-outdent"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Aumentar sangria" aria-label="Aumentar sangria" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('indent')"><i class="fa fa-indent"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Lista con vinetas" aria-label="Lista con vinetas" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('insertUnorderedList')"><i class="fa fa-list-ul"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Lista numerada" aria-label="Lista numerada" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('insertOrderedList')"><i class="fa fa-list-ol"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Reducir sangria" aria-label="Reducir sangria" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('outdent')"><i class="fa fa-outdent"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Aumentar sangria" aria-label="Aumentar sangria" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('indent')"><i class="fa fa-indent"/></button>
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group">
                                                     <button type="button" class="bpi-editor-tool" title="Agregar enlace" aria-label="Agregar enlace" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="createContentDescriptionLink"><i class="fa fa-link"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Quitar enlace" aria-label="Quitar enlace" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('unlink')"><i class="fa fa-unlink"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Limpiar formato" aria-label="Limpiar formato" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('removeFormat')"><i class="fa fa-eraser"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Deshacer" aria-label="Deshacer" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('undo')"><i class="fa fa-undo"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Rehacer" aria-label="Rehacer" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() => this.applyContentDescriptionCommand('redo')"><i class="fa fa-repeat"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Quitar enlace" aria-label="Quitar enlace" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('unlink')"><i class="fa fa-unlink"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Limpiar formato" aria-label="Limpiar formato" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('removeFormat')"><i class="fa fa-eraser"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Deshacer" aria-label="Deshacer" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('undo')"><i class="fa fa-undo"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Rehacer" aria-label="Rehacer" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('redo')"><i class="fa fa-repeat"/></button>
                                                 </div>
                                             </div>
-                                            <div class="bpi-rich-editor bpi-rich-editor--compact"
-                                                 contenteditable="true"
-                                                 t-ref="contentDescriptionEditor"
-                                                 t-on-input="onContentDescriptionInput"
-                                                 t-on-keyup="saveContentDescriptionSelection"
-                                                 t-on-mouseup="saveContentDescriptionSelection"
-                                                 t-on-blur="normalizeContentDescriptionEditor"
-                                                 aria-label="Descripcion Optimizada"
-                                                 data-placeholder="Resumen comercial breve de 45 a 70 palabras."/>
+                                            <div class="bpi-rich-editor bpi-rich-editor--compact" contenteditable="true" t-ref="contentDescriptionEditor" t-on-input="onContentDescriptionInput" t-on-keyup="saveContentDescriptionSelection" t-on-mouseup="saveContentDescriptionSelection" t-on-blur="normalizeContentDescriptionEditor" aria-label="Descripcion Optimizada" data-placeholder="Resumen comercial breve de 45 a 70 palabras."/>
                                         </div>
                                         <div class="bpi-editor-help">
                                             <i class="fa fa-eye"/> Este resumen aparece junto a las imágenes y botones de compra. Objetivo: lectura rápida.
@@ -753,42 +712,30 @@
                                             <textarea class="bpi-textarea bpi-textarea--mono" rows="3" t-att-value="state.contentForm.description" t-on-input="onContentDescriptionSourceInput"/>
                                         </details>
                                         <p class="bpi-muted" t-esc="contentWordCountLabel()"/>
-                                        <div class="bpi-content-divider" role="separator"></div>
+                                        <div class="bpi-content-divider" role="separator"/>
                                         <label>Descripcion Tecnica <span class="bpi-label-hint">(contenido ampliado)</span></label>
                                         <div class="bpi-rich-editor-shell">
                                             <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion tecnica">
                                                 <div class="bpi-rich-editor-toolbar__group">
-                                                    <select class="bpi-editor-select bpi-editor-select--block"
-                                                            title="Estilo de parrafo"
-                                                            aria-label="Estilo de parrafo"
-                                                            t-on-mousedown="saveTechnicalDescriptionSelection"
-                                                            t-on-change="onTechnicalDescriptionBlockChange">
+                                                    <select class="bpi-editor-select bpi-editor-select--block" title="Estilo de parrafo" aria-label="Estilo de parrafo" t-on-mousedown="saveTechnicalDescriptionSelection" t-on-change="onTechnicalDescriptionBlockChange">
                                                         <option value="">Formato</option>
                                                         <option t-foreach="descriptionBlockFormats" t-as="block" t-key="block.value" t-att-value="block.value" t-esc="block.label"/>
                                                     </select>
-                                                    <select class="bpi-editor-select bpi-editor-select--font"
-                                                            title="Fuente"
-                                                            aria-label="Fuente"
-                                                            t-on-mousedown="saveTechnicalDescriptionSelection"
-                                                            t-on-change="onTechnicalDescriptionFontChange">
+                                                    <select class="bpi-editor-select bpi-editor-select--font" title="Fuente" aria-label="Fuente" t-on-mousedown="saveTechnicalDescriptionSelection" t-on-change="onTechnicalDescriptionFontChange">
                                                         <option value="">Fuente</option>
                                                         <option t-foreach="descriptionFontFamilies" t-as="font" t-key="font.value" t-att-value="font.value" t-att-style="'font-family: ' + font.value" t-esc="font.label"/>
                                                     </select>
-                                                    <select class="bpi-editor-select bpi-editor-select--size"
-                                                            title="Tamano de fuente"
-                                                            aria-label="Tamano de fuente"
-                                                            t-on-mousedown="saveTechnicalDescriptionSelection"
-                                                            t-on-change="onTechnicalDescriptionFontSizeChange">
+                                                    <select class="bpi-editor-select bpi-editor-select--size" title="Tamano de fuente" aria-label="Tamano de fuente" t-on-mousedown="saveTechnicalDescriptionSelection" t-on-change="onTechnicalDescriptionFontSizeChange">
                                                         <option value="">Tamano</option>
                                                         <option t-foreach="descriptionFontSizes" t-as="fontSize" t-key="fontSize.value" t-att-value="fontSize.value" t-esc="fontSize.label"/>
                                                     </select>
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group">
-                                                    <button type="button" class="bpi-editor-tool" title="Negrita" aria-label="Negrita" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('bold')"><i class="fa fa-bold"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Cursiva" aria-label="Cursiva" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('italic')"><i class="fa fa-italic"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Subrayado" aria-label="Subrayado" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('underline')"><i class="fa fa-underline"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Tachado" aria-label="Tachado" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('strikeThrough')"><i class="fa fa-strikethrough"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Negrita" aria-label="Negrita" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('bold')"><i class="fa fa-bold"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Cursiva" aria-label="Cursiva" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('italic')"><i class="fa fa-italic"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Subrayado" aria-label="Subrayado" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('underline')"><i class="fa fa-underline"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Tachado" aria-label="Tachado" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('strikeThrough')"><i class="fa fa-strikethrough"/></button>
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group bpi-rich-editor-toolbar__group--colors">
@@ -803,36 +750,28 @@
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group">
-                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la izquierda" aria-label="Alinear a la izquierda" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('justifyLeft')"><i class="fa fa-align-left"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Centrar" aria-label="Centrar" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('justifyCenter')"><i class="fa fa-align-center"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la derecha" aria-label="Alinear a la derecha" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('justifyRight')"><i class="fa fa-align-right"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Justificar" aria-label="Justificar" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('justifyFull')"><i class="fa fa-align-justify"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la izquierda" aria-label="Alinear a la izquierda" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('justifyLeft')"><i class="fa fa-align-left"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Centrar" aria-label="Centrar" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('justifyCenter')"><i class="fa fa-align-center"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Alinear a la derecha" aria-label="Alinear a la derecha" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('justifyRight')"><i class="fa fa-align-right"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Justificar" aria-label="Justificar" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('justifyFull')"><i class="fa fa-align-justify"/></button>
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group">
-                                                    <button type="button" class="bpi-editor-tool" title="Lista con vinetas" aria-label="Lista con vinetas" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('insertUnorderedList')"><i class="fa fa-list-ul"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Lista numerada" aria-label="Lista numerada" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('insertOrderedList')"><i class="fa fa-list-ol"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Reducir sangria" aria-label="Reducir sangria" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('outdent')"><i class="fa fa-outdent"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Aumentar sangria" aria-label="Aumentar sangria" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('indent')"><i class="fa fa-indent"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Lista con vinetas" aria-label="Lista con vinetas" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('insertUnorderedList')"><i class="fa fa-list-ul"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Lista numerada" aria-label="Lista numerada" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('insertOrderedList')"><i class="fa fa-list-ol"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Reducir sangria" aria-label="Reducir sangria" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('outdent')"><i class="fa fa-outdent"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Aumentar sangria" aria-label="Aumentar sangria" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('indent')"><i class="fa fa-indent"/></button>
                                                 </div>
 
                                                 <div class="bpi-rich-editor-toolbar__group">
                                                     <button type="button" class="bpi-editor-tool" title="Agregar enlace" aria-label="Agregar enlace" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="createTechnicalDescriptionLink"><i class="fa fa-link"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Quitar enlace" aria-label="Quitar enlace" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('unlink')"><i class="fa fa-unlink"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Limpiar formato" aria-label="Limpiar formato" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('removeFormat')"><i class="fa fa-eraser"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Deshacer" aria-label="Deshacer" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('undo')"><i class="fa fa-undo"/></button>
-                                                    <button type="button" class="bpi-editor-tool" title="Rehacer" aria-label="Rehacer" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() => this.applyTechnicalDescriptionCommand('redo')"><i class="fa fa-repeat"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Quitar enlace" aria-label="Quitar enlace" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('unlink')"><i class="fa fa-unlink"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Limpiar formato" aria-label="Limpiar formato" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('removeFormat')"><i class="fa fa-eraser"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Deshacer" aria-label="Deshacer" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('undo')"><i class="fa fa-undo"/></button>
+                                                    <button type="button" class="bpi-editor-tool" title="Rehacer" aria-label="Rehacer" t-on-mousedown="onTechnicalDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyTechnicalDescriptionCommand('redo')"><i class="fa fa-repeat"/></button>
                                                 </div>
                                             </div>
-                                            <div class="bpi-rich-editor bpi-rich-editor--technical"
-                                                 contenteditable="true"
-                                                 t-ref="technicalDescriptionEditor"
-                                                 t-on-input="onTechnicalDescriptionInput"
-                                                 t-on-keyup="saveTechnicalDescriptionSelection"
-                                                 t-on-mouseup="saveTechnicalDescriptionSelection"
-                                                 t-on-blur="normalizeTechnicalDescriptionEditor"
-                                                 aria-label="Descripcion Tecnica"
-                                                 data-placeholder="La descripcion tecnica ampliada aparecera aqui con formato."/>
+                                            <div class="bpi-rich-editor bpi-rich-editor--technical" contenteditable="true" t-ref="technicalDescriptionEditor" t-on-input="onTechnicalDescriptionInput" t-on-keyup="saveTechnicalDescriptionSelection" t-on-mouseup="saveTechnicalDescriptionSelection" t-on-blur="normalizeTechnicalDescriptionEditor" aria-label="Descripcion Tecnica" data-placeholder="La descripcion tecnica ampliada aparecera aqui con formato."/>
                                         </div>
                                         <div class="bpi-editor-help">
                                             <i class="fa fa-file-text-o"/> Esta sección se publica debajo del área de imágenes y antes de las FAQs.
@@ -845,7 +784,7 @@
                                     </div>
                                     <button type="button" class="bpi-button bpi-button--secondary bpi-button--full" t-on-click="saveContentOnly" t-att-disabled="state.contentBusy">
                                         <i class="fa fa-floppy-o"/>
-                                        <span>Guardar Cambios</span>
+                                        <span>Guardar ficha</span>
                                     </button>
                                 </div>
 
@@ -860,13 +799,13 @@
                                                 <div class="bpi-faq-editor__row">
                                                     <div class="bpi-faq-editor__field">
                                                         <label>Pregunta</label>
-                                                        <textarea class="bpi-textarea" rows="2" t-att-value="faq.question" t-on-input="(ev) => this.updateFaq(faq_index, 'question', ev.target.value)"/>
+                                                        <textarea class="bpi-textarea" rows="2" t-att-value="faq.question" t-on-input="(ev) =&gt; this.updateFaq(faq_index, 'question', ev.target.value)"/>
                                                     </div>
-                                                    <button type="button" class="bpi-icon-button" t-on-click="() => this.removeFaq(faq_index)"><i class="fa fa-times"/></button>
+                                                    <button type="button" class="bpi-icon-button" t-on-click="() =&gt; this.removeFaq(faq_index)"><i class="fa fa-times"/></button>
                                                 </div>
                                                 <div class="bpi-faq-editor__field">
                                                     <label>Respuesta</label>
-                                                    <textarea class="bpi-textarea" rows="3" t-att-value="faq.answer" t-on-input="(ev) => this.updateFaq(faq_index, 'answer', ev.target.value)"/>
+                                                    <textarea class="bpi-textarea" rows="3" t-att-value="faq.answer" t-on-input="(ev) =&gt; this.updateFaq(faq_index, 'answer', ev.target.value)"/>
                                                 </div>
                                             </div>
                                         </div>
@@ -889,7 +828,7 @@
                             </t>
 
                             <t t-if="state.activeTab === 'images'">
-                                <!-- ── E-commerce Gallery Panel ── -->
+                                <p class="bpi-workspace-scope-note"><i class="fa fa-info-circle"/> La galería distingue origen y permisos. Guardar ficha no agrega ni elimina imágenes: utiliza la acción de cada recurso.</p><!-- ── E-commerce Gallery Panel ── -->
                                 <div class="bpi-panel">
                                     <div class="bpi-panel__title bpi-panel__title--between">
                                         <h3><i class="fa fa-picture-o"/> Galeria de Imagenes</h3>
@@ -898,13 +837,11 @@
                                     <div class="bpi-gallery-shell">
                                         <!-- Thumbnail sidebar (left) -->
                                         <div class="bpi-gallery-shell__sidebar">
-                                            <div t-foreach="currentImages()" t-as="image" t-key="image.id"
-                                                 t-att-class="state.imageForm.selectedGalleryUrl === image.imageUrl ? 'bpi-gallery-thumb is-active' : 'bpi-gallery-thumb'"
-                                                 t-on-click="() => this.selectGalleryImage(image.imageUrl)">
+                                            <div t-foreach="currentImages()" t-as="image" t-key="image.id" t-att-class="state.imageForm.selectedGalleryUrl === image.imageUrl ? 'bpi-gallery-thumb is-active' : 'bpi-gallery-thumb'" t-on-click="() =&gt; this.selectGalleryImage(image.imageUrl)">
                                                 <img t-att-src="image.imageUrl" t-att-alt="image.name"/>
-                                                <button t-if="image.canDelete" type="button" class="bpi-gallery-thumb__delete" t-on-click.stop="() => this.deleteImage(image)" t-att-disabled="state.imageBusy" title="Eliminar"><i class="fa fa-trash"/></button>
+                                                <button t-if="image.canDelete" type="button" class="bpi-gallery-thumb__delete" t-on-click.stop="() =&gt; this.deleteImage(image)" t-att-disabled="state.imageBusy" title="Eliminar"><i class="fa fa-trash"/></button>
                                             </div>
-                                            <div class="bpi-gallery-thumb bpi-gallery-thumb--add" t-on-click="() => this.state.showAddUrlInput = !this.state.showAddUrlInput">
+                                            <div class="bpi-gallery-thumb bpi-gallery-thumb--add" t-on-click="() =&gt; this.state.showAddUrlInput = !this.state.showAddUrlInput">
                                                 <i class="fa fa-plus"/>
                                             </div>
                                         </div>
@@ -948,9 +885,7 @@
                                                 <div>
                                                     <div class="bpi-playground__section-label">Selecciona imagenes del producto</div>
                                                     <div class="bpi-playground__thumb-grid">
-                                                        <div t-foreach="referenceableImages()" t-as="image" t-key="image.referenceToken"
-                                                             t-att-class="state.imageForm.selectedReferences.includes(image.referenceToken) ? 'bpi-pg-thumb bpi-pg-thumb--lg is-selected' : 'bpi-pg-thumb bpi-pg-thumb--lg'"
-                                                             t-on-click="() => this.toggleReference(image.referenceToken)">
+                                                        <div t-foreach="referenceableImages()" t-as="image" t-key="image.referenceToken" t-att-class="state.imageForm.selectedReferences.includes(image.referenceToken) ? 'bpi-pg-thumb bpi-pg-thumb--lg is-selected' : 'bpi-pg-thumb bpi-pg-thumb--lg'" t-on-click="() =&gt; this.toggleReference(image.referenceToken)">
                                                             <img t-att-src="image.imageUrl" t-att-alt="image.name"/>
                                                             <div class="bpi-pg-thumb__check"><i class="fa fa-check"/></div>
                                                         </div>
@@ -979,7 +914,7 @@
 
                                                 <!-- Generate button -->
                                                 <div class="bpi-footer-actions">
-                                                    <button type="button" class="bpi-button bpi-button--primary bpi-button--full" t-on-click="() => this.generateFromForm()" t-att-disabled="state.imageBusy">
+                                                    <button type="button" class="bpi-button bpi-button--primary bpi-button--full" t-on-click="() =&gt; this.generateFromForm()" t-att-disabled="state.imageBusy">
                                                         <i class="fa fa-magic"/> Generar con Nancy AI
                                                         <span t-if="state.imageBusy" class="fa fa-spinner fa-spin" style="margin-left: 6px;"/>
                                                     </button>
@@ -1005,7 +940,7 @@
                                                             <div t-if="msg.imageUrl" class="bpi-pg-msg__result">
                                                                 <img class="bpi-pg-msg__img" t-att-src="msg.imageUrl" alt="Resultado"/>
                                                                 <div class="bpi-pg-msg__result-actions">
-                                                                    <button type="button" class="bpi-button bpi-button--success bpi-button--sm" t-on-click="() => this.saveGeneratedImage(msg.imageUrl)" t-att-disabled="state.imageBusy">
+                                                                    <button type="button" class="bpi-button bpi-button--success bpi-button--sm" t-on-click="() =&gt; this.saveGeneratedImage(msg.imageUrl)" t-att-disabled="state.imageBusy">
                                                                         <i class="fa fa-save"/> Guardar en Galería
                                                                     </button>
                                                                     <a class="bpi-button bpi-button--secondary bpi-button--sm" t-att-href="msg.imageUrl" download="nancy_ai_image.png" target="_blank">
@@ -1035,7 +970,7 @@
                             </t>
 
                             <t t-if="state.activeTab === 'seo'">
-                                <div class="bpi-panel">
+                                <p class="bpi-workspace-scope-note"><i class="fa fa-info-circle"/> Los campos editables son un borrador. Las propuestas Nancy no se publican; revisa y guarda explícitamente. El slug pertenece a Datos y se aplica con Guardar ficha.</p><div class="bpi-panel">
                                     <div class="bpi-panel__title"><h3><i class="fa fa-globe"/> SEO &amp; Metadata</h3></div>
                                     <div class="bpi-form-grid">
                                         <div class="bpi-inline-meta">
@@ -1051,9 +986,9 @@
                                         <label>Slug (URL)</label>
                                         <div class="bpi-inline-field">
                                             <input class="bpi-input" t-model="state.productForm.slug"/>
-                                            <button type="button" class="bpi-icon-button" t-on-click="() => this.regenerateSlug('seo')"><i class="fa fa-refresh"/></button>
+                                            <button type="button" class="bpi-icon-button" t-on-click="() =&gt; this.regenerateSlug('seo')"><i class="fa fa-refresh"/></button>
                                         </div>
-                                        <small class="bpi-muted">El slug se guarda con Guardar Cambios.</small>
+                                        <small class="bpi-muted">El slug se guarda con Guardar ficha.</small>
                                         <label>Keywords SEO</label>
                                         <textarea class="bpi-textarea" rows="3" t-model="state.seoForm.seoKeywords"/>
                                         <label>Titulo GEO</label>
@@ -1078,10 +1013,10 @@
                                         <i class="fa fa-clock-o"/> <t t-esc="state.seoJobMessage"/>
                                     </div>
                                 </div>
-                            </t>
+                            <section class="bpi-panel bpi-workspace-seo-saved"><div class="bpi-panel__title"><h3>Metadatos guardados</h3><p>Referencia actual de la ficha, separada de los campos que estás editando.</p></div><dl><dt>SEO · Título</dt><dd t-esc="product.catalogHealth &amp;&amp; product.catalogHealth.seo ? (seoData.seoTitle || 'Sin título') : 'Metadatos incompletos'"/><dt>SEO · Descripción</dt><dd t-esc="seoData.seoDescription || 'Sin descripción guardada'"/><dt>GEO · Título</dt><dd t-esc="seoData.geoTitle || 'Sin título guardado'"/><dt>GEO · Descripción</dt><dd t-esc="seoData.geoDescription || 'Sin descripción guardada'"/></dl><p class="bpi-muted">Las evaluaciones SEO/GEO existentes son estimaciones, no mediciones del posicionamiento.</p></section><section class="bpi-panel bpi-workspace-search-preview"><div class="bpi-panel__title"><h3>Vista previa del borrador SEO</h3><p>Simulación visual, no resultado real del buscador. Guardar metadatos no garantiza su publicación o posicionamiento.</p></div><small t-esc="'Tienda / ' + (state.productForm.slug || 'producto')"/><h4 t-esc="state.seoForm.seoTitle || 'Completa el título SEO'"/><p t-esc="state.seoForm.seoDescription || 'Completa la descripción SEO para revisar la vista previa.'"/></section></t>
 
                             <t t-if="state.activeTab === 'competitors'">
-                                <div class="bpi-panel bpi-panel--hero">
+                                <p class="bpi-workspace-scope-note"><i class="fa fa-info-circle"/> Las comparaciones usan las últimas coletas registradas y sus monedas normalizadas; no representan precios en tiempo real.</p><div class="bpi-panel bpi-panel--hero">
                                     <div class="bpi-hero-card">
                                         <div class="bpi-hero-card__icon"><i class="fa fa-search"/></div>
                                         <div>
@@ -1094,12 +1029,12 @@
 
                                 <div class="bpi-panel">
                                     <div class="bpi-panel__title">
-                                        <h3><i class="fa fa-bullseye"/> Competitor Intelligence</h3>
+                                        <h3><i class="fa fa-bullseye"/> Competidores registrados</h3>
                                         <p>Monitoriza precios y SEO de competidores</p>
                                     </div>
                                     <div class="bpi-inline-field">
                                         <input class="bpi-input" type="url" placeholder="URL del producto competidor (ej: https://dentaltix.com/producto...)" t-model="state.competitorForm.competitorUrl"/>
-                                        <button type="button" class="bpi-button bpi-button--primary" t-on-click="() => this.addCompetitor()" t-att-disabled="state.competitorBusy"><i class="fa fa-plus"/> Anadir</button>
+                                        <button type="button" class="bpi-button bpi-button--primary" t-on-click="() =&gt; this.addCompetitor()" t-att-disabled="state.competitorBusy"><i class="fa fa-plus"/> Anadir</button>
                                     </div>
 
                                     <t t-if="state.competitorForm.discoveredCompetitors.length">
@@ -1121,7 +1056,7 @@
                                                 </div>
                                                 <div class="bpi-discovery-card__actions">
                                                     <a t-if="item.url" class="bpi-button bpi-button--external" t-att-href="item.url" target="_blank" rel="noopener noreferrer" t-att-title="'Abrir pagina encontrada'"><i class="fa fa-external-link"/> Abrir pagina</a>
-                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.addCompetitor(item.name, item.url, item.description || item.matchReason || '')">Agregar</button>
+                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.addCompetitor(item.name, item.url, item.description || item.matchReason || '')">Agregar</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1131,7 +1066,7 @@
                                         <div class="bpi-competitor-list">
                                             <div class="bpi-competitor-row" t-foreach="currentCompetitors()" t-as="competitor" t-key="competitor.id">
                                                 <div class="bpi-competitor-row__main">
-                                                    <div class="bpi-competitor-row__header" t-on-click="() => this.toggleCompetitorExpand(competitor.id)">
+                                                    <div class="bpi-competitor-row__header" t-on-click="() =&gt; this.toggleCompetitorExpand(competitor.id)">
                                                         <div>
                                                             <strong t-esc="competitor.competitorName"/>
                                                             <p t-esc="competitor.competitorUrl"/>
@@ -1141,7 +1076,7 @@
                                                 </div>
                                                 <div class="bpi-competitor-row__metrics">
                                                     <div><span>Precio</span><strong t-esc="(competitor.competitorOfferPrice || competitor.competitorPrice) ? formatCompetitorPrice(competitor.competitorOfferPrice || competitor.competitorPrice, competitor.competitorCurrency) : 'Sin precio'"/></div>
-                                                    <div><span>SEO</span><strong t-esc="(competitor.seoScore || 0) + '/100'"/></div>
+                                                    <div><span>SEO estimado</span><strong t-esc="(competitor.seoScore || 0) + '/100'"/></div>
                                                     <div><span>Status</span><strong t-esc="competitor.scrapeStatus || 'pending'"/></div>
                                                 </div>
 
@@ -1214,9 +1149,9 @@
 
                                                 <div class="bpi-footer-actions">
                                                     <a t-if="competitor.competitorUrl" class="bpi-button bpi-button--external" t-att-href="competitor.competitorUrl" target="_blank" rel="noopener noreferrer" t-att-title="'Abrir pagina del competidor'"><i class="fa fa-external-link"/> Abrir pagina</a>
-                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.scrapeCompetitor(competitor.id)">Scrapear</button>
-                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() => this.analyzeCompetitor(competitor.id)">Analizar</button>
-                                                    <button type="button" class="bpi-button bpi-button--ghost" t-on-click="() => this.deleteCompetitor(competitor.id)"><i class="fa fa-trash-o"/> Eliminar</button>
+                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.scrapeCompetitor(competitor.id)">Scrapear</button>
+                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.analyzeCompetitor(competitor.id)">Analizar</button>
+                                                    <button type="button" class="bpi-button bpi-button--ghost" t-on-click="() =&gt; this.deleteCompetitor(competitor.id)"><i class="fa fa-trash-o"/> Eliminar</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1253,40 +1188,7 @@
                                         </div>
                                     </t>
                                 </div>
-                            </t>
-
-                            <t t-if="state.activeTab === 'analytics'">
-                                <div class="bpi-kpi-grid bpi-kpi-grid--analytics">
-                                    <div class="bpi-kpi-card">
-                                        <div class="bpi-kpi-card__copy">
-                                            <span>Precio (USD)</span>
-                                            <strong t-esc="formatProductPrice(product)"/>
-                                        </div>
-                                    </div>
-                                    <div class="bpi-kpi-card bpi-kpi-card--success">
-                                        <div class="bpi-kpi-card__copy">
-                                            <span>Margen</span>
-                                            <strong t-esc="formatPercent(detailMargin())"/>
-                                            <small t-esc="'Costo: ' + formatProductCost(product)"/>
-                                        </div>
-                                    </div>
-                                    <div class="bpi-kpi-card">
-                                        <div class="bpi-kpi-card__copy">
-                                            <span>Stock</span>
-                                            <strong t-esc="formatNumber(product.qtyAvailable || 0)"/>
-                                            <small t-esc="product.inStock ? 'En stock' : 'Stock bajo'"/>
-                                        </div>
-                                    </div>
-                                    <div class="bpi-kpi-card bpi-kpi-card--success">
-                                        <div class="bpi-kpi-card__copy">
-                                            <span>SEO Score</span>
-                                            <strong t-esc="(seoData.seoScore || 0) + '/100'"/>
-                                        </div>
-                                        <div class="bpi-progress"><span t-att-style="'width: ' + (seoData.seoScore || 0) + '%;'"/></div>
-                                    </div>
-                                </div>
-
-                                <div class="bpi-panel" t-if="currentCompetitors().length">
+                            <div class="bpi-panel" t-if="currentCompetitors().length">
                                     <div class="bpi-panel__title"><h3><i class="fa fa-bullseye"/> Analisis Competitivo</h3></div>
                                     <div class="bpi-grid bpi-grid--4">
                                         <div class="bpi-metric-box"><span>Tu Precio</span><strong t-esc="formatProductPrice(product)"/></div>
@@ -1302,8 +1204,8 @@
 
                                 <div class="bpi-panel bpi-panel--insights">
                                     <div class="bpi-panel__title">
-                                        <h3><i class="fa fa-sun-o"/> Nancy AI Insights</h3>
-                                        <p>Analisis inteligente basado en tus datos</p>
+                                        <h3><i class="fa fa-sun-o"/> Alertas operativas</h3>
+                                        <p>Reglas sobre precio, margen y existencias. No es un análisis de IA.</p>
                                     </div>
                                     <t t-if="analyticsInsights().length">
                                         <div class="bpi-insight-list">
@@ -1340,7 +1242,7 @@
                                                     <p><strong>Hola! Soy el agente de <t t-esc="currentProduct().name"/></strong></p>
                                                     <p class="bpi-muted">Puedo ayudarte a crear contenido, analizar competencia y optimizar este producto.</p>
                                                     <div class="bpi-chat-quick-actions">
-                                                        <button type="button" class="bpi-button bpi-button--secondary bpi-button--sm" t-foreach="chatQuickActions" t-as="action" t-key="action_index" t-on-click="() => this.useChatQuickAction(action)">
+                                                        <button type="button" class="bpi-button bpi-button--secondary bpi-button--sm" t-foreach="chatQuickActions" t-as="action" t-key="action_index" t-on-click="() =&gt; this.useChatQuickAction(action)">
                                                             <t t-esc="action"/>
                                                         </button>
                                                     </div>
@@ -1357,15 +1259,40 @@
                                         </div>
                                         <div class="bpi-chat-input-bar">
                                             <input class="bpi-input" type="text" maxlength="4000" placeholder="Escribe tu mensaje..." t-model="state.chatInput" t-on-keydown="onChatKeydown" t-att-disabled="state.chatBusy"/>
-                                            <button type="button" class="bpi-button bpi-button--primary" t-on-click="() => this.sendChatMessage()" t-att-disabled="state.chatBusy || !state.chatInput.trim()">
+                                            <button type="button" class="bpi-button bpi-button--primary" t-on-click="() =&gt; this.sendChatMessage()" t-att-disabled="state.chatBusy || !state.chatInput.trim()">
                                                 <i class="fa fa-paper-plane"/>
                                             </button>
                                         </div>
                                     </div>
                                 </div>
                             </t>
-                        </div>
-                    </div>
+                        <t t-if="state.activeTab === 'mercadolibre'">
+  <section class="bpi-panel bpi-meli-control-panel">
+    <div class="bpi-meli-detail-controls"><div><span class="bpi-meli-mark">ML</span><strong>Seguimiento del canal</strong><p>Solo consulta · Sin publicar, sincronizar ni modificar anuncios</p></div><div class="bpi-meli-account"><label for="bpi-detail-meli-account">Cuenta Mercado Libre</label><select id="bpi-detail-meli-account" t-att-value="state.meliAccountId" t-on-change="changeMeliAccount"><option value="">Todas las cuentas disponibles</option><option t-foreach="meliAccountOptions()" t-as="account" t-key="account.id" t-att-value="account.id" t-att-selected="templateString(account.id) === templateString(state.meliAccountId)" t-esc="account.name"/></select></div><button type="button" class="bpi-button bpi-button--primary" data-meli-refresh="true" t-on-click="requestMeliRefresh" t-att-disabled="!meliCanRefresh()" t-att-title="meliContext().message || 'Solicitar una consulta remota de este producto'"><i t-att-class="state.meliRefreshBusy ? 'fa fa-circle-o-notch fa-spin' : 'fa fa-cloud-download'"/> Consultar Mercado Libre</button></div>
+    <div t-if="state.meliDetail.available" class="bpi-meli-detail-stats"><div><strong t-esc="formatNumber(state.meliDetail.summary.variantCount)"/><span>Variantes con vínculo local</span></div><div><strong t-esc="formatNumber(state.meliDetail.summary.itemCount)"/><span>Anuncios conocidos</span></div><div><strong t-esc="formatNumber(state.meliDetail.summary.activeItemCount)"/><span>Anuncios conocidos activos</span></div></div><div class="bpi-workspace-scope-note" role="status"><i class="fa fa-info-circle"/><span t-esc="meliContext().message || 'Esta página muestra el espejo local y las últimas observaciones. Una consulta externa solo se solicita con el botón.'"/></div>
+    <p class="bpi-meli-provenance">Consulta local: <t t-esc="dashboardDateLabel(meliContext().generatedAt)"/> · Última observación: <t t-esc="meliDateLabel(meliContext().observedAt)"/> · Las comparaciones nunca utilizan borradores de la ficha.</p>
+    <p t-if="state.meliRefreshMessage" class="bpi-workspace-scope-note" role="status" t-esc="state.meliRefreshMessage"/>
+    <div t-if="state.meliRefreshJob" class="bpi-meli-job"><i class="fa fa-tasks"/><strong t-esc="meliStateLabel(state.meliRefreshJob.state)"/><span><t t-esc="state.meliRefreshJob.completed"/> / <t t-esc="state.meliRefreshJob.total"/> recursos</span><small t-esc="dashboardDateLabel(state.meliRefreshJob.createdAt)"/></div>
+  </section>
+  <div t-if="state.meliBusy" class="bpi-workspace-loading" role="status"><i class="fa fa-circle-o-notch fa-spin"/> Leyendo el estado local…</div>
+  <div t-if="state.meliError" class="bpi-home-feedback bpi-home-feedback--error" role="alert"><p t-esc="state.meliError"/><button type="button" class="bpi-button bpi-button--secondary" t-on-click="loadMeliDetail">Reintentar lectura local</button></div>
+  <section t-if="!state.meliBusy and !state.meliError and !meliGroups().length" class="bpi-panel bpi-meli-empty"><i class="fa fa-link"/><h3 t-esc="state.meliDetail.summary.label || meliStateLabel(meliContext().state)"/><p t-esc="state.meliDetail.summary.reason || meliContext().message"/><p>Sin vínculo local no significa que el producto no tenga anuncios en Mercado Libre.</p></section>
+  <section t-foreach="meliGroups()" t-as="group" t-key="group.key" class="bpi-panel bpi-meli-group" t-att-data-meli-group="group.key">
+    <div class="bpi-meli-group__head"><div><span class="bpi-workspace-eyebrow" t-esc="group.accountName"/><h3 t-esc="group.variantName || group.sku || 'Variante'"/><p>SKU <b t-esc="group.sku || 'Sin SKU'"/> · User Product <b t-esc="group.userProductId || 'Sin identificador'"/> · Categoría ML <b t-esc="group.categoryId || 'Sin categoría'"/></p></div><span class="bpi-home-badge" t-esc="meliStateLabel(group.conditionState)"/></div>
+    <div class="bpi-meli-conditions"><div t-foreach="group.conditions" t-as="condition" t-key="condition.key" t-att-class="'bpi-meli-condition ' + (condition.state === 'complete' || condition.state === 'present' ? 'is-complete' : '')"><i class="fa fa-credit-card"/><strong t-esc="condition.label"/><span t-esc="meliStateLabel(condition.state)"/><small t-esc="condition.itemIds.join(' · ') || 'Sin publicación identificada'"/></div></div>
+    <article t-foreach="group.items" t-as="item" t-key="item.itemId + ':' + (item.variationId || '')" class="bpi-meli-item">
+      <div class="bpi-meli-item__head"><div><strong t-esc="item.itemId"/><span t-if="item.variationId"> / Variante ML <t t-esc="item.variationId"/></span><p t-esc="item.title"/></div><div class="bpi-meli-item__badges"><span class="bpi-home-badge" t-esc="meliStateLabel(item.status)"/><span class="bpi-home-badge" t-esc="item.logisticType ? meliStateLabel(item.logisticType) : 'Logística sin verificar'"/><span t-if="item.manual" class="bpi-home-badge bpi-home-badge--amber">Gestión manual</span><a t-if="item.url" t-att-href="item.url" target="_blank" rel="noopener noreferrer" class="bpi-button bpi-button--secondary">Ver anuncio <i class="fa fa-external-link"/></a></div></div>
+      <p class="bpi-meli-provenance">Publicación: <t t-esc="item.statusSource || 'Espejo local'"/> · <t t-esc="meliDateLabel(item.statusObservedAt)"/></p><p t-if="item.subStatus" class="bpi-muted" t-esc="item.subStatus"/>
+      <div class="bpi-meli-dimensions">
+        <section><h4><i class="fa fa-cubes"/> Stock <span t-esc="meliStateLabel(item.stock.state)"/></h4><dl><dt>Objetivo guardado del integrador</dt><dd t-esc="meliValue(item.stock.expected)"/><dt>Cantidad observada en ML</dt><dd t-esc="meliValue(item.stock.observed)"/><dt>Stock Full (separado)</dt><dd t-esc="meliValue(item.stock.full)"/></dl><p t-esc="item.stock.reason"/><small><t t-esc="item.stock.source ? meliStateLabel(item.stock.source) : 'Sin evidencia'"/> · <t t-esc="meliDateLabel(item.stock.observedAt)"/></small></section>
+        <section><h4><i class="fa fa-tag"/> Precios <span t-esc="meliStateLabel(item.price.state)"/></h4><dl><dt>Tarifa Odoo configurada</dt><dd t-esc="item.price.priceSource === 'list_price' ? 'Precio base del producto' : (item.price.pricelistName || 'Sin tarifa identificada')"/><dt>Último objetivo guardado</dt><dd t-esc="meliValue(item.price.expected, item.price.currency)"/><dt>Precio estándar observado</dt><dd t-esc="meliValue(item.price.standard, item.price.currency)"/><dt>Precio al comprador (contextual)</dt><dd t-esc="meliValue(item.price.sale, item.price.currency)"/></dl><p t-esc="item.price.reason"/><small><t t-esc="item.price.source ? meliStateLabel(item.price.source) : 'Sin evidencia'"/> · <t t-esc="meliDateLabel(item.price.observedAt)"/></small></section>
+        <section><h4><i class="fa fa-exchange"/> Integración</h4><dl><dt>Estado de tarea</dt><dd t-esc="meliStateLabel(item.task.state)"/><dt>Flujo</dt><dd t-esc="item.task.flow ? meliStateLabel(item.task.flow) : 'Sin tarea conocida'"/></dl><p t-esc="item.task.reason || 'La observación no confirma ni modifica tareas del integrador.'"/><small>Última confirmación: <t t-esc="meliDateLabel(item.task.checkedAt)"/></small></section>
+      </div>
+    </article>
+    <p class="bpi-meli-provenance">Los objetivos son los valores guardados por el integrador, no un nuevo cálculo. El stock compartido de un User Product no se suma entre anuncios. Full no se compara con el inventario total de Odoo.</p>
+  </section>
+<section t-if="state.meliDetail.jobs &amp;&amp; state.meliDetail.jobs.length" class="bpi-panel"><div class="bpi-panel__title"><h3>Últimas consultas solicitadas</h3><p>Estado del observador; no son tareas de publicación ni de sincronización.</p></div><div t-foreach="state.meliDetail.jobs" t-as="job" t-key="job.id" class="bpi-meli-job"><strong t-esc="meliStateLabel(job.state)"/><span><t t-esc="job.completed"/> / <t t-esc="job.total"/> recursos</span><small t-esc="dashboardDateLabel(job.createdAt)"/><span t-esc="job.message"/></div></section></t></div>
+                    </div><div t-if="state.detailLeavePrompt" class="bpi-workspace-modal-backdrop"><section class="bpi-workspace-leave-dialog" t-ref="detailLeaveDialog" tabindex="-1" t-on-keydown="onDetailLeaveKeydown" role="alertdialog" aria-modal="true" aria-labelledby="bpi-leave-title" aria-describedby="bpi-leave-message"><span class="bpi-workspace-modal-icon"><i class="fa fa-pencil-square-o"/></span><h2 id="bpi-leave-title" t-esc="state.detailLeavePrompt.title"/><p id="bpi-leave-message" t-esc="state.detailLeavePrompt.message"/><ul><li t-foreach="state.detailLeavePrompt.sections" t-as="section" t-key="section.id" t-esc="section.label"/></ul><div class="bpi-workspace-leave-actions"><button type="button" class="bpi-button bpi-button--primary" data-detail-leave="stay" autofocus="autofocus" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('stay')">Continuar editando</button><button type="button" class="bpi-button bpi-button--secondary" data-detail-leave="discard" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('discard')">Descartar y salir</button><button t-if="state.detailLeavePrompt.canSave" type="button" class="bpi-button bpi-button--secondary" data-detail-leave="save" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('save')">Guardar ficha y salir</button></div></section></div></div>
                 </t>
             </t>
         </div>

@@ -232,7 +232,7 @@ class BPIDashboardService(models.AbstractModel):
         return fields.Datetime.to_datetime(value).isoformat() + "Z" if value else False
 
     @api.model
-    def dashboard_overview(self, category_id=False):
+    def dashboard_overview(self, category_id=False, meli_account_id=False):
         self._ensure_manager()
         category = self._dashboard_category(category_id)
         products = self.env["product.template"].search(expression.AND([
@@ -240,6 +240,7 @@ class BPIDashboardService(models.AbstractModel):
             self._dashboard_category_domain(category),
         ]))
         coverage = self._dashboard_coverage_sets(products)
+        meli = self._meli_projection(products, account_id=self._meli_account_key(meli_account_id))
         specifications = (
             ("all", _("Productos activos"), _("Productos activos y disponibles para la venta.")),
             ("published", _("Publicados"), _("Productos publicados del catálogo activo vendible.")),
@@ -273,6 +274,7 @@ class BPIDashboardService(models.AbstractModel):
                 "total": len(products), "publishedPercent": kpis[1]["percent"],
             },
             "jobs": self._dashboard_jobs(products),
+            "meliOverview": self._meli_overview_payload(meli, len(products)),
             "exchangeRate": self.env["product.template"]._bpi_exchange_rate(),
         }
 
@@ -291,7 +293,7 @@ class BPIDashboardService(models.AbstractModel):
         }
 
     @api.model
-    def dashboard_payload(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog"):
+    def dashboard_payload(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False):
         self._ensure_manager()
         if tab not in ("all", "new", "discontinued"):
             raise UserError(_("Selecciona una sección válida del catálogo."))
@@ -300,6 +302,8 @@ class BPIDashboardService(models.AbstractModel):
         category = self._dashboard_category(category_id)
         quality_filter = self._dashboard_quality_filter(quality_filter)
         sort_key = self._dashboard_sort_key(sort_key)
+        meli_filter = self._meli_filter_key(meli_filter)
+        meli_account_id = self._meli_account_key(meli_account_id)
         try:
             safe_page = max(int(page or 1), 1)
             safe_limit = min(max(int(limit or 40), 1), 120)
@@ -314,6 +318,12 @@ class BPIDashboardService(models.AbstractModel):
         if quality_filter != "all":
             coverage = self._dashboard_coverage_sets(product_model.search(domain))
             domain = expression.AND([domain, [("id", "in", sorted(coverage[quality_filter]))]])
+        meli = None
+        if meli_filter:
+            meli = self._meli_projection(product_model.search(domain), account_id=meli_account_id)
+            if not meli.get("available"):
+                raise UserError(meli.get("message") or _("Los filtros de Mercado Libre no están disponibles."))
+            domain = expression.AND([domain, [("id", "in", sorted(meli["sets"][meli_filter]))]])
         tab_counts = {
             key: product_model.search_count(expression.AND([domain, self._dashboard_tab_domain(key)]))
             for key in ("all", "new", "discontinued")
@@ -330,17 +340,21 @@ class BPIDashboardService(models.AbstractModel):
         # all catalog templates just to render a paginated checklist.
         if coverage is None:
             coverage = self._dashboard_coverage_sets(products)
+        if meli is None:
+            meli = self._meli_projection(products, account_id=meli_account_id)
         exchange_rate = product_model._bpi_exchange_rate()
         rows = []
         for product in products:
             row = product.bpi_dashboard_payload(exchange_rate=exchange_rate)
             row.update(coverage["row_metadata"][product.id])
             row["catalogHealth"] = self._dashboard_catalog_health(coverage, product.id)
+            row["meliSummary"] = meli.get("rows", {}).get(product.id, self._meli_summary_default())
             rows.append(row)
         return {
             "products": rows,
             "exchangeRate": exchange_rate, "stats": self._dashboard_stats(category), "tabCounts": tab_counts,
             "categoryId": category.id or False, "qualityFilter": quality_filter, "sortKey": sort_key,
+            "meli": self._meli_public_context(meli), "meliFilter": meli_filter,
             "pager": {
                 "page": safe_page, "pageCount": page_count, "total": total_rows, "limit": safe_limit,
                 "hasNext": safe_page < page_count, "hasPrevious": safe_page > 1,
@@ -348,8 +362,8 @@ class BPIDashboardService(models.AbstractModel):
         }
 
     @api.model
-    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog"):
+    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False):
         return self.dashboard_payload(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
-            sort_key=sort_key,
+            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter,
         )

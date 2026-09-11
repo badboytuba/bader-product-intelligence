@@ -5,3 +5,4 @@ from . import product_intelligence
 from . import ai_job
 from . import res_config_settings
 from . import dashboard
+from . import meli_provider
