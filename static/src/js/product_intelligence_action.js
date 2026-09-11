@@ -214,6 +214,9 @@ export class ProductIntelligenceAction extends Component {
             overviewError: "",
             dashboardCategoryId: "",
             dashboardQualityFilter: "",
+            dashboardSortKey: "catalog",
+            catalogReviewId: false,
+            catalogBusyRows: {},
             dashboardCatalogUpdatedAt: "",
             showDashboardSettings: false,
             dashboardTab: "all",
@@ -532,6 +535,8 @@ export class ProductIntelligenceAction extends Component {
         this.state.seoJobMessage = "";
         this.state.seoPreviewPending = false;
         this.state.showImageModal = false;
+        this.state.catalogReviewId = false;
+        this.state.catalogBusyRows = {};
         this.contentDescriptionSelection = null;
         this.technicalDescriptionSelection = null;
         this.state.playground = { messages: [], canvasUrl: "", inputText: "" };
@@ -787,6 +792,7 @@ export class ProductIntelligenceAction extends Component {
 
     dashboardQualityLabel() {
         const labels = {
+            needs_attention: "Ficha incompleta", complete: "Ficha completa",
             published: "Publicados", unpublished: "Sin publicar", content: "Contenido completo",
             image: "Con imagen", seo: "Metadatos SEO completos", geo: "Metadatos GEO completos",
             faq: "Con FAQs", competitor: "Con competidores registrados", category: "Con categoría",
@@ -878,6 +884,7 @@ export class ProductIntelligenceAction extends Component {
             limit,
             category_id: this.state.dashboardCategoryId ? Number(this.state.dashboardCategoryId) : false,
             quality_filter: this.state.dashboardQualityFilter || false,
+            sort_key: this.state.dashboardSortKey || "catalog",
             ...this.dashboardRequestContext(),
         };
     }
@@ -899,6 +906,7 @@ export class ProductIntelligenceAction extends Component {
 
     async loadDashboard(overrides = {}, options = {}) {
         const params = this.resolveDashboardParams(overrides);
+        this.closeCatalogReview();
         this.activateDashboardSection("catalog");
         const request = this.beginRequest("dashboard");
         this.state.dashboardTab = params.tab;
@@ -1844,6 +1852,197 @@ export class ProductIntelligenceAction extends Component {
     onDashboardSearchInput(ev) {
         this.state.searchTerm = ev.target.value || "";
         this.scheduleDashboardReload();
+    }
+
+    catalogSortOptions() {
+        return [
+            { value: "catalog", label: "Orden del catálogo" },
+            { value: "recent", label: "Última edición" },
+            { value: "name_asc", label: "Nombre: A–Z" },
+            { value: "name_desc", label: "Nombre: Z–A" },
+            { value: "price_asc", label: "Precio base: menor a mayor" },
+            { value: "price_desc", label: "Precio base: mayor a menor" },
+        ];
+    }
+
+    catalogQualityOptions() {
+        return [
+            { value: "", label: "Todas las fichas" },
+            { value: "needs_attention", label: "Ficha incompleta" },
+            { value: "complete", label: "Ficha completa" },
+            { value: "published_missing_image", label: "Publicados sin imagen" },
+            { value: "published_missing_content", label: "Publicados sin descripción comercial" },
+            { value: "missing_seo", label: "SEO incompleto" },
+            { value: "missing_geo", label: "GEO incompleto" },
+            { value: "missing_category", label: "Sin categoría" },
+            { value: "published", label: "Publicados" },
+            { value: "unpublished", label: "Sin publicar" },
+            { value: "content", label: "Contenido completo" },
+            { value: "image", label: "Con imagen" },
+            { value: "seo", label: "Metadatos SEO completos" },
+            { value: "geo", label: "Metadatos GEO completos" },
+            { value: "faq", label: "Con FAQs" },
+            { value: "category", label: "Con categoría" },
+            { value: "competitor", label: "Con competidores registrados" },
+        ];
+    }
+
+    async changeDashboardSort(ev) {
+        const sortKey = ev.target.value;
+        if (!this.catalogSortOptions().some((option) => option.value === sortKey)) return;
+        if (sortKey === (this.state.dashboardSortKey || "catalog") && !this.state.error) return;
+        this.state.dashboardSortKey = sortKey;
+        return this.loadDashboard({ page: 1 }, { showSpinner: false });
+    }
+
+    async changeDashboardQualityFilter(ev) {
+        const quality = ev.target.value || "";
+        if (!this.catalogQualityOptions().some((option) => option.value === quality)) return;
+        if (quality === (this.state.dashboardQualityFilter || "") && !this.state.error) return;
+        this.state.dashboardQualityFilter = quality;
+        return this.loadDashboard({ page: 1 }, { showSpinner: false });
+    }
+
+    async clearCatalogFilters() {
+        this.state.dashboardQualityFilter = "";
+        this.state.dashboardSortKey = "catalog";
+        return this.loadDashboard({ search: "", page: 1 }, { showSpinner: false });
+    }
+
+    catalogHasFilters() {
+        return !!(this.state.searchTerm || this.state.dashboardQualityFilter ||
+            (this.state.dashboardSortKey && this.state.dashboardSortKey !== "catalog"));
+    }
+
+    catalogResultLabel() {
+        const pager = this.state.dashboardPager || this.dashboardDefaultPager();
+        const total = Math.max(0, Number(pager.total) || 0);
+        if (!total) return "Sin productos para esta selección";
+        const first = ((pager.page || 1) - 1) * (pager.limit || DASHBOARD_PAGE_SIZE) + 1;
+        const last = Math.min(first + (pager.limit || DASHBOARD_PAGE_SIZE) - 1, total);
+        return `Mostrando ${this.formatNumber(first)}–${this.formatNumber(last)} de ${this.formatNumber(total)} productos`;
+    }
+
+    catalogHealthItems(row) {
+        const health = row?.catalogHealth;
+        if (!health) return [];
+        return [
+            { key: "commercial", label: "Descripción comercial", section: "content", icon: "fa fa-file-text-o" },
+            { key: "technical", label: "Descripción técnica", section: "content", icon: "fa fa-list-alt" },
+            { key: "image", label: "Imagen", section: "images", icon: "fa fa-picture-o" },
+            { key: "seo", label: "Metadatos SEO", section: "seo", icon: "fa fa-search" },
+            { key: "geo", label: "Metadatos GEO", section: "seo", icon: "fa fa-crosshairs" },
+            { key: "faq", label: "FAQs", section: "content", icon: "fa fa-comments-o" },
+            { key: "category", label: "Categoría", section: "datos", icon: "fa fa-folder-open-o" },
+        ].map((item) => ({ ...item, complete: health[item.key] === true }));
+    }
+
+    catalogHealthLabel(row) {
+        const items = this.catalogHealthItems(row);
+        return items.length ? `${items.filter((item) => item.complete).length} de 7 secciones completas` : "Sin evaluar";
+    }
+
+    catalogHealthPercent(row) {
+        const items = this.catalogHealthItems(row);
+        return items.length ? Math.round(items.filter((item) => item.complete).length / items.length * 100) : 0;
+    }
+
+    catalogNextAction(row) {
+        const items = this.catalogHealthItems(row);
+        const copy = {
+            image: ["Añadir imagen", "Falta una imagen disponible en el catálogo."],
+            commercial: ["Completar descripción", "Falta la descripción comercial."],
+            technical: ["Completar ficha técnica", "Falta la descripción técnica."],
+            seo: ["Completar SEO", "Faltan metadatos SEO."],
+            geo: ["Completar GEO", "Faltan metadatos GEO."],
+            faq: ["Añadir FAQs", "Falta una pregunta y respuesta completas."],
+            category: ["Asignar categoría", "Falta la categoría de comercio electrónico."],
+        };
+        for (const key of ["image", "commercial", "technical", "seo", "geo", "faq", "category"]) {
+            const item = items.find((candidate) => candidate.key === key && !candidate.complete);
+            if (item) return { section: item.section, label: copy[key][0], reason: copy[key][1] };
+        }
+        return { section: "datos", label: "Abrir ficha", reason: items.length
+            ? "Las siete secciones están completas; revisa los datos del producto."
+            : "Revisa los datos del producto." };
+    }
+
+    catalogStockLabel(row) {
+        return Number(row?.qtyAvailable) > 0 ? "En stock" : "Sin stock";
+    }
+
+    catalogStockClass(row) {
+        return Number(row?.qtyAvailable) > 0 ? "is-in-stock" : "is-out-of-stock";
+    }
+
+    catalogProductStatusLabel(row) {
+        if (row?.isArchived || row?.isActive === false) return "Archivado";
+        if (row?.isDiscontinued || row?.saleOk === false) return "Fuera de venta";
+        return "Activo";
+    }
+
+    catalogStatusClass(row) {
+        if (row?.isArchived || row?.isActive === false) return "is-archived";
+        if (row?.isDiscontinued || row?.saleOk === false) return "is-unavailable";
+        return "is-active";
+    }
+
+    catalogPublicationLabel(row) {
+        return row?.isPublished ? "Publicado" : "Sin publicar";
+    }
+
+    catalogPublicationClass(row) {
+        return row?.isPublished ? "is-published" : "is-unpublished";
+    }
+
+    catalogMarginKnown(row) {
+        const cost = Number(row?.effectiveCostUsd ?? row?.costUsd ?? 0);
+        const price = this.effectivePriceRange(row || {}).min;
+        return Number.isFinite(cost) && cost > 0 && Number.isFinite(price) && price > 0;
+    }
+
+    catalogRowBusy(row) {
+        const id = row && typeof row === "object" ? row.id : row;
+        return !!(this.state.dashboardBusy || this.state.catalogBusyRows?.[id]);
+    }
+
+    toggleCatalogReview(row) {
+        if (!row?.id || this.catalogRowBusy(row)) return;
+        this.state.catalogReviewId = String(this.state.catalogReviewId) === String(row.id) ? false : row.id;
+    }
+
+    closeCatalogReview(ev = null) {
+        const reviewId = this.state.catalogReviewId;
+        const home = ev?.currentTarget?.closest?.(".bpi-home");
+        this.state.catalogReviewId = false;
+        // Only a deliberate close/Escape returns keyboard focus. Automatic
+        // invalidation during navigation or refresh must never steal focus.
+        if (home && reviewId) {
+            const invoker = Array.from(home.querySelectorAll("[data-catalog-review]"))
+                .find((button) => button.dataset.catalogReview === String(reviewId));
+            if (invoker && !invoker.disabled) invoker.focus({ preventScroll: true });
+        }
+    }
+
+    onCatalogReviewKeydown(ev) {
+        if (ev.key !== "Escape" || !this.state.catalogReviewId) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.closeCatalogReview(ev);
+    }
+
+    catalogReviewRow() {
+        return (this.state.dashboardRows || []).find((row) => String(row.id) === String(this.state.catalogReviewId)) || null;
+    }
+
+    async openCatalogProduct(row, section = "datos") {
+        if (!row?.id || this.catalogRowBusy(row)) return;
+        const allowed = new Set(["datos", "content", "seo", "images", "competitors"]);
+        this.state.origin = "dashboard";
+        // Set the tab before loading; never apply it after awaiting a request
+        // that may now belong to a different product/navigation generation.
+        this.state.activeTab = allowed.has(section) ? section : "datos";
+        await this.loadDetail(row.id);
     }
 
     async changeDashboardTab(tab) {
@@ -3101,34 +3300,42 @@ export class ProductIntelligenceAction extends Component {
         }
     }
 
-    async toggleDashboardPublish(productId, checked) {
-        const request = this.beginRequest("toggleDashboardPublish");
+    async mutateCatalogFlag(productId, field, checked, event = null) {
+        const currentRow = (this.state.dashboardRows || []).find((row) => String(row.id) === String(productId));
+        const previous = currentRow ? !!currentRow[field] : !checked;
+        if (this.catalogRowBusy(productId)) {
+            if (event?.target) event.target.checked = previous;
+            return;
+        }
+        this.state.catalogBusyRows = this.state.catalogBusyRows || {};
+        this.state.catalogBusyRows[productId] = true;
+        const request = this.beginRequest(`catalogFlag:${productId}:${field}`);
         try {
             await this.rpc("/bader_product_intelligence/update_product", {
-                product_tmpl_id: productId,
-                values: { isPublished: checked },
+                product_tmpl_id: productId, values: { [field]: !!checked },
             });
             if (!this.isRequestCurrent(request)) return;
+            const updatedRow = (this.state.dashboardRows || []).find((row) => String(row.id) === String(productId));
+            if (updatedRow) updatedRow[field] = !!checked;
             await this.loadDashboard({}, { showSpinner: false });
         } catch (error) {
             if (!this.isRequestCurrent(request)) return;
-            this.notify(this.errorMessage(error, "No se pudo actualizar la publicacion."), "danger");
+            const row = (this.state.dashboardRows || []).find((item) => String(item.id) === String(productId));
+            if (row) row[field] = previous;
+            if (event?.target) event.target.checked = previous;
+            this.notify(this.errorMessage(error, field === "isPublished"
+                ? "No se pudo actualizar la publicación." : "No se pudo actualizar el destacado."), "danger");
+        } finally {
+            if (this.isRequestCurrent(request)) delete this.state.catalogBusyRows[productId];
         }
     }
 
-    async toggleDashboardFeatured(productId, checked) {
-        const request = this.beginRequest("toggleDashboardFeatured");
-        try {
-            await this.rpc("/bader_product_intelligence/update_product", {
-                product_tmpl_id: productId,
-                values: { featured: checked },
-            });
-            if (!this.isRequestCurrent(request)) return;
-            await this.loadDashboard({}, { showSpinner: false });
-        } catch (error) {
-            if (!this.isRequestCurrent(request)) return;
-            this.notify(this.errorMessage(error, "No se pudo actualizar el destacado."), "danger");
-        }
+    async toggleDashboardPublish(productId, checked, event = null) {
+        return this.mutateCatalogFlag(productId, "isPublished", checked, event);
+    }
+
+    async toggleDashboardFeatured(productId, checked, event = null) {
+        return this.mutateCatalogFlag(productId, "featured", checked, event);
     }
 
     quickAction(tabId) {

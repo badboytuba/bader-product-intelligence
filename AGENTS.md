@@ -89,3 +89,7 @@ Release `16.0.1.3.0` was developed on `feature/bpi-technical-description` and ce
 ## Executive dashboard invariants — 16.0.1.4.0
 
 Read `docs/EXECUTIVE_DASHBOARD.md` before changing home KPIs or filters. Keep overview counts and catalog drill-down driven by one predicate implementation, active saleable templates, current category and selected companies. Dashboard RPCs must forward captured `user.context`. Never aggregate the current page, download image binaries, call providers or construct full operational product payloads for overview. New dashboard styles are scoped and backend-only. Preserve all detail/save/job protections from 1.3.1; no PROD delivery is authorized.
+
+## Catalog workbench invariants — 16.0.1.5.0
+
+Read `docs/CATALOG_WORKBENCH.md` before changing catalog rows, preparation or sorting. Seven-section presence is not an AI quality/ranking score; competitors remain optional. Reuse shared batch predicates, preserve the `catalog` default ordering and explicitly label base-price sorts. Inline inspection must not make RPCs; next-section links only navigate. Keep per-row mutation pending/checkbox rollback and all prior async guards. Mobile uses the same table DOM as cards, with no horizontal page/table overflow. Catalog styles must not alter overview or detail. Delivery remains QAS-only.

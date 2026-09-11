@@ -742,7 +742,8 @@ function dashboardAction() {
     Object.assign(action.state, {
         productId: null, viewMode: "dashboard", dashboardSection: "overview",
         dashboardOverview: action.dashboardDefaultOverview(), dashboardCategoryId: "",
-        dashboardQualityFilter: "", dashboardCatalogUpdatedAt: "", overviewError: "",
+        dashboardQualityFilter: "", dashboardSortKey: "catalog", catalogReviewId: false, catalogBusyRows: {},
+        dashboardCatalogUpdatedAt: "", overviewError: "",
         overviewBusy: false, dashboardBusy: false, loading: false,
         dashboardPager: action.dashboardDefaultPager(), dashboardRows: [],
     });
@@ -788,7 +789,7 @@ QUnit.test("KPI drill-down clears search and page but preserves the shared categ
     assert.strictEqual(action.state.searchTerm, "");
     assert.deepEqual(calls[0], {
         route: "/bader_product_intelligence/dashboard",
-        params: { tab: "all", search: "", page: 1, limit: 40, category_id: 7, quality_filter: "published_missing_image" },
+        params: { tab: "all", search: "", page: 1, limit: 40, category_id: 7, quality_filter: "published_missing_image", sort_key: "catalog" },
     });
     assert.strictEqual(action.dashboardQualityLabel(), "Publicados sin imagen");
     await action.openDashboardMetric("all");
@@ -893,7 +894,7 @@ QUnit.test("returning from product detail preserves catalog category quality sea
     await action.openDetail(2);
     await action.goBack();
     assert.strictEqual(action.state.dashboardSection, "catalog");
-    assert.deepEqual(calls[1].params, { tab: "all", search: "pinza", page: 3, limit: 40, category_id: 7, quality_filter: "faq" });
+    assert.deepEqual(calls[1].params, { tab: "all", search: "pinza", page: 3, limit: 40, category_id: 7, quality_filter: "faq", sort_key: "catalog" });
     assert.strictEqual(action.state.dashboardPager.page, 3);
     assert.strictEqual(action.state.searchTerm, "pinza");
 });
@@ -1053,6 +1054,477 @@ QUnit.test("populated dashboard mounts its actual OWL template and supports cate
         assert.ok(target.querySelector(".bpi-home-catalog"), "real event binding opens the catalog");
         assert.strictEqual(calls[calls.length - 1].params.quality_filter, "seo");
         assert.strictEqual(calls[calls.length - 1].params.category_id, 7);
+    } finally {
+        app.destroy();
+        target.remove();
+    }
+});
+
+
+function catalogRow(id = 2, overrides = {}) {
+    return {
+        id, name: `Producto ${id}`, sku: `SKU-${id}`, qtyAvailable: 3,
+        isPublished: false, featured: false, isActive: true, saleOk: true,
+        priceUsd: 20, effectivePriceMinUsd: 20, effectivePriceMaxUsd: 20, costUsd: 10, effectiveCostUsd: 10,
+        catalogHealth: { commercial: true, technical: false, image: false, seo: false, geo: false, faq: false, category: true, competitor: false, completed: 2, total: 7, percent: 29 },
+        ...overrides,
+    };
+}
+
+QUnit.test("catalog sorting preserves scoped filters and selected companies through pagination and detail return", async (assert) => {
+    const action = dashboardAction();
+    Object.assign(action.state, { dashboardSection: "catalog", dashboardCategoryId: "7", dashboardQualityFilter: "needs_attention", searchTerm: "pinza" });
+    action.state.dashboardPager = { ...action.dashboardDefaultPager(), page: 3, pageCount: 4 };
+    action.user = { context: { allowed_company_ids: [3] } };
+    const calls = [];
+    action.rpc = async (route, params) => {
+        calls.push({ route, params });
+        return route.endsWith("/data") ? stabilizationPayload(2)
+            : { products: [catalogRow()], pager: { page: params.page, pageCount: 4, total: 130 } };
+    };
+    await action.changeDashboardSort({ target: { value: "price_asc" } });
+    assert.strictEqual(calls[0].params.sort_key, "price_asc");
+    assert.strictEqual(calls[0].params.category_id, 7);
+    assert.strictEqual(calls[0].params.quality_filter, "needs_attention");
+    assert.strictEqual(calls[0].params.search, "pinza");
+    assert.strictEqual(calls[0].params.page, 1);
+    assert.deepEqual(calls[0].params.context.allowed_company_ids, [3]);
+    await action.changeDashboardPage(2);
+    await action.openCatalogProduct(catalogRow(), "images");
+    assert.strictEqual(action.state.activeTab, "images");
+    await action.goBack();
+    assert.strictEqual(calls[calls.length - 1].params.sort_key, "price_asc");
+    assert.strictEqual(calls[calls.length - 1].params.page, 2);
+    assert.strictEqual(action.state.dashboardQualityFilter, "needs_attention");
+    assert.ok(action.catalogSortOptions().find((option) => option.value === "price_asc").label.includes("Precio base"));
+});
+
+QUnit.test("late catalog sort responses and failures cannot replace the latest order", async (assert) => {
+    const action = dashboardAction();
+    action.state.dashboardSection = "catalog";
+    const older = stabilizationDeferred();
+    const newer = stabilizationDeferred();
+    action.rpc = (_route, params) => params.sort_key === "recent" ? older.promise : newer.promise;
+    const first = action.changeDashboardSort({ target: { value: "recent" } });
+    const second = action.changeDashboardSort({ target: { value: "name_asc" } });
+    newer.resolve({ products: [catalogRow(22)] });
+    await second;
+    older.reject(new Error("obsolete sort error"));
+    await first;
+    assert.strictEqual(action.state.dashboardRows[0].id, 22);
+    assert.strictEqual(action.state.dashboardSortKey, "name_asc");
+    assert.strictEqual(action.state.error, "");
+    assert.notOk(action.state.dashboardBusy);
+});
+
+QUnit.test("catalog quality and reset controls preserve category and base tab without retaining stale review", async (assert) => {
+    const action = dashboardAction();
+    Object.assign(action.state, { dashboardSection: "catalog", dashboardTab: "new", dashboardCategoryId: "7", dashboardSortKey: "recent", searchTerm: "pinza" });
+    const calls = [];
+    action.rpc = async (route, params) => { calls.push({ route, params }); return { products: [catalogRow()] }; };
+    await action.changeDashboardQualityFilter({ target: { value: "complete" } });
+    assert.strictEqual(calls[0].params.quality_filter, "complete");
+    assert.strictEqual(calls[0].params.page, 1);
+    assert.strictEqual(calls[0].params.sort_key, "recent");
+    assert.strictEqual(action.dashboardQualityLabel(), "Ficha completa");
+    action.toggleCatalogReview(action.state.dashboardRows[0]);
+    assert.strictEqual(action.state.catalogReviewId, 2);
+    await action.clearCatalogFilters();
+    assert.deepEqual(calls[1].params, { tab: "new", search: "", page: 1, limit: 40, category_id: 7, quality_filter: false, sort_key: "catalog" });
+    assert.notOk(action.state.catalogReviewId);
+    assert.notOk(action.catalogHasFilters(), "category/base tab are intentionally retained, not resettable filters");
+    await action.changeDashboardSort({ target: { value: "unknown" } });
+    await action.changeDashboardQualityFilter({ target: { value: "unknown" } });
+    assert.strictEqual(calls.length, 2, "invalid controls cannot broaden scope or trigger RPC");
+});
+
+QUnit.test("catalog inline review uses current rows only and never fetches product details", async (assert) => {
+    const action = dashboardAction();
+    action.state.dashboardSection = "catalog";
+    action.state.dashboardRows = [catalogRow()];
+    let calls = 0;
+    action.rpc = async () => { calls++; return { products: [catalogRow(3)] }; };
+    action.toggleCatalogReview(action.state.dashboardRows[0]);
+    assert.strictEqual(action.catalogReviewRow().id, 2);
+    assert.strictEqual(calls, 0);
+    action.toggleCatalogReview(action.state.dashboardRows[0]);
+    assert.strictEqual(action.catalogReviewRow(), null);
+    action.toggleCatalogReview(action.state.dashboardRows[0]);
+    await action.loadDashboard();
+    assert.strictEqual(action.catalogReviewRow(), null);
+    assert.strictEqual(calls, 1, "only explicit catalog refresh fetched data");
+    action.state.catalogReviewId = 3;
+    action.invalidateProductRequests();
+    assert.notOk(action.state.catalogReviewId);
+});
+
+QUnit.test("catalog checklist excludes competitors and next actions map only to existing editable sections", (assert) => {
+    const action = dashboardAction();
+    const row = catalogRow();
+    assert.strictEqual(action.catalogHealthItems(row).length, 7);
+    assert.strictEqual(action.catalogHealthLabel(row), "2 de 7 secciones completas");
+    assert.strictEqual(action.catalogHealthPercent(row), 29);
+    row.catalogHealth.competitor = true;
+    assert.strictEqual(action.catalogHealthPercent(row), 29, "competitor info never increases completion");
+    assert.strictEqual(action.catalogNextAction(row).section, "images");
+    row.catalogHealth.image = true;
+    assert.strictEqual(action.catalogNextAction(row).section, "content");
+    row.catalogHealth.technical = true;
+    assert.strictEqual(action.catalogNextAction(row).section, "seo");
+    Object.keys(row.catalogHealth).forEach((key) => { row.catalogHealth[key] = true; });
+    assert.strictEqual(action.catalogNextAction(row).section, "datos");
+    assert.strictEqual(action.catalogHealthLabel(row), "7 de 7 secciones completas");
+    assert.strictEqual(action.catalogHealthLabel({}), "Sin evaluar");
+    assert.deepEqual(action.catalogHealthItems({}), []);
+    assert.strictEqual(action.catalogNextAction({}).section, "datos");
+});
+
+QUnit.test("catalog labels separate real publication inventory availability and missing cost", (assert) => {
+    const action = dashboardAction();
+    const row = catalogRow(2, { isArchived: true, isActive: false, isPublished: true, qtyAvailable: 5 });
+    assert.strictEqual(action.catalogProductStatusLabel(row), "Archivado");
+    assert.strictEqual(action.catalogPublicationLabel(row), "Publicado", "archived does not mean publication flag false");
+    assert.strictEqual(action.catalogStockLabel(row), "En stock", "archived inventory is still real inventory");
+    assert.strictEqual(action.catalogProductStatusLabel(catalogRow(3, { saleOk: false })), "Fuera de venta");
+    assert.strictEqual(action.catalogStockLabel(catalogRow(3, { qtyAvailable: -1 })), "Sin stock");
+    assert.notOk(action.catalogMarginKnown(catalogRow(3, { effectiveCostUsd: 0, costUsd: 10 })), "effective Pack missing cost is not replaced by template cost");
+    assert.notOk(action.catalogMarginKnown(catalogRow(3, { effectivePriceMinUsd: 0 })));
+    assert.ok(action.catalogMarginKnown(catalogRow()));
+    action.state.dashboardPager = { page: 2, limit: 40, total: 43 };
+    assert.strictEqual(action.catalogResultLabel(), "Mostrando 41–43 de 43 productos");
+});
+
+QUnit.test("late quick-section product response cannot overwrite a newer product's selected tab", async (assert) => {
+    const action = dashboardAction();
+    action.state.dashboardSection = "catalog";
+    const older = stabilizationDeferred();
+    action.rpc = (_route, params) => params.product_tmpl_id === 1 ? older.promise : Promise.resolve(stabilizationPayload(2));
+    const first = action.openCatalogProduct(catalogRow(1), "images");
+    await action.openCatalogProduct(catalogRow(2), "seo");
+    older.resolve(stabilizationPayload(1));
+    await first;
+    assert.strictEqual(action.state.detail.product.id, 2);
+    assert.strictEqual(action.state.activeTab, "seo");
+    await action.openCatalogProduct(catalogRow(2), "untrusted-section");
+    assert.strictEqual(action.state.activeTab, "datos", "unknown actions fall back to existing Datos tab");
+});
+
+QUnit.test("catalog toggle blocks duplicate row writes and restores checkbox DOM after a failed mutation", async (assert) => {
+    const action = dashboardAction();
+    action.state.dashboardSection = "catalog";
+    action.state.dashboardRows = [catalogRow()];
+    const pending = stabilizationDeferred();
+    let calls = 0;
+    action.rpc = () => { calls++; return pending.promise; };
+    const publishEvent = { target: { checked: true } };
+    const duplicateEvent = { target: { checked: true } };
+    const saving = action.toggleDashboardPublish(2, true, publishEvent);
+    assert.ok(action.catalogRowBusy(action.state.dashboardRows[0]));
+    await action.toggleDashboardFeatured(2, true, duplicateEvent);
+    assert.strictEqual(calls, 1);
+    assert.notOk(duplicateEvent.target.checked);
+    pending.reject(new Error("Write rejected"));
+    await saving;
+    assert.notOk(publishEvent.target.checked);
+    assert.notOk(action.state.dashboardRows[0].isPublished);
+    assert.notOk(action.catalogRowBusy(2));
+    assert.strictEqual(action.notifications.length, 1);
+});
+
+QUnit.test("catalog writes on separate rows preserve independent busy state and current sort", async (assert) => {
+    const action = dashboardAction();
+    Object.assign(action.state, { dashboardSection: "catalog", dashboardSortKey: "name_desc", dashboardQualityFilter: "needs_attention" });
+    action.state.dashboardRows = [catalogRow(2), catalogRow(3)];
+    const first = stabilizationDeferred();
+    const second = stabilizationDeferred();
+    const calls = [];
+    action.rpc = (route, params) => {
+        calls.push({ route, params });
+        if (route.endsWith("/update_product")) return params.product_tmpl_id === 2 ? first.promise : second.promise;
+        return Promise.resolve({ products: [catalogRow(2, { isPublished: true }), catalogRow(3, { featured: true })] });
+    };
+    const a = action.toggleDashboardPublish(2, true);
+    const b = action.toggleDashboardFeatured(3, true);
+    first.resolve({ success: true });
+    await a;
+    assert.notOk(action.catalogRowBusy(2));
+    assert.ok(action.catalogRowBusy(3));
+    second.resolve({ success: true });
+    await b;
+    assert.notOk(action.catalogRowBusy(3));
+    assert.ok(calls.filter((call) => call.route.endsWith("/dashboard")).every((call) => call.params.sort_key === "name_desc" && call.params.quality_filter === "needs_attention"));
+});
+
+QUnit.test("successful catalog write stays visible if its refresh fails and stale failures never affect another view", async (assert) => {
+    const action = dashboardAction();
+    action.state.dashboardSection = "catalog";
+    action.state.dashboardRows = [catalogRow()];
+    const event = { target: { checked: true } };
+    action.rpc = async (route) => {
+        if (route.endsWith("/update_product")) return { success: true };
+        throw new Error("Refresh unavailable");
+    };
+    await action.toggleDashboardPublish(2, true, event);
+    assert.ok(action.state.dashboardRows[0].isPublished, "committed write not visually rolled back by refresh error");
+    assert.ok(event.target.checked);
+    assert.notOk(action.catalogRowBusy(2));
+    const pending = stabilizationDeferred();
+    action.rpc = (route) => route.endsWith("/dashboard_overview") ? Promise.resolve(dashboardOverviewPayload()) : pending.promise;
+    const staleEvent = { target: { checked: true } };
+    const stale = action.toggleDashboardFeatured(2, true, staleEvent);
+    await action.selectDashboardSection("overview");
+    pending.reject(new Error("Obsolete failed write"));
+    await stale;
+    assert.deepEqual(action.notifications, []);
+    assert.strictEqual(action.state.dashboardSection, "overview");
+    assert.ok(staleEvent.target.checked, "detached old DOM is not changed after navigation");
+    assert.deepEqual(action.state.catalogBusyRows, {});
+});
+
+QUnit.test("actual catalog template binds sort quality inline review and direct section actions", async (assert) => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    const calls = [];
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: {}, context: {} } },
+        env: { services: {
+            user: { context: { allowed_company_ids: [1] } }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route, params) => {
+                calls.push({ route, params });
+                if (route.endsWith("/dashboard_overview")) return dashboardOverviewPayload();
+                if (route.endsWith("/dashboard")) return { products: [catalogRow()], pager: { total: 1 }, tabCounts: { all: 1, new: 1, discontinued: 0 } };
+                if (route.endsWith("/data")) return stabilizationPayload(params.product_tmpl_id);
+                throw new Error(`Unexpected write or IA request: ${route}`);
+            },
+        } },
+    });
+    const patched = async () => {
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    try {
+        const action = await app.mount(target);
+        target.querySelector('[data-bpi-section="catalog"]').click();
+        await patched();
+        assert.strictEqual(target.querySelectorAll("tr[data-product-id]").length, 1);
+        const beforeReview = calls.length;
+        target.querySelector('[data-catalog-review="2"]').click();
+        await patched();
+        assert.strictEqual(calls.length, beforeReview, "expanding review performs zero RPC");
+        assert.strictEqual(target.querySelectorAll('[data-catalog-inspector="2"] [data-catalog-check]').length, 7);
+        assert.strictEqual(target.querySelector('[data-catalog-check="image"]').getAttribute("data-catalog-present"), "false");
+        const sort = target.querySelector("#bpi-catalog-sort");
+        sort.value = "price_desc";
+        sort.dispatchEvent(new Event("change", { bubbles: true }));
+        await patched();
+        assert.strictEqual(calls[calls.length - 1].params.sort_key, "price_desc");
+        assert.notOk(target.querySelector("[data-catalog-inspector]"), "new catalog load closes prior review");
+        const quality = target.querySelector("#bpi-catalog-quality");
+        quality.value = "needs_attention";
+        quality.dispatchEvent(new Event("change", { bubbles: true }));
+        await patched();
+        assert.strictEqual(calls[calls.length - 1].params.quality_filter, "needs_attention");
+        target.querySelector("[data-catalog-clear]").click();
+        await patched();
+        assert.strictEqual(target.querySelector("#bpi-catalog-sort").value, "catalog");
+        assert.strictEqual(target.querySelector("#bpi-catalog-quality").value, "");
+        target.querySelector('[data-catalog-review="2"]').click();
+        await patched();
+        target.querySelector('[data-catalog-check="image"]').click();
+        await patched();
+        assert.strictEqual(action.state.activeTab, "images");
+        assert.strictEqual(action.state.detail.product.id, 2);
+        assert.ok(target.querySelector(".bpi-detail-shell"));
+        assert.strictEqual(calls[calls.length - 1].route, "/bader_product_intelligence/data");
+        await action.goBack();
+        await patched();
+        assert.ok(target.querySelector(".bpi-home-catalog"));
+        assert.notOk(target.querySelector("[data-catalog-inspector]"));
+    } finally {
+        app.destroy();
+        target.remove();
+    }
+});
+
+QUnit.test("actual catalog name row open and next buttons retain real helper receivers without double navigation", async (assert) => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    const details = [];
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: {}, context: {} } },
+        env: { services: {
+            user: { context: {} }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route, params) => {
+                if (route.endsWith("/dashboard_overview")) return dashboardOverviewPayload();
+                if (route.endsWith("/dashboard")) return { products: [catalogRow(2), catalogRow(3)], pager: { total: 2 } };
+                if (route.endsWith("/data")) {
+                    details.push(params.product_tmpl_id);
+                    return stabilizationPayload(params.product_tmpl_id);
+                }
+                throw new Error(`Unexpected RPC: ${route}`);
+            },
+        } },
+    });
+    const patched = async () => {
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    try {
+        const action = await app.mount(target);
+        await action.selectDashboardSection("catalog");
+        await patched();
+        assert.strictEqual(action.catalogRowBusy, ProductIntelligenceAction.prototype.catalogRowBusy,
+            "use the real method: a stub could conceal an unbound this in template lambdas");
+        action.state.catalogBusyRows = { 2: true };
+        await patched();
+        const busyRow = target.querySelector('tr[data-product-id="2"]');
+        const busyName = busyRow.querySelector(".bpi-home-product-link");
+        const busyOpen = busyRow.querySelector(".bpi-catalog-open");
+        assert.ok(busyName.disabled, "busy product name is disabled");
+        assert.ok(busyOpen.disabled, "busy open action is disabled");
+        busyName.click();
+        busyOpen.click();
+        busyRow.click();
+        await patched();
+        assert.strictEqual(details.length, 0, "busy row and disabled controls cannot open details");
+        assert.strictEqual(action.state.viewMode, "dashboard");
+        action.state.catalogBusyRows = {};
+        await patched();
+        for (const [id, selector] of [
+            [2, 'tr[data-product-id="2"] .bpi-home-product-link'],
+            [3, 'tr[data-product-id="3"]'],
+            [2, 'tr[data-product-id="2"] .bpi-catalog-open'],
+        ]) {
+            const before = details.length;
+            target.querySelector(selector).click();
+            await patched();
+            assert.strictEqual(action.state.viewMode, "detail", `${selector} opens the product workspace`);
+            assert.strictEqual(action.state.detail.product.id, id, "the clicked row supplies the correct product ID");
+            assert.strictEqual(details.length, before + 1, "one click creates exactly one detail request, without bubbling twice");
+            assert.strictEqual(action.state.activeTab, "overview", "standard catalog entry preserves default detail overview");
+            await action.goBack();
+            await patched();
+        }
+        assert.strictEqual(action.catalogNextAction, ProductIntelligenceAction.prototype.catalogNextAction,
+            "recommended action also uses the real prototype method inside its event lambda");
+        target.querySelector('[data-catalog-review="2"]').click();
+        await patched();
+        target.querySelector('[data-catalog-next="2"]').click();
+        await patched();
+        assert.strictEqual(action.state.viewMode, "detail");
+        assert.strictEqual(action.state.detail.product.id, 2);
+        assert.strictEqual(action.state.activeTab, "images", "next action opens the actual first incomplete section");
+        assert.deepEqual(details, [2, 3, 2, 2], "next action also opens only once");
+        await action.goBack();
+        await patched();
+        assert.strictEqual(action.state.dashboardSection, "catalog");
+    } finally {
+        app.destroy();
+        target.remove();
+    }
+});
+
+QUnit.test("actual catalog review Escape and close return focus without requests or automatic focus stealing", async (assert) => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    let calls = 0;
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: {}, context: {} } },
+        env: { services: {
+            user: { context: {} }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route) => {
+                calls++;
+                if (route.endsWith("/dashboard_overview")) return dashboardOverviewPayload();
+                if (route.endsWith("/dashboard")) return { products: [catalogRow()], pager: { total: 1 } };
+                throw new Error(`Unexpected RPC: ${route}`);
+            },
+        } },
+    });
+    const patched = async () => {
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    try {
+        const action = await app.mount(target);
+        await action.selectDashboardSection("catalog");
+        await patched();
+        const beforeReview = calls;
+        const invoker = target.querySelector('[data-catalog-review="2"]');
+        invoker.click();
+        await patched();
+        const check = target.querySelector('[data-catalog-check="image"]');
+        check.focus();
+        check.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+        assert.ok(action.state.catalogReviewId, "unrelated keys do not dismiss the review");
+        const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+        check.dispatchEvent(escape);
+        await patched();
+        assert.ok(escape.defaultPrevented, "Escape is handled locally");
+        assert.notOk(target.querySelector("[data-catalog-inspector]"));
+        assert.strictEqual(document.activeElement, invoker, "Escape returns focus to the invoking review button");
+        invoker.click();
+        await patched();
+        const close = target.querySelector(".bpi-catalog-close");
+        close.focus();
+        close.click();
+        await patched();
+        assert.notOk(target.querySelector("[data-catalog-inspector]"));
+        assert.strictEqual(document.activeElement, invoker, "manual close also restores focus");
+        invoker.click();
+        await patched();
+        const search = target.querySelector("#bpi-catalog-search");
+        search.focus();
+        action.closeCatalogReview();
+        await patched();
+        assert.strictEqual(document.activeElement, search, "automatic close does not move keyboard focus");
+        assert.strictEqual(calls, beforeReview, "inspection, closing and Escape perform zero RPC");
+    } finally {
+        app.destroy();
+        target.remove();
+    }
+});
+
+QUnit.test("actual catalog checkbox binds busy state and restores visual value on rejected write", async (assert) => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    const mutation = stabilizationDeferred();
+    const notifications = [];
+    let writes = 0;
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: {}, context: {} } },
+        env: { services: {
+            user: { context: {} }, notification: { add: (message) => notifications.push(message) }, action: { doAction() {} },
+            rpc: async (route) => {
+                if (route.endsWith("/dashboard_overview")) return dashboardOverviewPayload();
+                if (route.endsWith("/dashboard")) return { products: [catalogRow()], pager: { total: 1 } };
+                if (route.endsWith("/update_product")) { writes++; return mutation.promise; }
+                throw new Error(`Unexpected RPC: ${route}`);
+            },
+        } },
+    });
+    const patched = async () => {
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    try {
+        const action = await app.mount(target);
+        await action.selectDashboardSection("catalog");
+        await patched();
+        const publish = target.querySelector('input[aria-label="Publicar Producto 2"]');
+        const featured = target.querySelector('input[aria-label="Destacar Producto 2"]');
+        assert.notOk(publish.checked);
+        publish.click();
+        await patched();
+        assert.strictEqual(writes, 1);
+        assert.ok(publish.disabled);
+        assert.ok(featured.disabled, "another flag on the same row cannot race the first mutation");
+        mutation.reject(new Error("Rejected fixture write"));
+        await patched();
+        assert.notOk(publish.checked, "failed browser checked state is restored");
+        assert.notOk(publish.disabled);
+        assert.notOk(featured.disabled);
+        assert.strictEqual(notifications.length, 1);
+        assert.strictEqual(action.state.viewMode, "dashboard", "toggle event does not open product detail");
     } finally {
         app.destroy();
         target.remove();

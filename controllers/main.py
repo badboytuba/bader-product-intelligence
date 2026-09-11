@@ -58,10 +58,11 @@ class BaderProductIntelligenceController(http.Controller):
         return job
 
     @http.route("/bader_product_intelligence/dashboard", type="json", auth="user")
-    def dashboard(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, **kwargs):
+    def dashboard(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", **kwargs):
         self._ensure_manager()
         return request.env["bpi.service"].dashboard_payload(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
+            sort_key=sort_key,
         )
 
     @http.route("/bader_product_intelligence/dashboard_overview", type="json", auth="user")
@@ -70,10 +71,11 @@ class BaderProductIntelligenceController(http.Controller):
         return request.env["bpi.service"].dashboard_overview(category_id=category_id)
 
     @http.route("/bader_product_intelligence/sync_catalog", type="json", auth="user")
-    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, **kwargs):
+    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", **kwargs):
         self._ensure_manager()
         payload = request.env["bpi.service"].sync_catalog(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
+            sort_key=sort_key,
         )
         return {"success": True, **payload}
 

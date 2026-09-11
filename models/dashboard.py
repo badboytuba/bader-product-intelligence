@@ -15,14 +15,25 @@ class BPIDashboardService(models.AbstractModel):
         "all", "published", "unpublished", "content", "image", "seo", "geo",
         "faq", "competitor", "category", "published_missing_image",
         "published_missing_content", "missing_seo", "missing_geo", "missing_category",
+        "needs_attention", "complete",
     ))
+    _CATALOG_CHECKLIST = ("commercial", "technical", "image", "seo", "geo", "faq", "category")
+    _CATALOG_SORT_ORDERS = {
+        "catalog": "website_sequence asc, name asc, id desc",
+        "recent": "write_date desc, id desc",
+        "name_asc": "name asc, id asc",
+        "name_desc": "name desc, id desc",
+        # This is the stored base USD price, not an effective Pack/variant range.
+        "price_asc": "list_price asc, name asc, id asc",
+        "price_desc": "list_price desc, name asc, id asc",
+    }
     _DASHBOARD_CONTENT_FIELDS = (
         # Preload publication dependencies too: its computed getter must not
         # fetch is_published/website_id separately for every template.
         "is_published", "website_id", "website_published", "bpi_featured", "bpi_ai_generated_description",
         "description_sale", "website_description", "description", "bpi_technical_description",
         "website_meta_title", "website_meta_description", "bpi_geo_title",
-        "bpi_geo_description", "public_categ_ids",
+        "bpi_geo_description", "public_categ_ids", "active", "sale_ok", "write_date",
     )
 
     @api.model
@@ -53,6 +64,14 @@ class BPIDashboardService(models.AbstractModel):
         if not isinstance(quality_filter, str) or quality_filter not in self._DASHBOARD_FILTERS:
             raise UserError(_("Selecciona un filtro de calidad válido."))
         return quality_filter
+
+    @api.model
+    def _dashboard_sort_key(self, sort_key):
+        if sort_key is False or sort_key is None or sort_key == "":
+            return "catalog"
+        if not isinstance(sort_key, str) or sort_key not in self._CATALOG_SORT_ORDERS:
+            raise UserError(_("Selecciona un orden válido para el catálogo."))
+        return sort_key
 
     @api.model
     def _dashboard_image_record_ids(self, records, field_name):
@@ -88,13 +107,19 @@ class BPIDashboardService(models.AbstractModel):
         result = {key: set() for key in self._DASHBOARD_FILTERS}
         result["all"] = set(products.ids)
         result["commercial"] = set()
+        result["technical"] = set()
         result["featured"] = set()
+        result["row_metadata"] = {}
         if not products:
             return result
         product_model = products.with_context(prefetch_fields=False)
         plain = self.env["product.template"]._bpi_plain_text
         for row in product_model.read(list(self._DASHBOARD_CONTENT_FIELDS), load=False):
             product_id = row["id"]
+            result["row_metadata"][product_id] = {
+                "isActive": bool(row["active"]), "saleOk": bool(row["sale_ok"]),
+                "updatedAt": self._dashboard_datetime(row["write_date"]),
+            }
             if row["website_published"]:
                 result["published"].add(product_id)
             if row["bpi_featured"]:
@@ -104,8 +129,8 @@ class BPIDashboardService(models.AbstractModel):
                 "bpi_ai_generated_description", "description_sale", "website_description", "description",
             )):
                 result["commercial"].add(product_id)
-                if plain(row["bpi_technical_description"]):
-                    result["content"].add(product_id)
+            if plain(row["bpi_technical_description"]):
+                result["technical"].add(product_id)
             for key, title, description in (
                 ("seo", "website_meta_title", "website_meta_description"),
                 ("geo", "bpi_geo_title", "bpi_geo_description"),
@@ -149,11 +174,24 @@ class BPIDashboardService(models.AbstractModel):
                 result["competitor"].add(row["product_tmpl_id"])
 
         result["unpublished"] = result["all"] - result["published"]
+        result["content"] = result["commercial"] & result["technical"]
         result["published_missing_image"] = result["published"] - result["image"]
         result["published_missing_content"] = result["published"] - result["commercial"]
         for key in ("seo", "geo", "category"):
             result["missing_" + key] = result["all"] - result[key]
+        result["complete"] = set.intersection(*(result[key] for key in self._CATALOG_CHECKLIST))
+        result["needs_attention"] = result["all"] - result["complete"]
         return result
+
+    @api.model
+    def _dashboard_catalog_health(self, coverage, product_id):
+        flags = {key: product_id in coverage[key] for key in (*self._CATALOG_CHECKLIST, "competitor")}
+        completed = sum(flags[key] for key in self._CATALOG_CHECKLIST)
+        total = len(self._CATALOG_CHECKLIST)
+        return {
+            **flags, "completed": completed, "total": total,
+            "percent": round(completed * 100.0 / total, 1),
+        }
 
     @api.model
     def _dashboard_metric(self, coverage, key, label, description):
@@ -253,7 +291,7 @@ class BPIDashboardService(models.AbstractModel):
         }
 
     @api.model
-    def dashboard_payload(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False):
+    def dashboard_payload(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog"):
         self._ensure_manager()
         if tab not in ("all", "new", "discontinued"):
             raise UserError(_("Selecciona una sección válida del catálogo."))
@@ -261,6 +299,7 @@ class BPIDashboardService(models.AbstractModel):
             raise UserError(_("La búsqueda debe ser un texto."))
         category = self._dashboard_category(category_id)
         quality_filter = self._dashboard_quality_filter(quality_filter)
+        sort_key = self._dashboard_sort_key(sort_key)
         try:
             safe_page = max(int(page or 1), 1)
             safe_limit = min(max(int(limit or 40), 1), 120)
@@ -271,6 +310,7 @@ class BPIDashboardService(models.AbstractModel):
             self._dashboard_base_domain(), self._dashboard_category_domain(category),
             self._dashboard_search_domain(search),
         ])
+        coverage = None
         if quality_filter != "all":
             coverage = self._dashboard_coverage_sets(product_model.search(domain))
             domain = expression.AND([domain, [("id", "in", sorted(coverage[quality_filter]))]])
@@ -283,14 +323,24 @@ class BPIDashboardService(models.AbstractModel):
         safe_page = min(safe_page, page_count)
         products = product_model.search(
             expression.AND([domain, self._dashboard_tab_domain(tab)]),
-            order="website_sequence asc, name asc, id desc", offset=(safe_page - 1) * safe_limit,
+            order=self._CATALOG_SORT_ORDERS[sort_key], offset=(safe_page - 1) * safe_limit,
             limit=safe_limit,
         )
+        # Reuse the quality-filter batch; otherwise enrich only this page, never
+        # all catalog templates just to render a paginated checklist.
+        if coverage is None:
+            coverage = self._dashboard_coverage_sets(products)
         exchange_rate = product_model._bpi_exchange_rate()
+        rows = []
+        for product in products:
+            row = product.bpi_dashboard_payload(exchange_rate=exchange_rate)
+            row.update(coverage["row_metadata"][product.id])
+            row["catalogHealth"] = self._dashboard_catalog_health(coverage, product.id)
+            rows.append(row)
         return {
-            "products": [product.bpi_dashboard_payload(exchange_rate=exchange_rate) for product in products],
+            "products": rows,
             "exchangeRate": exchange_rate, "stats": self._dashboard_stats(category), "tabCounts": tab_counts,
-            "categoryId": category.id or False, "qualityFilter": quality_filter,
+            "categoryId": category.id or False, "qualityFilter": quality_filter, "sortKey": sort_key,
             "pager": {
                 "page": safe_page, "pageCount": page_count, "total": total_rows, "limit": safe_limit,
                 "hasNext": safe_page < page_count, "hasPrevious": safe_page > 1,
@@ -298,7 +348,8 @@ class BPIDashboardService(models.AbstractModel):
         }
 
     @api.model
-    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False):
+    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog"):
         return self.dashboard_payload(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
+            sort_key=sort_key,
         )

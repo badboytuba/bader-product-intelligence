@@ -150,10 +150,14 @@ class TestBPIDashboardOverview(TransactionCase):
             "name": "Preview no cuenta", "product_tmpl_id": self.draft.id, "image_1920": PNG, "state": "preview",
         })
         self.assertEqual(self._counts(self._overview())["image"], 2)
+        row_health = {row["id"]: row["catalogHealth"] for row in self._catalog()["products"]}
+        self.assertTrue(row_health[self.empty.id]["image"])
+        self.assertFalse(row_health[self.draft.id]["image"], "Generated previews do not satisfy the checklist")
         approved = self.env["bpi.product.image"].create({
             "name": "Aprobada", "product_tmpl_id": self.draft.id, "image_1920": PNG, "state": "approved",
         })
         self.assertEqual(self._counts(self._overview())["image"], 3)
+        self.assertTrue(next(row["catalogHealth"]["image"] for row in self._catalog()["products"] if row["id"] == self.draft.id))
         approved.unlink()
         self.draft.product_variant_id.image_variant_1920 = PNG
         self.assertEqual(self._counts(self._overview())["image"], 3)
@@ -176,6 +180,7 @@ class TestBPIDashboardOverview(TransactionCase):
         self.assertEqual(overview["total"], 3)
         self.assertEqual(self._counts(overview)["image"], 2)
         self.assertTrue(self.draft.with_context(bin_size=True)._bpi_primary_image_url())
+        self.assertTrue(next(row["catalogHealth"]["image"] for row in self._catalog()["products"] if row["id"] == self.draft.id))
 
     def test_archived_tab_intersects_quality_and_tab_counts_include_search(self):
         payload = self._catalog(tab="discontinued", quality_filter="seo")
@@ -248,12 +253,14 @@ class TestBPIDashboardOverview(TransactionCase):
         with patch("odoo.addons.bader_product_intelligence.controllers.main.request", SimpleNamespace(env=self.env)):
             self.assertEqual(controller.dashboard_overview(category_id=self.root_category.id)["total"], 3)
             with patch.object(type(self.service), "dashboard_payload", return_value={"products": []}) as call:
-                controller.dashboard(category_id=self.root_category.id, quality_filter="image", page=2)
+                controller.dashboard(category_id=self.root_category.id, quality_filter="image", page=2, sort_key="name_desc")
                 self.assertEqual(call.call_args.kwargs["category_id"], self.root_category.id)
                 self.assertEqual(call.call_args.kwargs["quality_filter"], "image")
                 self.assertEqual(call.call_args.kwargs["page"], 2)
-                controller.sync_catalog(category_id=self.root_category.id, quality_filter="seo")
+                self.assertEqual(call.call_args.kwargs["sort_key"], "name_desc")
+                controller.sync_catalog(category_id=self.root_category.id, quality_filter="seo", sort_key="price_asc")
                 self.assertEqual(call.call_args.kwargs["quality_filter"], "seo")
+                self.assertEqual(call.call_args.kwargs["sort_key"], "price_asc")
 
     def test_product_record_rules_are_respected_in_metrics_catalog_and_jobs(self):
         self.env["bpi.ai.job"].create({"product_tmpl_id": self.complete.id, "state": "done"})
@@ -267,6 +274,7 @@ class TestBPIDashboardOverview(TransactionCase):
         self.assertEqual(self._counts(overview)["content"], 0)
         self.assertEqual(overview["jobs"]["recent"], [])
         self.assertEqual(self._catalog(service=service)["pager"]["total"], 2)
+        self.assertEqual(self._catalog(service=service, quality_filter="complete")["products"], [])
 
     def test_selected_companies_filter_even_when_admin_has_both_companies(self):
         other = self.env["res.company"].create({"name": "BPI Dashboard Other Company"})
@@ -274,8 +282,10 @@ class TestBPIDashboardOverview(TransactionCase):
         self.draft.company_id = other
         service = self.service.with_user(self.manager).with_context(allowed_company_ids=self.env.company.ids)
         self.assertEqual(self._overview(service=service)["total"], 2)
+        self.assertNotIn(self.draft.id, [row["id"] for row in self._catalog(service=service)["products"]])
         service = service.with_context(allowed_company_ids=(self.env.company + other).ids)
         self.assertEqual(self._overview(service=service)["total"], 3)
+        self.assertIn(self.draft.id, [row["id"] for row in self._catalog(service=service)["products"]])
 
     def test_related_record_rules_do_not_leak_faq_or_competitor_coverage(self):
         for model in ("bpi.product.faq", "bpi.product.competitor"):
@@ -288,6 +298,11 @@ class TestBPIDashboardOverview(TransactionCase):
         self.assertEqual(counts["all"], 3)
         self.assertEqual(counts["faq"], 0)
         self.assertEqual(counts["competitor"], 0)
+        rows = self._catalog(service=self.service.with_user(self.manager))["products"]
+        complete_row = next(row for row in rows if row["id"] == self.complete.id)
+        self.assertFalse(complete_row["catalogHealth"]["faq"])
+        self.assertFalse(complete_row["catalogHealth"]["competitor"])
+        self.assertEqual(complete_row["catalogHealth"]["completed"], 6)
 
     def test_coverage_query_count_does_not_grow_per_product(self):
         extra = self.env["product.template"].create([
@@ -342,3 +357,128 @@ class TestBPIDashboardOverview(TransactionCase):
                               side_effect=AssertionError("Dashboard must never load attachment bytes")):
                 self.assertEqual(self._counts(self._overview(service=service))["image"], 3)
                 self.assertEqual(self._catalog(service=service, quality_filter="image")["pager"]["total"], 3)
+                rows = self._catalog(service=service)["products"]
+                self.assertTrue(all(row["catalogHealth"]["image"] for row in rows))
+
+    def test_catalog_health_seven_checks_exclude_competitor_from_completion(self):
+        rows = {row["id"]: row for row in self._catalog()["products"]}
+        complete = rows[self.complete.id]
+        self.assertEqual(complete["catalogHealth"], {
+            "commercial": True, "technical": True, "image": True, "seo": True,
+            "geo": True, "faq": True, "category": True, "competitor": True,
+            "completed": 7, "total": 7, "percent": 100.0,
+        })
+        self.assertTrue(complete["isActive"])
+        self.assertTrue(complete["saleOk"])
+        self.assertEqual(complete["updatedAt"], self.service._dashboard_datetime(self.complete.write_date))
+        self.assertEqual(rows[self.empty.id]["catalogHealth"]["completed"], 1)
+        self.assertEqual(rows[self.empty.id]["catalogHealth"]["percent"], 14.3)
+        self.complete.bpi_competitor_ids.unlink()
+        complete = next(row for row in self._catalog()["products"] if row["id"] == self.complete.id)
+        self.assertFalse(complete["catalogHealth"]["competitor"])
+        self.assertEqual(complete["catalogHealth"]["completed"], 7)
+        self.assertEqual(self._catalog(quality_filter="complete")["pager"]["total"], 1)
+
+    def test_catalog_technical_check_is_independent_of_commercial_fallback(self):
+        self.draft.write({"bpi_technical_description": "<p>Ficha técnica</p>", "description_sale": " "})
+        health = next(row["catalogHealth"] for row in self._catalog()["products"] if row["id"] == self.draft.id)
+        self.assertTrue(health["technical"])
+        self.assertFalse(health["commercial"])
+        self.assertEqual(health["completed"], 2)
+        self.assertEqual(self._counts(self._overview())["content"], 1, "Original overview content still needs both")
+        self.draft.write({"bpi_technical_description": "<p>&nbsp;<br/></p>", "website_description": "<p>Fallback web</p>"})
+        health = next(row["catalogHealth"] for row in self._catalog()["products"] if row["id"] == self.draft.id)
+        self.assertFalse(health["technical"])
+        self.assertTrue(health["commercial"])
+        self.assertEqual(health["completed"], 2)
+
+    def test_catalog_complete_and_attention_partition_current_tab_universe(self):
+        complete = self._catalog(quality_filter="complete")
+        attention = self._catalog(quality_filter="needs_attention")
+        self.assertEqual([row["id"] for row in complete["products"]], self.complete.ids)
+        self.assertEqual({row["id"] for row in attention["products"]}, set((self.empty + self.draft).ids))
+        self.assertEqual(complete["pager"]["total"] + attention["pager"]["total"], 3)
+        self.assertEqual(len(self._overview()["kpis"]), 8)
+        archived = self._catalog(tab="discontinued", quality_filter="needs_attention")
+        by_id = {row["id"]: row for row in archived["products"]}
+        self.assertEqual(set(by_id), set((self.archived + self.not_saleable).ids))
+        self.assertFalse(by_id[self.archived.id]["isActive"])
+        self.assertTrue(by_id[self.archived.id]["saleOk"])
+        self.assertTrue(by_id[self.not_saleable.id]["isActive"])
+        self.assertFalse(by_id[self.not_saleable.id]["saleOk"])
+        self.assertEqual(self._catalog(tab="discontinued", quality_filter="complete")["products"], [])
+
+    def test_catalog_enriches_only_page_or_reuses_one_quality_batch(self):
+        seen = []
+        original = type(self.service)._dashboard_coverage_sets
+
+        def observe(service, products):
+            seen.append(products.ids)
+            return original(service, products)
+
+        with patch.object(type(self.service), "_dashboard_coverage_sets", observe), \
+                patch.object(type(self.service), "_openai_request", side_effect=AssertionError("No AI calls")), \
+                patch("requests.sessions.Session.request", side_effect=AssertionError("No external HTTP")):
+            page = self._catalog(page=2, limit=1)
+            self.assertEqual(seen, [[page["products"][0]["id"]]])
+            seen.clear()
+            filtered = self._catalog(quality_filter="needs_attention", limit=1)
+            self.assertEqual(len(seen), 1)
+            self.assertEqual(set(seen[0]), set((self.complete + self.empty + self.draft + self.archived + self.not_saleable).ids))
+            self.assertEqual(len(filtered["products"]), 1)
+
+    def test_catalog_sort_orders_preserve_legacy_default_and_base_price(self):
+        self.complete.write({"name": "BPI Order Charlie", "list_price": 10, "website_sequence": 0})
+        self.empty.write({"name": "BPI Order Alpha", "list_price": 30, "website_sequence": 3})
+        self.draft.write({"name": "BPI Order Bravo", "list_price": 20, "website_sequence": 1, "pack_ok": True})
+        # Controlled fixture edit times: no clock sleeps or timing races in tests.
+        self.env.flush_all()
+        for product, date in ((self.complete, "2020-01-02"), (self.empty, "2020-01-01"), (self.draft, "2020-01-03")):
+            self.env.cr.execute("UPDATE product_template SET write_date=%s WHERE id=%s", [date, product.id])
+        (self.complete + self.empty + self.draft).invalidate_recordset(["write_date"])
+        expected = {
+            "catalog": (self.complete + self.draft + self.empty).ids,
+            "recent": (self.draft + self.complete + self.empty).ids,
+            "name_asc": (self.empty + self.draft + self.complete).ids,
+            "name_desc": (self.complete + self.draft + self.empty).ids,
+            "price_asc": (self.complete + self.draft + self.empty).ids,
+            "price_desc": (self.empty + self.draft + self.complete).ids,
+        }
+        self.assertEqual(self._catalog()["sortKey"], "catalog")
+        for key, product_ids in expected.items():
+            with self.subTest(sort=key):
+                rows = self._catalog(sort_key=key)["products"]
+                self.assertEqual([row["id"] for row in rows], product_ids)
+                self.assertEqual(self._catalog(sort_key=key, page=2, limit=1)["products"][0]["id"], product_ids[1])
+        self.assertEqual(self._catalog(sort_key="recent")["products"][0]["updatedAt"], "2020-01-03T00:00:00Z")
+
+    def test_catalog_sort_ties_are_stable_across_pages(self):
+        products = self.complete + self.empty + self.draft
+        products.write({"name": "BPI Equal Sort", "website_sequence": 7, "list_price": 12})
+        for key, expected in (("catalog", sorted(products.ids, reverse=True)), ("name_asc", sorted(products.ids)),
+                              ("price_asc", sorted(products.ids)), ("price_desc", sorted(products.ids))):
+            with self.subTest(sort=key):
+                found = [self._catalog(sort_key=key, page=page, limit=1)["products"][0]["id"] for page in (1, 2, 3)]
+                self.assertEqual(found, expected)
+
+    def test_catalog_sort_rejects_arbitrary_order_sql_and_invalid_types(self):
+        for value in ("write_date desc", "name; DROP TABLE product_template", "priceUsd", True, 1, [], {}):
+            with self.subTest(sort_key=value), self.assertRaises(UserError):
+                self.service.dashboard_payload(sort_key=value)
+        for value in (False, None, ""):
+            self.assertEqual(self._catalog(sort_key=value)["sortKey"], "catalog")
+
+    def test_catalog_checklist_query_count_is_batched_not_per_row(self):
+        self.env["product.template"].create([
+            {"name": "BPI Catalog Batch %s" % index, "public_categ_ids": [(6, 0, self.root_category.ids)]}
+            for index in range(24)
+        ])
+        self.env.flush_all()
+
+        def query_count(limit):
+            self.env.invalidate_all()
+            before = self.env.cr.sql_log_count
+            self._catalog(limit=limit)
+            return self.env.cr.sql_log_count - before
+
+        self.assertLessEqual(query_count(120), query_count(1) + 8, "Checklist enrichment must not query per row")

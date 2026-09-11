@@ -186,3 +186,7 @@ The admin home opens **Visión general**, with eight current-state coverage KPIs
 Counters now consistently refer to active saleable templates in the selected Odoo companies; the former “Nuevos” tab is correctly labeled “Sin publicar”. A finished SEO job is only a proposal, not publication. No historical trends, external analytics, paid requests or automatic content changes are triggered by opening the dashboard.
 
 See [Executive dashboard contract](docs/EXECUTIVE_DASHBOARD.md). This release is scoped to QAS only.
+
+## Release 16.0.1.5.0 — Catalog workbench (QAS only)
+
+Catálogo now has prominent search, preparation filters, safe sorting, visible category/Pack/variant context, a real seven-section checklist and inline quick review linking to existing editors. Mobile rows become cards without duplicate controls. Publication/feature toggles have per-row pending state and failed-checkbox rollback. The executive overview, detail and atomic save workflows are preserved. See [`docs/CATALOG_WORKBENCH.md`](docs/CATALOG_WORKBENCH.md) for field definitions and sort semantics.

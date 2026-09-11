@@ -2,6 +2,10 @@
 
 _Last updated: 2026-09-11_
 
+## Catalog workbench — 16.0.1.5.0 (QAS only)
+
+User approved the executive home and requested a more useful Catálogo. Read `CATALOG_WORKBENCH.md` for the new per-row seven-section presence contract, `complete`/`needs_attention`, allowlisted `sort_key` (default `catalog`, price sorts explicitly base USD), inline review and editor shortcuts. All reads retain company/ACL scope; reuse one metadata-only batch. New `catalog.scss` is scoped to catalog state only; a single table becomes mobile cards. Preserve per-row toggle pending/DOM rollback, async guards and prior atomic saves. Actual deployment proof belongs in the delivery certificate; PROD remains unauthorized.
+
 ## Executive home — 16.0.1.4.0 (QAS-only delivery)
 
 Branch: `feature/bpi-executive-dashboard`, based on certified QAS runtime `32b12c1` / `16.0.1.3.1`. The user approved an executive hybrid petroleum/light dashboard, separate **Visión general / Catálogo**, eight current-state coverage KPIs and exact catalog drill-down. Historical trends, sales integration, automatic generation and PROD are outside scope.
