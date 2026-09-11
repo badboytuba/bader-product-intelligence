@@ -5,3 +5,6 @@ from . import test_stabilization_service
 from . import test_dashboard_overview
 
 from . import test_meli_contract
+
+from . import test_ai_provider_contract
+from . import test_competitor_metadata

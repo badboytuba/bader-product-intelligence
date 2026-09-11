@@ -1056,7 +1056,7 @@
                                                 </div>
                                                 <div class="bpi-discovery-card__actions">
                                                     <a t-if="item.url" class="bpi-button bpi-button--external" t-att-href="item.url" target="_blank" rel="noopener noreferrer" t-att-title="'Abrir pagina encontrada'"><i class="fa fa-external-link"/> Abrir pagina</a>
-                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.addCompetitor(item.name, item.url, item.description || item.matchReason || '')">Agregar</button>
+                                                    <button type="button" class="bpi-button bpi-button--secondary" t-att-disabled="state.competitorBusy" t-on-click="() =&gt; this.addCompetitor(item.name, item.url, item.description || item.matchReason || '')">Agregar</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1066,33 +1066,36 @@
                                         <div class="bpi-competitor-list">
                                             <div class="bpi-competitor-row" t-foreach="currentCompetitors()" t-as="competitor" t-key="competitor.id">
                                                 <div class="bpi-competitor-row__main">
-                                                    <div class="bpi-competitor-row__header" t-on-click="() =&gt; this.toggleCompetitorExpand(competitor.id)">
+                                                    <button type="button" class="bpi-competitor-row__header" t-att-aria-expanded="state.expandedCompetitorId === competitor.id ? 'true' : 'false'" t-att-data-competitor-expand="competitor.id" t-on-click="() =&gt; this.toggleCompetitorExpand(competitor.id)">
                                                         <div>
                                                             <strong t-esc="competitor.competitorName"/>
                                                             <p t-esc="competitor.competitorUrl"/>
                                                             <small class="bpi-muted" data-competitor-last-consultation="true"><t t-set="lastConsultation" t-value="dashboardDateLabel(competitor.lastScrapedAt)"/>Última consulta: <t t-esc="lastConsultation !== '—' ? lastConsultation : 'Sin consulta registrada'"/></small>
                                                         </div>
                                                         <i t-att-class="'fa ' + (state.expandedCompetitorId === competitor.id ? 'fa-chevron-up' : 'fa-chevron-down')"/>
-                                                    </div>
+                                                    </button>
                                                 </div>
                                                 <div class="bpi-competitor-row__metrics">
-                                                    <div><span>Precio</span><strong t-esc="(competitor.competitorOfferPrice || competitor.competitorPrice) ? formatCompetitorPrice(competitor.competitorOfferPrice || competitor.competitorPrice, competitor.competitorCurrency) : 'Sin precio'"/></div>
-                                                    <div><span>SEO estimado</span><strong t-esc="(competitor.seoScore || 0) + '/100'"/></div>
-                                                    <div><span>Status</span><strong t-esc="competitor.scrapeStatus || 'pending'"/></div>
+                                                    <div><span>Precio registrado</span><strong t-esc="competitorObservedPriceLabel(competitor)"/><small t-esc="competitorEvidenceLabel(competitor.priceStatus || 'unknown')"/></div>
+                                                    <div title="Control heurístico de la página consultada; no mide posición en Google ni ranking de IA."><span>SEO de la página · heurístico</span><strong t-esc="competitorSeoEvidenceLabel(competitor)"/></div>
+                                                    <div><span>Estado de consulta</span><strong t-esc="competitorEvidenceLabel(competitor.scrapeStatus || 'pending')"/></div>
+                                                </div>
+                                                <div class="bpi-competitor-evidence">
+                                                    <small>Última consulta válida: <t t-set="lastValidConsultation" t-value="dashboardDateLabel(competitor.lastSuccessfulScrapedAt)"/><t t-esc="lastValidConsultation !== '—' ? lastValidConsultation : 'Sin consulta válida registrada'"/></small>
+                                                    <small>Fuente de consulta: <t t-esc="competitorEvidenceLabel(competitor.scrapeSource)"/></small>
+                                                    <small>Fuente del precio: <t t-esc="competitorEvidenceLabel(competitor.priceSource)"/></small>
                                                 </div>
 
                                                 <t t-if="state.expandedCompetitorId === competitor.id">
                                                     <div class="bpi-competitor-expand">
-                                                        <t t-if="competitor.metaTitle || competitor.metaDescription">
-                                                            <div class="bpi-expand-section">
-                                                                <label>Meta Tags</label>
+                                                            <div class="bpi-expand-section" data-competitor-page-metadata="true">
+                                                                <label>Metadatos observados de la página</label>
                                                                 <div class="bpi-expand-grid">
-                                                                    <div t-if="competitor.metaTitle"><span>Title</span><p t-esc="competitor.metaTitle"/></div>
-                                                                    <div t-if="competitor.metaDescription"><span>Description</span><p t-esc="competitor.metaDescription"/></div>
-                                                                    <div t-if="competitor.metaKeywords.length"><span>Keywords</span><p t-esc="(competitor.metaKeywords || []).join(', ')"/></div>
+                                                                    <div><span>Meta título</span><p t-esc="competitor.metaTitle || 'No disponible en los datos registrados'"/></div>
+                                                                    <div><span>Meta descripción</span><p t-esc="competitor.metaDescription || 'No disponible en los datos registrados'"/></div>
+                                                                    <div><span t-esc="competitorKeywordsLabel(competitor)"/><p t-esc="(competitor.metaKeywords || []).join(', ') || (competitor.metaKeywordsSource === 'not_found' ? 'La página no declara meta keywords' : 'Sin keywords registradas')"/></div>
                                                                 </div>
                                                             </div>
-                                                        </t>
                                                         <t t-if="(competitor.h1Tags || []).length || (competitor.h2Tags || []).length">
                                                             <div class="bpi-expand-section">
                                                                 <label>Heading Tags</label>
@@ -1102,13 +1105,13 @@
                                                                 </div>
                                                             </div>
                                                         </t>
-                                                        <t t-if="competitor.ogTitle || competitor.ogImage">
+                                                        <t t-if="competitor.ogTitle || competitor.ogDescription || competitor.ogImage">
                                                             <div class="bpi-expand-section">
                                                                 <label>Open Graph</label>
                                                                 <div class="bpi-expand-grid">
                                                                     <div t-if="competitor.ogTitle"><span>OG Title</span><p t-esc="competitor.ogTitle"/></div>
                                                                     <div t-if="competitor.ogDescription"><span>OG Description</span><p t-esc="competitor.ogDescription"/></div>
-                                                                    <div t-if="competitor.ogImage"><span>OG Image</span><img class="bpi-og-thumb" t-att-src="competitor.ogImage" alt="OG"/></div>
+                                                                    <div t-if="competitor.ogImage"><span>Imagen Open Graph</span><a t-if="competitorExternalImageUrl(competitor.ogImage)" t-att-href="competitorExternalImageUrl(competitor.ogImage)" target="_blank" rel="noopener noreferrer">Ver imagen Open Graph <i class="fa fa-external-link"/></a><p t-else="">Enlace de imagen no disponible</p></div>
                                                                 </div>
                                                             </div>
                                                         </t>
@@ -1140,9 +1143,15 @@
                                                                 </div>
                                                             </div>
                                                         </t>
+                                                        <div t-if="competitor.lastAnalyzedAt || (competitor.recommendedKeywords || []).length || competitor.contentStrategy" class="bpi-expand-section" data-competitor-ai-recommendations="true">
+                                                            <label>Recomendaciones de Nancy AI</label>
+                                                            <p class="bpi-muted">Son propuestas de IA, no metadatos observados ni cambios publicados.</p>
+                                                            <small>Último análisis: <t t-esc="dashboardDateLabel(competitor.lastAnalyzedAt)"/></small>
+                                                            <div class="bpi-expand-grid"><div><span>Keywords sugeridas por IA</span><p t-esc="(competitor.recommendedKeywords || []).join(', ') || 'Sin sugerencias registradas'"/></div><div t-if="competitor.contentStrategy"><span>Estrategia de contenido sugerida</span><p t-esc="competitor.contentStrategy"/></div></div>
+                                                        </div>
                                                         <t t-if="competitor.scrapeStatus === 'failed' and competitor.scrapeError">
                                                             <div class="bpi-expand-error">
-                                                                <i class="fa fa-exclamation-triangle"/> <t t-esc="competitor.scrapeError"/>
+                                                                <i class="fa fa-exclamation-triangle"/> <t t-esc="competitorCollectionError(competitor)"/>
                                                             </div>
                                                         </t>
                                                     </div>
@@ -1150,9 +1159,9 @@
 
                                                 <div class="bpi-footer-actions">
                                                     <a t-if="competitor.competitorUrl" class="bpi-button bpi-button--external" t-att-href="competitor.competitorUrl" target="_blank" rel="noopener noreferrer" t-att-title="'Abrir pagina del competidor'"><i class="fa fa-external-link"/> Abrir pagina</a>
-                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.scrapeCompetitor(competitor.id)">Scrapear</button>
-                                                    <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.analyzeCompetitor(competitor.id)">Analizar</button>
-                                                    <button type="button" class="bpi-button bpi-button--ghost" t-on-click="() =&gt; this.deleteCompetitor(competitor.id)"><i class="fa fa-trash-o"/> Eliminar</button>
+                                                    <button type="button" class="bpi-button bpi-button--secondary" t-att-disabled="state.competitorBusy" t-att-data-competitor-scrape="competitor.id" t-on-click="() =&gt; this.scrapeCompetitor(competitor.id)">Consultar página</button>
+                                                    <button type="button" class="bpi-button bpi-button--secondary" t-att-disabled="state.competitorBusy" t-att-data-competitor-analyze="competitor.id" t-on-click="() =&gt; this.analyzeCompetitor(competitor.id)">Analizar con Nancy AI</button>
+                                                    <button type="button" class="bpi-button bpi-button--ghost" t-att-disabled="state.competitorBusy" t-on-click="() =&gt; this.deleteCompetitor(competitor.id)"><i class="fa fa-trash-o"/> Eliminar</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1193,11 +1202,11 @@
                                     <div class="bpi-panel__title"><h3><i class="fa fa-bullseye"/> Analisis Competitivo</h3></div>
                                     <div class="bpi-grid bpi-grid--4">
                                         <div class="bpi-metric-box"><span>Tu Precio</span><strong t-esc="formatProductPrice(product)"/></div>
-                                        <div class="bpi-metric-box"><span>Media Comp.</span><strong t-esc="formatUSD(averageCompetitorPrice())"/></div>
+                                        <div class="bpi-metric-box"><span>Media Comp.</span><strong t-esc="averageCompetitorPrice() ? formatUSD(averageCompetitorPrice()) : 'No disponible'"/></div>
                                         <div class="bpi-metric-box"><span>vs Media</span><strong t-esc="priceVsCompetition() !== null ? formatPercent(priceVsCompetition()) : '-'"/></div>
-                                        <div class="bpi-metric-box"><span>Rango</span><strong t-esc="formatUSD(competitorPriceRange().min) + ' - ' + formatUSD(competitorPriceRange().max)"/></div>
+                                        <div class="bpi-metric-box"><span>Rango</span><strong t-esc="competitorPriceRange().max ? formatUSD(competitorPriceRange().min) + ' - ' + formatUSD(competitorPriceRange().max) : 'No disponible'"/></div>
                                     </div>
-                                    <div class="bpi-range-bar">
+                                    <div class="bpi-range-bar" t-if="averageCompetitorPrice()">
                                         <span class="bpi-range-bar__fill"/>
                                         <span class="bpi-range-bar__marker" t-att-style="priceMarkerStyle()"/>
                                     </div>

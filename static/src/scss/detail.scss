@@ -162,3 +162,12 @@
 @media (max-width: 767px) {
     .o_action.bpi-app .bpi-detail-workspace .bpi-grid--3 { grid-template-columns: minmax(0,1fr); }
 }
+
+.o_action.bpi-app .bpi-detail-workspace .bpi-competitor-row {
+    button.bpi-competitor-row__header { width: 100%; text-align: left; border: 0; background: transparent; padding: 0; color: inherit; }
+    button.bpi-competitor-row__header:focus-visible { outline: 3px solid #14859b; outline-offset: 5px; border-radius: 5px; }
+    .bpi-competitor-evidence { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 12px 0; color: #526b77; }
+    .bpi-competitor-evidence small, .bpi-competitor-row__metrics small { font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+    .bpi-competitor-row__metrics small { display: block; color: #526b77; }
+    .bpi-expand-grid > div { min-width: 0; overflow-wrap: anywhere; }
+}

@@ -2,6 +2,23 @@
 
 Installable Odoo 16 Community product operations module with SEO, GEO, image generation, competitor analysis and product-level AI workflows.
 
+## Release 16.0.1.6.1 — AI and competitor reliability (QAS only)
+
+- Existing AI actions keep their configured models. Safe Odoo validation/access errors
+  are shown instead of generic transport errors; invalid/incomplete provider responses
+  never become completed proposals.
+- Competitor collection preserves HTML metadata and JSON-LD regardless of attribute
+  order. Prices require unambiguous amount/currency evidence; ranges, freight and
+  installment amounts are not fabricated discounts.
+- Page keywords are identified as observed, absent or legacy/unknown. AI keyword and
+  content recommendations are separate, dated suggestions, not extracted page facts.
+- Failed refreshes retain the last valid evidence and show a warning. Collection is
+  explicit, bounded and admin/company scoped; opening pages performs no paid calls.
+- Set keys only in protected configuration. Public HTTP collection may work without
+  Firecrawl; JavaScript/blocking pages can still fail. Keep MercadoLibre external
+  reads/writes disabled and dry run enabled in QAS. Production is not part of this release.
+- See `docs/AI_COMPETITOR_QAS.md`; runtime evidence is recorded separately.
+
 ## Release 16.0.1.3.1 — QAS stabilization
 
 - A single admin `/save_all` request saves a captured product workspace atomically; the category selected in Datos is authoritative.
@@ -90,7 +107,7 @@ Core parameters:
 - `Firecrawl Base URL`
 - `Tipo de Cambio ARS`
 
-Without OpenAI and Firecrawl credentials, the module installs, but AI and competitor-analysis features will not work.
+Without an OpenAI credential, AI generation/analysis is unavailable. Competitor collection can fall back to bounded public HTTP access without Firecrawl when the site permits it; neither provider is called automatically when opening pages.
 
 Environment fallbacks:
 

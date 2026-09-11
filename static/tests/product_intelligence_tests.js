@@ -23,6 +23,22 @@ QUnit.test("Studio selects gallery images by real reference token", (assert) => 
     assert.deepEqual(action.state.imageForm.selectedReferences, []);
 });
 
+QUnit.test("safe Odoo user errors replace generic transport messages without exposing internal details", (assert) => {
+    const action = Object.create(ProductIntelligenceAction.prototype);
+    const fallback = "No se pudo completar esta acción.";
+    for (const name of ["odoo.exceptions.UserError", "odoo.exceptions.ValidationError", "odoo.exceptions.AccessError"]) {
+        assert.strictEqual(action.errorMessage({ message: "Odoo Server Error", data: { name, message: "Configura OpenAI API Key en Ajustes." } }, fallback), "Configura OpenAI API Key en Ajustes.");
+    }
+    for (const message of ["<script>private()</script>", "&lt;img src=x&gt;", "Traceback (most recent call last): internal detail", 'File "/private/server.py", line 42', "API key: synthetic-private-token", "Bearer synthetic-private-token", "https://example.invalid/api?token=private", "sk-proj-synthetic-private-token", "fc-synthetic-private-token", "x".repeat(1201), ""]) {
+        assert.strictEqual(action.errorMessage({ message: "Odoo Server Error", data: { name: "odoo.exceptions.UserError", message, debug: "must never be exposed" } }, fallback), fallback, "unsafe or empty details use the operation fallback");
+    }
+    assert.strictEqual(action.errorMessage({ data: { name: "builtins.TypeError", message: "private backend detail" } }, fallback), fallback);
+    assert.strictEqual(action.errorMessage(new Error("Unexpected local detail"), fallback), fallback);
+    assert.strictEqual(action.errorMessage({ data: { name: "odoo.exceptions.UserError", message: { private: true } } }, fallback), fallback);
+    assert.strictEqual(action.errorMessage(null, fallback), fallback);
+    assert.strictEqual(action.errorMessage({ data: { name: "odoo.exceptions.UserError", message: "  Falta configuración.\n Revisa Ajustes.\u202e  " } }, fallback), "Falta configuración. Revisa Ajustes.");
+});
+
 QUnit.test("gallery deletion is conditioned by canDelete and bpi token", async (assert) => {
     assert.notOk(canDeleteGalleryImage({ canDelete: false, referenceToken: "main" }));
     assert.notOk(canDeleteGalleryImage({ canDelete: true, referenceToken: "odoo:8" }));
@@ -184,6 +200,8 @@ QUnit.test("analytics only uses normalized USD values", (assert) => {
         15
     );
     assert.strictEqual(competitorComparablePriceUsd({ competitorPrice: 999, competitorCurrency: "EUR" }), 0);
+    for (const priceStatus of ['unknown', 'not_found', 'ambiguous']) assert.strictEqual(competitorComparablePriceUsd({ priceStatus, competitorPriceUsd: 999 }), 0, 'explicitly unverified price is excluded from analytics');
+    assert.strictEqual(competitorComparablePriceUsd({ priceStatus: 'known', competitorPriceUsd: 20 }), 20);
 
     const action = Object.create(ProductIntelligenceAction.prototype);
     action.currentCompetitors = () => [
@@ -564,6 +582,35 @@ QUnit.test("newest request wins and stale failure cannot reset busy or notify", 
     assert.notOk(action.state.contentBusy);
 });
 
+QUnit.test("AI configuration failures keep drafts and release busy state without implicit retry or save", async (assert) => {
+    for (const [method, args, busy] of [
+        ["generateContent", [], "contentBusy"], ["generateFaq", [], "faqBusy"],
+        ["analyzeSeo", [], "seoBusy"], ["reclassifyCategory", [], "categoryBusy"],
+        ["generateImage", [], "imageBusy"], ["discoverCompetitors", [], "competitorBusy"],
+        ["scrapeCompetitor", [7], "competitorBusy"], ["analyzeCompetitor", [7], "competitorBusy"],
+        ["generateStrategy", [], "strategyBusy"],
+    ]) {
+        const action = stabilizationAction();
+        action.state.contentForm.description = "Descripción todavía sin guardar";
+        action.state.seoForm.seoTitle = "SEO todavía sin guardar";
+        action.state.categoryForm.type = "instrumental";
+        action.state.imageForm.prompt = "Generar imagen de prueba";
+        action.state.imageForm.generatedPreviewUrl = "data:image/png;base64,retained";
+        const before = action.captureDrafts();
+        let calls = 0;
+        action.rpc = async () => { calls++; throw { message: "Odoo Server Error", data: { name: "odoo.exceptions.UserError", message: "Configura OpenAI API Key en Ajustes." } }; };
+        await action[method](...args);
+        assert.strictEqual(calls, 1, `${method}: no retry or mutation after error`);
+        assert.deepEqual(action.state.contentForm, before.contentForm, `${method}: content draft retained`);
+        assert.deepEqual(action.state.seoForm, before.seoForm, `${method}: SEO draft retained`);
+        assert.deepEqual(action.state.categoryForm, before.categoryForm, `${method}: category draft retained`);
+        assert.strictEqual(action.state.imageForm.generatedPreviewUrl, before.imageForm.generatedPreviewUrl);
+        assert.notOk(action.state[busy], `${method}: busy state released`);
+        assert.deepEqual(action.notifications, ["Configura OpenAI API Key en Ajustes."]);
+        assert.notOk(action.seoJobPollTimer, "failed initiation does not begin polling");
+    }
+});
+
 QUnit.test("partial variant and gallery updates retain editorial, Pack and chat drafts", async (assert) => {
     const action = stabilizationAction();
     action.state.contentForm.description = "Comercial borrador";
@@ -906,7 +953,7 @@ QUnit.test("overview failure preserves the home shell and supports an explicit r
     await action.refreshDashboardHome();
     assert.strictEqual(action.state.viewMode, "dashboard");
     assert.strictEqual(action.state.dashboardSection, "overview");
-    assert.strictEqual(action.state.overviewError, "Metrics unavailable");
+    assert.strictEqual(action.state.overviewError, "No se pudo cargar la visión general. Inténtalo de nuevo.", "unexpected internal errors use the safe operation fallback");
     assert.strictEqual(action.state.error, "", "top-level error never removes the home header");
     assert.notOk(action.state.overviewBusy);
     assert.notOk(action.state.loading);
@@ -1997,5 +2044,118 @@ QUnit.test('actual ML overview drilldown account filter and catalog link compose
         assert.deepEqual(calls.slice(count).map((call) => call.route), ['/bader_product_intelligence/data', '/bader_product_intelligence/meli/product_status'], 'one detail plus one local ML read, without row bubbling');
         assert.strictEqual(calls[calls.length - 1].params.meli_account_id, 8);
         assert.ok(calls.every((call) => call.route.indexOf('/refresh') === -1));
+    } finally { app.destroy(); target.remove(); }
+});
+
+QUnit.test('actual content generation shows safe configuration errors and preserves editable drafts', async (assert) => {
+    const target = document.createElement('div'); document.body.appendChild(target);
+    const calls = [], notifications = [];
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: {
+            user: { context: { allowed_company_ids: [3] } }, notification: { add: (message) => notifications.push(message) }, action: { doAction() {} },
+            rpc: async (route, params) => {
+                calls.push({ route, params });
+                if (route.endsWith('/data')) return stabilizationPayload();
+                if (route.endsWith('/generate_content')) throw { message: 'Odoo Server Error', data: { name: 'odoo.exceptions.UserError', message: 'Configura OpenAI API Key en Ajustes.', debug: 'Private debug never displayed' } };
+                throw new Error('Unexpected write or provider request');
+            },
+        } },
+    });
+    try {
+        const action = await app.mount(target);
+        action.state.contentForm.description = 'Borrador comercial';
+        action.state.contentForm.technicalDescription = 'Borrador técnico';
+        action.state.contentForm.tone = 'tecnico';
+        action.state.contentForm.audience = 'laboratorios';
+        target.querySelector('[data-detail-section="content"]').click();
+        await workspacePatched();
+        [...target.querySelectorAll('button')].find(button => button.textContent.includes('Generar Descripciones con Nancy AI')).click();
+        await workspacePatched();
+        assert.deepEqual(calls.map(call => call.route), ['/bader_product_intelligence/data', '/bader_product_intelligence/generate_content']);
+        assert.deepEqual(calls[1].params, { product_tmpl_id: 1, tone: 'tecnico', audience: 'laboratorios', context: { allowed_company_ids: [3] } });
+        assert.deepEqual(notifications, ['Configura OpenAI API Key en Ajustes.']);
+        assert.strictEqual(action.state.contentForm.description, 'Borrador comercial');
+        assert.strictEqual(action.state.contentForm.technicalDescription, 'Borrador técnico');
+        assert.notOk(action.state.contentBusy);
+        assert.ok(action.detailHasUnsavedChanges());
+    } finally { app.destroy(); target.remove(); }
+});
+
+QUnit.test('competitor collection failures warn after refresh while repeated paid actions are blocked', async (assert) => {
+    for (const [method, args] of [['addCompetitor', ['Tienda', 'https://example.com/product']], ['scrapeCompetitor', [7]], ['analyzeCompetitor', [7]], ['discoverCompetitors', []], ['deleteCompetitor', [7]]]) {
+        const action = stabilizationAction();
+        const pending = stabilizationDeferred(); const calls = [], notices = [];
+        action.notify = (message, type = 'success') => notices.push({ message, type });
+        action.state.contentForm.description = 'Retained draft';
+        action.rpc = (route) => { calls.push(route); return pending.promise; };
+        let refreshes = 0; action.refreshDetail = async () => { refreshes++; };
+        const operation = action[method](...args);
+        await action[method](...args);
+        assert.strictEqual(calls.length, 1, `${method}: duplicate request blocked synchronously`);
+        pending.resolve({ competitor: { id: 7, scrapeStatus: 'failed', scrapeError: 'La página no respondió. Se conservan los datos anteriores.' }, competitors: [] });
+        await operation;
+        assert.notOk(action.state.competitorBusy);
+        assert.strictEqual(action.state.contentForm.description, 'Retained draft');
+        if (['addCompetitor', 'scrapeCompetitor'].includes(method)) {
+            assert.strictEqual(refreshes, 1, 'reload persists failed attempt and prior valid evidence');
+            assert.strictEqual(notices[0].type, 'warning', 'failed scrape never emits a green completion notice');
+            assert.strictEqual(notices[0].message, 'La página no respondió. Se conservan los datos anteriores.');
+        } else if (method === 'analyzeCompetitor') {
+            assert.strictEqual(notices[0].type, 'success', 'a successful AI analysis is independent of historical scrape failure');
+        }
+    }
+    const action = stabilizationAction();
+    action.state.competitorForm.competitorUrl = 'https://example.com/submitted';
+    const pending = stabilizationDeferred();
+    action.rpc = () => pending.promise; action.refreshDetail = async () => {};
+    const adding = action.addCompetitor();
+    action.state.competitorForm.competitorUrl = 'https://example.com/new-draft';
+    pending.resolve({ competitor: { scrapeStatus: 'done' } }); await adding;
+    assert.strictEqual(action.state.competitorForm.competitorUrl, 'https://example.com/new-draft', 'completion does not discard a newer competitor URL draft');
+    action.rpc = async () => ({ competitor: { scrapeStatus: 'done' } });
+    await action.addCompetitor('Discovered', 'https://example.com/discovered');
+    assert.strictEqual(action.state.competitorForm.competitorUrl, 'https://example.com/new-draft', 'adding a discovered result does not clear the separate URL form');
+});
+
+QUnit.test('competitor evidence distinguishes observed keywords AI suggestions and unknown prices without remote image loading', async (assert) => {
+    const target = document.createElement('div'); document.body.appendChild(target);
+    const detail = stabilizationPayload();
+    detail.competitors = [{ id: 7, competitorName: 'Fixture competitor', competitorUrl: 'https://example.com/product',
+        metaTitle: '', metaDescription: '', metaKeywords: ['observada'], metaKeywordsSource: 'page', recommendedKeywords: ['sugerida'], contentStrategy: 'Propuesta editorial',
+        lastScrapedAt: '2026-09-11T12:01:00Z', lastSuccessfulScrapedAt: '2026-09-11T12:00:00Z', lastAnalyzedAt: '2026-09-11T12:02:00Z',
+        scrapeStatus: 'done', scrapeSource: 'direct_http', priceStatus: 'ambiguous', priceSource: '', competitorPrice: 99, seoScore: 42,
+        ogTitle: '', ogDescription: 'Descripción Open Graph', ogImage: 'http://127.0.0.1/private.png',
+    }];
+    const calls = [];
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: { user: { context: {} }, notification: { add() {} }, action: { doAction() {} }, rpc: async route => { calls.push(route); if (route.endsWith('/data')) return detail; throw new Error('Unexpected request'); } } },
+    });
+    try {
+        const action = await app.mount(target);
+        target.querySelector('[data-detail-section="competitors"]').click(); await workspacePatched();
+        const trigger = target.querySelector('[data-competitor-expand="7"]');
+        assert.strictEqual(trigger.tagName, 'BUTTON', 'inspection is keyboard accessible');
+        trigger.click(); await workspacePatched();
+        assert.strictEqual(trigger.getAttribute('aria-expanded'), 'true');
+        const observed = target.querySelector('[data-competitor-page-metadata]');
+        assert.ok(observed.textContent.includes('Meta keywords de la página'));
+        assert.ok(observed.textContent.includes('observada'), 'keywords-only page remains visible without title/description');
+        assert.notOk(observed.textContent.includes('sugerida'), 'AI keywords never masquerade as page metadata');
+        assert.ok(target.querySelector('[data-competitor-ai-recommendations]').textContent.includes('sugerida'));
+        assert.ok(target.querySelector('.bpi-competitor-row__metrics').textContent.includes('No disponible'), 'ambiguous price is not presented as99 or0');
+        assert.ok(target.querySelector('.bpi-competitor-expand').textContent.includes('Descripción Open Graph'));
+        assert.strictEqual(target.querySelectorAll('.bpi-competitor-expand img').length, 0, 'inspection never auto-loads an untrusted OG image');
+        assert.notOk(target.querySelector('a[href="http://127.0.0.1/private.png"]'));
+        for (const url of ['javascript:alert(1)', 'https://user:pass@example.com/a.png', 'http://2130706433/a.png', 'http://[::1]/a.png', 'https://server.local/a.png']) assert.notOk(action.competitorExternalImageUrl(url));
+        assert.strictEqual(action.competitorExternalImageUrl('https://cdn.example.com/a.png'), 'https://cdn.example.com/a.png');
+        assert.strictEqual(action.competitorKeywordsLabel({ metaKeywordsSource: 'legacy_unknown' }), 'Keywords guardadas (origen no confirmado)');
+        assert.strictEqual(action.competitorObservedPriceLabel({ priceStatus: 'unknown', competitorPrice: 0 }), 'No disponible');
+        assert.strictEqual(action.competitorSeoEvidenceLabel({ seoScore: 0 }), 'Sin evaluar');
+        action.state.competitorBusy = true; await workspacePatched();
+        assert.ok(target.querySelector('[data-competitor-scrape="7"]').disabled);
+        assert.ok(target.querySelector('[data-competitor-analyze="7"]').disabled);
+        assert.deepEqual(calls, ['/bader_product_intelligence/data']);
     } finally { app.destroy(); target.remove(); }
 });

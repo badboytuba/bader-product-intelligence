@@ -9,6 +9,9 @@ const DASHBOARD_PAGE_SIZE = 40;
 const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_CHAT_MESSAGE_LENGTH = 4000;
+const SAFE_ODOO_ERROR_NAMES = new Set([
+    "odoo.exceptions.UserError", "odoo.exceptions.ValidationError", "odoo.exceptions.AccessError",
+]);
 const DESCRIPTION_FONT_FAMILIES = [
     { value: "Arial", label: "Arial" },
     { value: "Verdana", label: "Verdana" },
@@ -59,6 +62,7 @@ const DESCRIPTION_ALLOWED_ALIGNMENTS = new Set(["left", "center", "right", "just
 const DESCRIPTION_ALLOWED_INDENTS = new Set(["40px", "80px", "120px", "160px", "200px"]);
 
 export function competitorComparablePriceUsd(competitor) {
+    if (competitor?.priceStatus && competitor.priceStatus !== "known") return 0;
     const value = Number(competitor?.competitorOfferPriceUsd || competitor?.competitorPriceUsd || 0);
     return Number.isFinite(value) && value > 0 ? value : 0;
 }
@@ -1098,7 +1102,18 @@ export class ProductIntelligenceAction extends Component {
     }
 
     errorMessage(error, fallback) {
-        return (error && (error.message || error.data && error.data.message)) || fallback;
+        const defaultMessage = typeof fallback === "string" && fallback.trim()
+            ? fallback : "No se pudo completar la operación. Inténtalo de nuevo.";
+        // Odoo's transport message is normally just "Odoo Server Error". Only
+        // explicit user-facing exception classes may replace our safe fallback;
+        // never surface arbitrary Python/network errors or their debug payload.
+        const data = error?.data;
+        if (!SAFE_ODOO_ERROR_NAMES.has(data?.name) || typeof data.message !== "string") return defaultMessage;
+        const message = data.message.trim();
+        if (!message || message.length > 1200 ||
+            /[<>]|&(?:lt|gt|#0*60|#0*62|#x0*3c|#x0*3e);|\b(?:Traceback|psycopg2|SQLSTATE)\b|File\s+["'][^"']+["'],\s+line\s+\d/i.test(message) ||
+            /\b(?:sk-(?:proj-)?|fc-)[a-z0-9_-]{8,}|\bBearer\s+\S+|\b(?:authorization|api[_ -]?key|token|password|secret)\s*[:=]\s*\S|https?:\/\/\S*[?@]/i.test(message)) return defaultMessage;
+        return message.replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, " ").replace(/\s+/g, " ").trim() || defaultMessage;
     }
 
     dashboardDefaultOverview() {
@@ -1517,6 +1532,53 @@ export class ProductIntelligenceAction extends Component {
 
     currentCompetitors() {
         return (this.state.detail && this.state.detail.competitors) || [];
+    }
+
+    competitorEvidenceLabel(value) {
+        return {
+            firecrawl: "Firecrawl", direct_http: "Lectura directa", jsonld_offer: "JSON-LD / oferta",
+            product_meta: "Metadatos de producto", visible_price: "Texto de precio",
+            known: "Precio registrado", not_found: "No encontrado", ambiguous: "Precio ambiguo", unknown: "Sin verificar",
+            pending: "Pendiente de consulta", done: "Consulta válida", success: "Consulta válida", failed: "Error de consulta",
+        }[value] || "Sin fuente registrada";
+    }
+
+    competitorObservedPriceLabel(competitor) {
+        const price = Number(competitor.competitorOfferPrice || competitor.competitorPrice);
+        return (!competitor.priceStatus || competitor.priceStatus === "known") && Number.isFinite(price) && price > 0
+            ? this.formatCompetitorPrice(price, competitor.competitorCurrency) : "No disponible";
+    }
+
+    competitorSeoEvidenceLabel(competitor) {
+        const score = Number(competitor.seoScore);
+        const observed = competitor.lastSuccessfulScrapedAt || (competitor.scrapeStatus === "done" && competitor.lastScrapedAt);
+        return observed && Number.isFinite(score) ? `${Math.max(0, Math.min(100, score))}/100` : "Sin evaluar";
+    }
+
+    competitorKeywordsLabel(competitor) {
+        return competitor.metaKeywordsSource === "page" || competitor.metaKeywordsSource === "not_found"
+            ? "Meta keywords de la página" : "Keywords guardadas (origen no confirmado)";
+    }
+
+    competitorCollectionError(competitor) {
+        return this.errorMessage({ data: { name: "odoo.exceptions.UserError", message: competitor?.scrapeError } },
+            "No se pudo consultar el competidor. Se conservan los últimos datos válidos; revisa la URL y la configuración.");
+    }
+
+    notifyCompetitorCollection(competitor, successMessage) {
+        if (competitor?.scrapeStatus === "failed") this.notify(this.competitorCollectionError(competitor), "warning");
+        else this.notify(successMessage);
+    }
+
+    competitorExternalImageUrl(value) {
+        try {
+            const url = new URL(value);
+            const host = url.hostname.toLowerCase();
+            if (!["http:", "https:"].includes(url.protocol) || url.username || url.password ||
+                !host.includes(".") || /(?:^|\.)(?:localhost|local|internal|test|invalid)$/.test(host) ||
+                host.includes(":") || /^[\d.]+$/.test(host) || url.port) return false;
+            return url.href;
+        } catch { return false; }
     }
 
     currentCategories() {
@@ -3618,6 +3680,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async discoverCompetitors() {
+        if (this.state.competitorBusy) return;
         const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
@@ -3638,6 +3701,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async addCompetitor(name = "", url = "", description = "") {
+        if (this.state.competitorBusy) return;
         const competitorName = name || this.state.competitorForm.competitorName;
         const competitorUrl = url || this.state.competitorForm.competitorUrl;
         if (!competitorUrl) {
@@ -3647,18 +3711,20 @@ export class ProductIntelligenceAction extends Component {
         const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
-            await this.rpc("/bader_product_intelligence/add_competitor", {
+            const result = await this.rpc("/bader_product_intelligence/add_competitor", {
                 product_tmpl_id: request.productId,
                 competitor_name: competitorName,
                 competitor_url: competitorUrl,
                 competitor_description: description || "",
             });
             if (!this.isRequestCurrent(request)) return;
-            this.state.competitorForm.competitorName = "";
-            this.state.competitorForm.competitorUrl = "";
+            if (!url) {
+                this.state.competitorForm.competitorName = this.mergeSavedDraft(this.state.competitorForm.competitorName, request.drafts.competitorForm.competitorName, "");
+                this.state.competitorForm.competitorUrl = this.mergeSavedDraft(this.state.competitorForm.competitorUrl, request.drafts.competitorForm.competitorUrl, "");
+            }
             await this.refreshDetail(request, {});
             if (!this.isRequestCurrent(request)) return;
-            this.notify("Competidor agregado.");
+            this.notifyCompetitorCollection(result?.competitor, "Competidor agregado.");
         } catch (error) {
             if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo agregar el competidor."), "danger");
@@ -3668,17 +3734,18 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async scrapeCompetitor(competitorId) {
+        if (this.state.competitorBusy) return;
         const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
-            await this.rpc("/bader_product_intelligence/scrape_competitor", {
+            const result = await this.rpc("/bader_product_intelligence/scrape_competitor", {
                 product_tmpl_id: request.productId,
                 competitor_id: competitorId,
             });
             if (!this.isRequestCurrent(request)) return;
             await this.refreshDetail(request, {});
             if (!this.isRequestCurrent(request)) return;
-            this.notify("Scraping completado.");
+            this.notifyCompetitorCollection(result?.competitor, "Consulta del competidor completada.");
         } catch (error) {
             if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo scrapear el competidor."), "danger");
@@ -3688,6 +3755,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async analyzeCompetitor(competitorId) {
+        if (this.state.competitorBusy) return;
         const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {
@@ -3708,6 +3776,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async deleteCompetitor(competitorId) {
+        if (this.state.competitorBusy) return;
         const request = this.beginRequest("competitor", true);
         this.state.competitorBusy = true;
         try {

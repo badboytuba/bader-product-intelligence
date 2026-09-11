@@ -1,3 +1,14 @@
+## 2026-09-11 — AI/provider and competitor reliability patch
+
+Release target `16.0.1.6.1`, QAS only. Read `AI_COMPETITOR_QAS.md` for
+provider-boundary validation, safe UI errors and competitor evidence semantics.
+New competitor fields require a normal BPI upgrade. The optional ML bridge and
+native integrator remain unchanged with read/write disabled and dry-run enabled.
+Runtime proof: workspace `audit_outputs/bpi_ai_enable_20260911/`; never infer
+live verification from model authentication or mocked tests alone.
+
+---
+
 ## 2026-09-11 — Product workspace + optional Mercado Libre bridge
 
 Release target: BPI `16.0.1.6.0` plus explicitly installed
