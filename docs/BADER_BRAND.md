@@ -42,3 +42,9 @@ Check actual fonts rendered (not just CSS declarations), official SVG aspect/alt
 contrast, native Odoo isolation, drafts/navigation and no external brand requests.
 Evidence: workspace audit_outputs/bader_brand_20260913. Deployment status and
 hashes are recorded there; source version alone is not proof of QAS deployment.
+
+The image Studio retains its two desktop panes and stacks them below900px.
+Form and results content scroll independently; the form header and close action
+remain visible. Flex/grid minimum sizes prevent the420px desktop results column
+from displacing mobile controls. Check both panes, content overflow and close
+accessibility at all four widths; opening or closing Studio must not call providers.
