@@ -2168,13 +2168,18 @@ QUnit.test('official Bader home logo stays local accessible and scoped while KPI
     document.body.append(target, nativeSibling);
     const bodyClasses = document.body.className;
     const calls = [];
+    // This mounted navigation test needs the SEO card it clicks; keep the shared
+    // minimal overview fixture unchanged for the pre-existing regression suite.
+    const overview = dashboardOverviewPayload();
+    overview.kpis.push({key: 'seo', label: 'Metadatos SEO completos', count: 0,
+        percent: 0, filter: 'seo', description: 'Título y descripción SEO guardados.'});
     const app = new App(ProductIntelligenceAction, {
         templates, test: true, props: { action: { params: {}, context: {} } },
         env: { services: {
             user: { context: { allowed_company_ids: [1] } }, notification: { add() {} }, action: { doAction() {} },
             rpc: async (route, params) => {
                 calls.push({route, params});
-                if (route.endsWith('/dashboard_overview')) return dashboardOverviewPayload();
+                if (route.endsWith('/dashboard_overview')) return overview;
                 if (route.endsWith('/dashboard')) return {products: [], pager: {total: 0}};
                 throw new Error('Brand navigation cannot call providers or writes: ' + route);
             },
@@ -2186,8 +2191,10 @@ QUnit.test('official Bader home logo stays local accessible and scoped while KPI
         const logo = target.querySelector('[data-bader-brand-logo]');
         assert.ok(logo, 'home displays an official image instead of a recreated Bader wordmark');
         assert.strictEqual(logo.tagName, 'IMG');
-        assert.strictEqual(logo.getAttribute('src'), '/bader_brand/static/src/img/bader_logotipo_verde_claro.svg');
-        assert.strictEqual(logo.getAttribute('alt'), 'Bader');
+        // Native Odoo tests/setup.js rewrites template src/alt to data-src/data-alt
+        // to prevent resource loads. The real-browser harness checks src/alt.
+        assert.strictEqual(logo.getAttribute('data-src'), '/bader_brand/static/src/img/bader_logotipo_verde_claro.svg');
+        assert.strictEqual(logo.getAttribute('data-alt'), 'Bader');
         assert.ok(logo.closest('.bader-brand'), 'logo inherits only the owned module scope');
         assert.strictEqual(document.body.className, bodyClasses, 'never brand the global body');
         assert.strictEqual(nativeSibling.className, 'btn btn-primary', 'native sibling DOM untouched');
@@ -2199,7 +2206,7 @@ QUnit.test('official Bader home logo stays local accessible and scoped while KPI
         assert.strictEqual(calls.length, 2);
         assert.strictEqual(calls[1].route, '/bader_product_intelligence/dashboard');
         assert.strictEqual(calls[1].params.quality_filter, 'seo');
-        assert.strictEqual(target.querySelector('[data-bader-brand-logo]').getAttribute('src'), logo.getAttribute('src'));
+        assert.strictEqual(target.querySelector('[data-bader-brand-logo]').getAttribute('data-src'), logo.getAttribute('data-src'));
     } finally { app.destroy(); target.remove(); nativeSibling.remove(); }
 });
 
