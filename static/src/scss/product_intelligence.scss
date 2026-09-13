@@ -12,6 +12,18 @@ $bpi-danger: #f49a95;
 $bpi-yellow: #f2c34c;
 $bpi-orange: #ff8122;
 
+// Odoo sets an explicit heading face, so the action's inherited body font alone
+// does not brand panel, workspace or Studio headings. The more-specific home
+// hero rule keeps Bader Sans; authored rich content must retain its own face.
+.o_action.bpi-app.bader-brand {
+    h1, h2, h3, h4, h5, h6 {
+        font-family: var(--bader-font-body);
+    }
+    .bpi-rich-editor {
+        h1, h2, h3, h4, h5, h6 { font-family: inherit; }
+    }
+}
+
 .o_action.bpi-app {
     height: 100% !important;
     overflow-y: auto !important;
@@ -2770,4 +2782,5 @@ $bpi-orange: #ff8122;
     color: var(--bader-ink) !important;
     font-family: var(--bader-font-body);
     font-synthesis: none;
+    h1, h2, h3, h4, h5, h6 { font-family: inherit; }
 }
