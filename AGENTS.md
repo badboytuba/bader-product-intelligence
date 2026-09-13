@@ -1,3 +1,7 @@
+## 2026-09-13 — Official Bader identity
+
+Release `16.0.1.6.2` requires the shared `bader_brand` addon from `bader_brand_addons`. Read `docs/BADER_BRAND.md` (or `BADER_BRAND.md` alongside this handoff). Scope styles to explicit owned `.bader-brand` roots; never restyle native Odoo navbar/global forms or overwrite authored content. Logos/fonts are official local assets. Category-generation templates are not part of this cosmetic release. Preserve business/API/save/ML safety behavior; QAS only.
+
 # Agent Instructions — Bader Product Intelligence
 
 This repository is an Odoo 16 Community addon. It must be cloned or deployed with the technical addon directory name:

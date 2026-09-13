@@ -1,11 +1,13 @@
-$bpi-dark: #003841;
-$bpi-green: #70d44b;
-$bpi-teal: #0f766e;
-$bpi-green-soft: #eafbe3;
-$bpi-mint: #edf5f3;
-$bpi-line: #d6e4df;
-$bpi-text: #214842;
-$bpi-muted: #6f8580;
+// Shared official Bader tokens; no global Odoo theme overrides.
+$bpi-dark: var(--bader-green-dark);
+$bpi-green: var(--bader-green-light);
+$bpi-teal: var(--bader-green-action);
+$bpi-green-soft: var(--bader-mist);
+$bpi-mint: var(--bader-mist);
+$bpi-line: var(--bader-line);
+$bpi-text: var(--bader-ink);
+$bpi-muted: var(--bader-muted);
+// Operational warnings/errors retain their established semantic distinction.
 $bpi-danger: #f49a95;
 $bpi-yellow: #f2c34c;
 $bpi-orange: #ff8122;
@@ -13,9 +15,11 @@ $bpi-orange: #ff8122;
 .o_action.bpi-app {
     height: 100% !important;
     overflow-y: auto !important;
-    background: linear-gradient(180deg, #f6faf9 0%, #edf5f3 100%);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bader-mist);
+    font-family: var(--bader-font-body);
+    font-synthesis: none;
     font-size: 13px;
+    font-weight: 400;
     color: $bpi-text;
 
     button,
@@ -79,7 +83,7 @@ $bpi-orange: #ff8122;
     }
 
     h1 {
-        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        font-family: var(--bader-font-body);
         font-size: 28px;
         line-height: 1.1;
         color: $bpi-dark;
@@ -87,7 +91,7 @@ $bpi-orange: #ff8122;
 
     h3 {
         font-size: 15px;
-        font-weight: 600;
+        font-weight: 500;
         color: $bpi-dark;
     }
 
@@ -116,7 +120,7 @@ $bpi-orange: #ff8122;
     .bpi-thumb,
     .bpi-reference-card {
         border: 1px solid $bpi-line;
-        background: #fff;
+        background: var(--bader-white);
         color: $bpi-dark;
         cursor: pointer;
         transition: 0.22s ease;
@@ -138,46 +142,46 @@ $bpi-orange: #ff8122;
         gap: 8px;
         padding: 8px 14px;
         font-size: 13px;
-        font-weight: 600;
+        font-weight: 500;
 
         &--primary {
             background: $bpi-dark;
             border-color: $bpi-dark;
-            color: #fff !important;
+            color: var(--bader-white) !important;
 
-            &, * { color: #fff !important; }
+            &, * { color: var(--bader-white) !important; }
         }
 
         &--secondary {
-            background: #fff;
+            background: var(--bader-white);
             color: $bpi-dark;
 
             &:hover:not(:disabled) {
-                background: #f3f8f6;
+                background: var(--bader-mist);
             }
         }
 
         &--success {
-            background: #1a7a0a;
-            border-color: #1a7a0a;
-            color: #fff !important;
+            background: var(--bader-green-action);
+            border-color: var(--bader-green-action);
+            color: var(--bader-white) !important;
 
-            &, * { color: #fff !important; }
+            &, * { color: var(--bader-white) !important; }
         }
 
         &--external {
             background: $bpi-teal;
             border-color: $bpi-teal;
-            color: #fff !important;
+            color: var(--bader-white) !important;
             text-decoration: none !important;
             white-space: nowrap;
 
-            &, * { color: #fff !important; }
+            &, * { color: var(--bader-white) !important; }
 
             &:hover:not(:disabled) {
-                background: darken($bpi-teal, 7%);
-                border-color: darken($bpi-teal, 7%);
-                color: #fff !important;
+                background: var(--bader-green-dark);
+                border-color: var(--bader-green-dark);
+                color: var(--bader-white) !important;
                 text-decoration: none !important;
                 transform: translateY(-1px);
             }
@@ -186,9 +190,9 @@ $bpi-orange: #ff8122;
         &--danger {
             background: #c9302c;
             border-color: #c9302c;
-            color: #fff !important;
+            color: var(--bader-white) !important;
 
-            &, * { color: #fff !important; }
+            &, * { color: var(--bader-white) !important; }
         }
 
         &--outline {
@@ -273,7 +277,7 @@ $bpi-orange: #ff8122;
         width: 100%;
         border: 1px solid $bpi-line;
         border-radius: 10px;
-        background: #fff;
+        background: var(--bader-white);
         padding: 12px 14px;
         color: $bpi-dark;
         outline: none;
@@ -294,7 +298,7 @@ $bpi-orange: #ff8122;
         min-height: 96px;
 
         &--mono {
-            font-family: "Courier New", monospace;
+            font-family: var(--bader-font-body);
             font-size: 13px;
         }
     }
@@ -352,7 +356,7 @@ $bpi-orange: #ff8122;
     .bpi-competitor-row,
     .bpi-strategy-card,
     .bpi-metric-box {
-        background: #fff;
+        background: var(--bader-white);
         border: 1px solid $bpi-line;
         border-radius: 12px;
         box-shadow: 0 4px 12px rgba(0, 56, 65, 0.04);
@@ -367,7 +371,7 @@ $bpi-orange: #ff8122;
         }
 
         &--success {
-            background: linear-gradient(90deg, #effced 0%, #f7fffa 100%);
+            background: var(--bader-mist);
             border-color: rgba(112, 212, 75, 0.45);
         }
 
@@ -383,7 +387,7 @@ $bpi-orange: #ff8122;
         }
 
         &--hero {
-            background: linear-gradient(90deg, rgba(112, 212, 75, 0.1), rgba(255, 255, 255, 0.98));
+            background: var(--bader-mist);
             border-color: rgba(112, 212, 75, 0.4);
         }
     }
@@ -420,7 +424,7 @@ $bpi-orange: #ff8122;
         gap: 12px;
 
         &--success {
-            background: linear-gradient(90deg, #effced 0%, #f8fffb 100%);
+            background: var(--bader-mist);
             border-color: rgba(112, 212, 75, 0.5);
         }
     }
@@ -463,7 +467,7 @@ $bpi-orange: #ff8122;
 
     .bpi-kpi-card__icon--dark {
         background: $bpi-dark;
-        color: #fff;
+        color: var(--bader-white);
     }
 
     .bpi-quick-card__icon--dark {
@@ -473,22 +477,22 @@ $bpi-orange: #ff8122;
 
     .bpi-kpi-card__icon--green {
         background: $bpi-green;
-        color: #fff;
+        color: var(--bader-green-dark);
     }
 
     .bpi-quick-card__icon--green {
         background: rgba(112, 212, 75, 0.14);
-        color: #198754;
+        color: var(--bader-green-action);
     }
 
     .bpi-kpi-card__icon--yellow {
         background: $bpi-yellow;
-        color: #fff;
+        color: var(--bader-green-dark);
     }
 
     .bpi-kpi-card__icon--orange {
         background: $bpi-orange;
-        color: #fff;
+        color: var(--bader-green-dark);
     }
 
     .bpi-rate-inline {
@@ -511,7 +515,7 @@ $bpi-orange: #ff8122;
         display: grid;
         grid-template-columns: repeat(9, minmax(0, 1fr));
         gap: 0;
-        background: #fff;
+        background: var(--bader-white);
         border: 1px solid $bpi-line;
         border-radius: 12px;
         padding: 4px;
@@ -537,11 +541,11 @@ $bpi-orange: #ff8122;
 
         &.is-active {
             background: $bpi-dark;
-            color: #fff !important;
-            font-weight: 600;
+            color: var(--bader-white) !important;
+            font-weight: 500;
             box-shadow: 0 2px 8px rgba(0, 56, 65, 0.18);
 
-            &, * { color: #fff !important; }
+            &, * { color: var(--bader-white) !important; }
         }
     }
 
@@ -556,11 +560,11 @@ $bpi-orange: #ff8122;
 
     .bpi-tab-pill.is-active {
         background: $bpi-dark;
-        color: #fff !important;
-        font-weight: 600;
+        color: var(--bader-white) !important;
+        font-weight: 500;
         box-shadow: 0 2px 8px rgba(0, 56, 65, 0.18);
 
-        &, * { color: #fff !important; }
+        &, * { color: var(--bader-white) !important; }
     }
 
     .bpi-search {
@@ -607,7 +611,7 @@ $bpi-orange: #ff8122;
             text-align: left;
             padding: 16px 14px;
             color: $bpi-muted;
-            font-weight: 600;
+            font-weight: 500;
             border-bottom: 1px solid $bpi-line;
         }
 
@@ -622,7 +626,7 @@ $bpi-orange: #ff8122;
 
         td {
             padding: 16px 14px;
-            border-bottom: 1px solid rgba(214, 228, 223, 0.7);
+            border-bottom: 1px solid rgba(0, 56, 65, 0.7);
             vertical-align: middle;
 
             p {
@@ -640,7 +644,7 @@ $bpi-orange: #ff8122;
         object-fit: contain;
         border-radius: 8px;
         border: 1px solid $bpi-line;
-        background: #f8fbfb;
+        background: var(--bader-mist);
         flex: 0 0 auto;
 
         &--empty {
@@ -652,7 +656,7 @@ $bpi-orange: #ff8122;
     }
 
     .bpi-detail-header {
-        background: #fff;
+        background: var(--bader-white);
         border: 1px solid $bpi-line;
         border-radius: 0 0 12px 12px;
         padding: 14px 18px;
@@ -703,14 +707,14 @@ $bpi-orange: #ff8122;
         border-radius: 999px;
         font-size: 12px;
         border: 1px solid $bpi-line;
-        background: #fff;
+        background: var(--bader-white);
     }
 
     .bpi-inline-badge--green,
     .bpi-status-pill--success {
         background: rgba(112, 212, 75, 0.14);
         border-color: rgba(112, 212, 75, 0.35);
-        color: #198754;
+        color: var(--bader-green-action);
     }
 
     .bpi-inline-badge--amber {
@@ -776,7 +780,7 @@ $bpi-orange: #ff8122;
 
         i {
             font-size: 15px;
-            color: $bpi-green;
+            color: var(--bader-green-action);
             margin-top: 2px;
         }
 
@@ -797,12 +801,12 @@ $bpi-orange: #ff8122;
     .bpi-rich-editor-shell {
         border: 1px solid rgba(0, 56, 65, 0.18);
         border-radius: 12px;
-        background: #fff;
+        background: var(--bader-white);
         overflow: hidden;
         transition: border-color 0.16s ease, box-shadow 0.16s ease;
 
         &:focus-within {
-            border-color: rgba(0, 82, 92, 0.45);
+            border-color: rgba(0, 56, 65, 0.45);
             box-shadow: 0 0 0 3px rgba(112, 212, 75, 0.16);
         }
     }
@@ -814,7 +818,7 @@ $bpi-orange: #ff8122;
         gap: 6px;
         padding: 8px 10px;
         border-bottom: 1px solid rgba(0, 56, 65, 0.12);
-        background: linear-gradient(180deg, #fbfdfc 0%, #f1f7f5 100%);
+        background: var(--bader-mist);
 
         &__group {
             display: inline-flex;
@@ -839,7 +843,7 @@ $bpi-orange: #ff8122;
         border: 1px solid rgba(0, 56, 65, 0.16);
         border-radius: 6px;
         padding: 0 24px 0 8px;
-        background-color: #fff;
+        background-color: var(--bader-white);
         color: $bpi-dark;
         font-size: 12px;
         cursor: pointer;
@@ -847,7 +851,7 @@ $bpi-orange: #ff8122;
 
         &:focus,
         &:hover {
-            border-color: rgba(0, 82, 92, 0.42);
+            border-color: rgba(0, 56, 65, 0.42);
         }
 
         &--block { width: 94px; }
@@ -872,7 +876,7 @@ $bpi-orange: #ff8122;
         &:hover,
         &:focus-visible {
             border-color: rgba(0, 56, 65, 0.14);
-            background: #fff;
+            background: var(--bader-white);
             color: $bpi-teal;
             outline: none;
         }
@@ -903,7 +907,7 @@ $bpi-orange: #ff8122;
         min-height: 280px;
         max-height: 620px;
         padding: 18px;
-        background: #fff;
+        background: var(--bader-white);
         color: $bpi-dark;
         line-height: 1.55;
         outline: none;
@@ -1043,7 +1047,7 @@ $bpi-orange: #ff8122;
         width: 46px;
         height: 28px;
         border-radius: 999px;
-        background: #d7e3df;
+        background: var(--bader-line);
         display: inline-flex;
         align-items: center;
         padding: 3px;
@@ -1053,7 +1057,7 @@ $bpi-orange: #ff8122;
     .bpi-toggle__thumb {
         width: 22px;
         height: 22px;
-        background: #fff;
+        background: var(--bader-white);
         border-radius: 50%;
         box-shadow: 0 2px 6px rgba(0, 56, 65, 0.15);
         transition: transform 0.2s ease;
@@ -1072,13 +1076,13 @@ $bpi-orange: #ff8122;
 
         span {
             display: block;
-            color: #4d8d47;
+            color: var(--bader-green-action);
             margin-bottom: 8px;
         }
 
         strong {
             font-size: 48px;
-            color: #228b22;
+            color: var(--bader-green-action);
             line-height: 0.95;
         }
     }
@@ -1116,7 +1120,7 @@ $bpi-orange: #ff8122;
     }
 
     .bpi-faq-editor__item {
-        background: #f8fbfb;
+        background: var(--bader-mist);
         border: 1px solid $bpi-line;
         border-radius: 14px;
         padding: 16px;
@@ -1136,13 +1140,13 @@ $bpi-orange: #ff8122;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #fff;
+        background: var(--bader-white);
 
         img {
             width: 100%;
             height: 100%;
             object-fit: contain;
-            background: #fff;
+            background: var(--bader-white);
         }
     }
 
@@ -1168,7 +1172,7 @@ $bpi-orange: #ff8122;
             aspect-ratio: 1 / 1;
             object-fit: contain;
             border-radius: 12px;
-            background: #f9fbfb;
+            background: var(--bader-mist);
         }
 
         &.is-selected {
@@ -1189,7 +1193,7 @@ $bpi-orange: #ff8122;
         height: 26px;
         border-radius: 8px;
         background: rgba(244, 154, 149, 0.9);
-        color: #fff;
+        color: var(--bader-white);
         border: 0;
         display: none;
         align-items: center;
@@ -1220,7 +1224,7 @@ $bpi-orange: #ff8122;
             width: 100%;
             border-radius: 16px;
             border: 1px solid $bpi-line;
-            background: #fff;
+            background: var(--bader-white);
         }
     }
 
@@ -1234,7 +1238,7 @@ $bpi-orange: #ff8122;
 
     .bpi-hero-card__icon {
         background: $bpi-green-soft;
-        color: $bpi-green;
+        color: var(--bader-green-action);
     }
 
     .bpi-list-card,
@@ -1302,13 +1306,13 @@ $bpi-orange: #ff8122;
         font-weight: 700;
 
         &:hover {
-            color: darken($bpi-teal, 10%) !important;
+            color: var(--bader-green-dark) !important;
             text-decoration: underline !important;
         }
     }
 
     .bpi-discovery-card__reason {
-        color: #198754 !important;
+        color: var(--bader-green-action) !important;
         word-break: normal !important;
 
         i {
@@ -1368,7 +1372,7 @@ $bpi-orange: #ff8122;
     .bpi-range-bar__fill {
         position: absolute;
         inset: 0;
-        background: linear-gradient(90deg, #78d850, #f0bc42);
+        background: var(--bader-green-action);
     }
 
     .bpi-range-bar__marker {
@@ -1378,7 +1382,7 @@ $bpi-orange: #ff8122;
         height: 16px;
         border-radius: 50%;
         background: $bpi-dark;
-        border: 3px solid #fff;
+        border: 3px solid var(--bader-white);
         transform: translate(-50%, -50%);
         box-shadow: 0 4px 10px rgba(0, 56, 65, 0.18);
     }
@@ -1426,7 +1430,7 @@ $bpi-orange: #ff8122;
     }
 
     .bpi-score-card {
-        background: #fff;
+        background: var(--bader-white);
         border: 1px solid $bpi-line;
         border-radius: 12px;
         padding: 12px 14px;
@@ -1460,7 +1464,7 @@ $bpi-orange: #ff8122;
     // Dynamic score colors via inline data-score
     .bpi-score-card[data-level="critical"] .bpi-score-card__head strong { color: #dc2626; }
     .bpi-score-card[data-level="warning"] .bpi-score-card__head strong { color: #d97706; }
-    .bpi-score-card[data-level="good"] .bpi-score-card__head strong { color: #16a34a; }
+    .bpi-score-card[data-level="good"] .bpi-score-card__head strong { color: var(--bader-green-action); }
 
     .bpi-score-bar {
         width: 100%;
@@ -1477,13 +1481,13 @@ $bpi-orange: #ff8122;
         transition: width 0.5s ease, background 0.3s ease;
 
         // Semantic colors based on score level
-        &--critical { background: linear-gradient(90deg, #dc2626, #f87171); }
-        &--warning { background: linear-gradient(90deg, #d97706, #fbbf24); }
-        &--good { background: linear-gradient(90deg, #16a34a, #4ade80); }
+        &--critical { background: #dc2626; }
+        &--warning { background: #d97706; }
+        &--good { background: var(--bader-green-action); }
 
         // Legacy fallbacks
-        &--blue { background: #3b82f6; }
-        &--emerald { background: #10b981; }
+        &--blue { background: var(--bader-muted); }
+        &--emerald { background: var(--bader-green-action); }
         &--green { background: $bpi-green; }
         &--orange { background: $bpi-orange; }
     }
@@ -1491,7 +1495,7 @@ $bpi-orange: #ff8122;
     // UNSAVED CHANGES INDICATOR
     .bpi-button--success.has-changes {
         animation: bpi-pulse-save 1.5s ease infinite;
-        box-shadow: 0 0 0 0 rgba(26, 122, 10, 0.4);
+        box-shadow: 0 0 0 0 rgba(0, 56, 65, 0.4);
     }
 
     // TAB CONTENT FADE
@@ -1522,7 +1526,7 @@ $bpi-orange: #ff8122;
     }
 
     .bpi-chat-card {
-        background: #fff;
+        background: var(--bader-white);
         border: 1px solid $bpi-line;
         border-radius: 18px;
         display: flex;
@@ -1580,16 +1584,16 @@ $bpi-orange: #ff8122;
         &--user {
             align-self: flex-end;
             background: $bpi-dark;
-            color: #fff;
+            color: var(--bader-white);
 
             p {
-                color: #fff;
+                color: var(--bader-white);
             }
         }
 
         &--assistant {
             align-self: flex-start;
-            background: #f3f8f6;
+            background: var(--bader-mist);
             border: 1px solid $bpi-line;
         }
     }
@@ -1636,7 +1640,7 @@ $bpi-orange: #ff8122;
 
     .bpi-expand-section {
         > label {
-            font-weight: 600;
+            font-weight: 500;
             font-size: 13px;
             color: $bpi-dark;
             margin-bottom: 10px;
@@ -1693,7 +1697,7 @@ $bpi-orange: #ff8122;
     }
 
     .bpi-label--success {
-        color: #198754 !important;
+        color: var(--bader-green-action) !important;
     }
 
     .bpi-sw-list {
@@ -1706,7 +1710,7 @@ $bpi-orange: #ff8122;
         }
 
         &--success li {
-            color: #198754;
+            color: var(--bader-green-action);
         }
     }
 
@@ -1745,7 +1749,7 @@ $bpi-orange: #ff8122;
         min-width: 160px;
         border: 1px solid $bpi-line;
         border-radius: 12px;
-        background: #fff;
+        background: var(--bader-white);
         color: $bpi-text;
         padding: 10px 12px;
         display: grid;
@@ -1764,8 +1768,8 @@ $bpi-orange: #ff8122;
         }
 
         &.is-active {
-            border-color: $bpi-green;
-            box-shadow: 0 0 0 2px rgba($bpi-green, .12);
+            border-color: var(--bader-green-action);
+            box-shadow: 0 0 0 2px rgba(112, 212, 75, .12);
         }
     }
 
@@ -1838,7 +1842,7 @@ $bpi-orange: #ff8122;
         gap: 10px;
         border: 1px solid $bpi-line;
         border-radius: 10px;
-        background: #fff;
+        background: var(--bader-white);
         color: $bpi-text;
         padding: 10px 12px;
         text-align: left;
@@ -1853,8 +1857,8 @@ $bpi-orange: #ff8122;
         }
 
         &:hover {
-            border-color: $bpi-green;
-            background: rgba($bpi-green, .04);
+            border-color: var(--bader-green-action);
+            background: rgba(112, 212, 75, .04);
         }
     }
 }
@@ -1863,7 +1867,7 @@ $bpi-orange: #ff8122;
     margin: 32px 0;
     padding: 28px;
     border-radius: 28px;
-    background: linear-gradient(180deg, #ffffff 0%, #f6faf8 100%);
+    background: var(--bader-mist);
     border: 1px solid $bpi-line;
 
     .bpi-website-shell__eyebrow {
@@ -1994,13 +1998,13 @@ $bpi-orange: #ff8122;
 
 @keyframes bpi-pulse-save {
     0% {
-        box-shadow: 0 0 0 0 rgba(26, 122, 10, 0.45);
+        box-shadow: 0 0 0 0 rgba(0, 56, 65, 0.45);
     }
     70% {
-        box-shadow: 0 0 0 8px rgba(26, 122, 10, 0);
+        box-shadow: 0 0 0 8px rgba(0, 56, 65, 0);
     }
     100% {
-        box-shadow: 0 0 0 0 rgba(26, 122, 10, 0);
+        box-shadow: 0 0 0 0 rgba(0, 56, 65, 0);
     }
 }
 
@@ -2016,16 +2020,15 @@ $bpi-orange: #ff8122;
 }
 
 // ─── Nancy AI Studio Playground ──────────────────────────
-// overlay must be root-level for position:fixed
-.bpi-playground-overlay {
+// Fixed overlay remains explicitly scoped to the BPI action.
+.o_action.bpi-app .bpi-playground-overlay {
     position: fixed;
     inset: 0;
     z-index: 10000;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 20, 24, 0.65);
-    backdrop-filter: blur(6px);
+    background: rgba(0, 56, 65, 0.65);
     animation: bpi-fade-in 0.2s ease;
     padding: 16px;
 }
@@ -2039,9 +2042,9 @@ $bpi-orange: #ff8122;
     max-width: 1600px;
     max-height: 100%;
     display: flex;
-    background: #fff;
+    background: var(--bader-white);
     border-radius: 16px;
-    box-shadow: 0 20px 80px rgba(0, 40, 50, 0.25);
+    box-shadow: 0 8px 24px rgba(0, 56, 65, .16);
     overflow: hidden;
     animation: bpi-modal-enter 0.25s ease;
 }
@@ -2065,15 +2068,15 @@ $bpi-orange: #ff8122;
     justify-content: space-between;
     padding: 18px 24px;
     border-bottom: 1px solid $bpi-line;
-    background: linear-gradient(135deg, $bpi-dark 0%, darken($bpi-dark, 5%) 100%);
-    color: #fff;
+    background: var(--bader-green-dark);
+    color: var(--bader-white);
     flex-shrink: 0;
 
     h3 {
         margin: 0;
         font-size: 16px;
-        font-weight: 600;
-        color: #fff;
+        font-weight: 500;
+        color: var(--bader-white);
     }
 }
 
@@ -2087,7 +2090,7 @@ $bpi-orange: #ff8122;
 
 .bpi-playground__section-label {
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     color: $bpi-dark;
     margin-bottom: 6px;
 }
@@ -2118,7 +2121,7 @@ $bpi-orange: #ff8122;
     gap: 6px;
     padding: 8px 16px;
     background: $bpi-dark;
-    color: #fff;
+    color: var(--bader-white);
     border: none;
     border-radius: 10px;
     font-size: 13px;
@@ -2126,7 +2129,7 @@ $bpi-orange: #ff8122;
     white-space: nowrap;
     transition: 0.2s;
 
-    &:hover { background: darken($bpi-dark, 6%); }
+    &:hover { background: var(--bader-green-dark); }
 }
 
 .bpi-playground__upload-preview {
@@ -2139,7 +2142,7 @@ $bpi-orange: #ff8122;
         height: 48px;
         object-fit: contain;
         border-radius: 8px;
-        background: #fff;
+        background: var(--bader-white);
         border: 1px solid $bpi-line;
     }
 
@@ -2167,7 +2170,7 @@ $bpi-orange: #ff8122;
     display: flex;
     flex-direction: column;
     border-left: 1px solid $bpi-line;
-    background: #fafcfc;
+    background: var(--bader-mist);
 }
 
 .bpi-playground__chat-header {
@@ -2175,22 +2178,22 @@ $bpi-orange: #ff8122;
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    background: linear-gradient(135deg, $bpi-dark 0%, darken($bpi-dark, 5%) 100%);
-    color: #fff;
+    background: var(--bader-green-dark);
+    color: var(--bader-white);
     flex-shrink: 0;
 
     h3 {
         margin: 0;
         font-size: 15px;
-        font-weight: 600;
-        color: #fff;
+        font-weight: 500;
+        color: var(--bader-white);
     }
 }
 
 .bpi-playground__close {
     background: rgba(255,255,255,0.15);
     border: none;
-    color: #fff;
+    color: var(--bader-white);
     width: 32px;
     height: 32px;
     border-radius: 50%;
@@ -2229,8 +2232,8 @@ $bpi-orange: #ff8122;
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: linear-gradient(135deg, $bpi-green, darken($bpi-green, 10%));
-    color: #fff;
+    background: var(--bader-green-light);
+    color: var(--bader-green-dark);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2238,7 +2241,8 @@ $bpi-orange: #ff8122;
     flex-shrink: 0;
 
     &.bpi-pg-msg__avatar--user {
-        background: linear-gradient(135deg, $bpi-dark, lighten($bpi-dark, 8%));
+        background: var(--bader-green-dark);
+        color: var(--bader-white);
     }
 }
 
@@ -2254,7 +2258,7 @@ $bpi-orange: #ff8122;
 }
 
 .bpi-pg-msg--ai .bpi-pg-msg__bubble {
-    background: #fff;
+    background: var(--bader-white);
     border: 1px solid $bpi-line;
     border-top-left-radius: 4px;
     color: $bpi-dark;
@@ -2262,15 +2266,16 @@ $bpi-orange: #ff8122;
 
 .bpi-pg-msg--user .bpi-pg-msg__bubble {
     background: $bpi-dark;
-    color: #fff;
+    color: var(--bader-white);
     border-top-right-radius: 4px;
+    p { color: var(--bader-white); }
 }
 
 .bpi-pg-msg__name {
     display: block;
     font-size: 11px;
     font-weight: 700;
-    color: $bpi-green;
+    color: var(--bader-green-action);
     margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
@@ -2287,8 +2292,8 @@ $bpi-orange: #ff8122;
     transition: 0.2s;
 
     &:hover {
-        border-color: $bpi-green;
-        box-shadow: 0 4px 16px rgba(112,212,75,0.15);
+        border-color: var(--bader-green-action);
+        box-shadow: 0 2px 8px rgba(0,56,65,.08);
     }
 }
 
@@ -2300,7 +2305,7 @@ $bpi-orange: #ff8122;
     font-size: 13px;
     margin-top: 4px;
 
-    .fa-spinner { color: $bpi-green; }
+    .fa-spinner { color: var(--bader-green-action); }
 }
 
 .bpi-pg-msg__attachments {
@@ -2324,12 +2329,12 @@ $bpi-orange: #ff8122;
     flex-shrink: 0;
     padding: 10px 16px;
     border-top: 1px solid $bpi-line;
-    background: #fff;
+    background: var(--bader-white);
 }
 
 .bpi-playground__images-label {
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 500;
     color: $bpi-muted;
     text-transform: uppercase;
     letter-spacing: 0.3px;
@@ -2355,7 +2360,7 @@ $bpi-orange: #ff8122;
     border-radius: 10px;
     overflow: hidden;
     cursor: pointer;
-    background: #f9fbfb;
+    background: var(--bader-mist);
     transition: 0.2s;
 
     img {
@@ -2367,7 +2372,7 @@ $bpi-orange: #ff8122;
     &:hover { border-color: rgba(0, 56, 65, 0.3); }
 
     &.is-selected {
-        border-color: $bpi-green;
+        border-color: var(--bader-green-action);
         box-shadow: 0 0 0 2px rgba(112, 212, 75, 0.18);
     }
 
@@ -2379,7 +2384,7 @@ $bpi-orange: #ff8122;
         height: 18px;
         border-radius: 50%;
         background: $bpi-green;
-        color: #fff;
+        color: var(--bader-green-dark);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -2410,7 +2415,7 @@ $bpi-orange: #ff8122;
     gap: 8px;
     padding: 12px 16px;
     border-top: 1px solid $bpi-line;
-    background: #fff;
+    background: var(--bader-white);
 }
 
 .bpi-playground__attach-btn {
@@ -2418,7 +2423,7 @@ $bpi-orange: #ff8122;
     height: 38px;
     border: 1px solid $bpi-line;
     border-radius: 50%;
-    background: #fff;
+    background: var(--bader-white);
     color: $bpi-muted;
     cursor: pointer;
     font-size: 16px;
@@ -2436,11 +2441,11 @@ $bpi-orange: #ff8122;
     min-width: 0;
     border: 1px solid $bpi-line;
     border-radius: 14px;
-    background: #fff;
+    background: var(--bader-white);
     overflow: hidden;
     transition: border-color 0.2s;
 
-    &:focus-within { border-color: $bpi-green; }
+    &:focus-within { border-color: var(--bader-green-action); }
 }
 
 .bpi-playground__input-attachment {
@@ -2503,7 +2508,7 @@ $bpi-orange: #ff8122;
     border: none;
     border-radius: 50%;
     background: $bpi-green;
-    color: #fff;
+    color: var(--bader-green-dark);
     cursor: pointer;
     font-size: 14px;
     display: flex;
@@ -2512,7 +2517,7 @@ $bpi-orange: #ff8122;
     transition: 0.2s;
     flex-shrink: 0;
 
-    &:hover { background: darken($bpi-green, 8%); }
+    &:hover { background: var(--bader-green-light); }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
@@ -2528,7 +2533,7 @@ $bpi-orange: #ff8122;
     border: 2px solid $bpi-line;
     border-radius: 14px;
     overflow: hidden;
-    background: #fff;
+    background: var(--bader-white);
     aspect-ratio: 1 / 1;
     transition: 0.2s;
 
@@ -2552,7 +2557,7 @@ $bpi-orange: #ff8122;
         height: 26px;
         border-radius: 50%;
         background: rgba(201, 48, 44, 0.85);
-        color: #fff;
+        color: var(--bader-white);
         border: none;
         cursor: pointer;
         display: flex;
@@ -2619,7 +2624,7 @@ $bpi-orange: #ff8122;
     &__stage {
         border: 2px solid $bpi-line;
         border-radius: 16px;
-        background: #fff;
+        background: var(--bader-white);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -2655,7 +2660,7 @@ $bpi-orange: #ff8122;
     border-radius: 10px;
     overflow: hidden;
     cursor: pointer;
-    background: #fff;
+    background: var(--bader-white);
     transition: 0.2s;
 
     img {
@@ -2668,7 +2673,7 @@ $bpi-orange: #ff8122;
     &:hover { border-color: rgba(0, 56, 65, 0.3); }
 
     &.is-active {
-        border-color: $bpi-green;
+        border-color: var(--bader-green-action);
         box-shadow: 0 0 0 2px rgba(112, 212, 75, 0.25);
     }
 
@@ -2680,7 +2685,7 @@ $bpi-orange: #ff8122;
         height: 20px;
         border-radius: 50%;
         background: rgba(201, 48, 44, 0.85);
-        color: #fff;
+        color: var(--bader-white);
         border: none;
         cursor: pointer;
         display: flex;
@@ -2739,7 +2744,7 @@ $bpi-orange: #ff8122;
 
     blockquote {
         padding: 0.5rem 0.875rem;
-        border-left: 4px solid #70d44b;
+        border-left: 4px solid var(--bader-green-light);
         background: rgba(112, 212, 75, 0.08);
     }
 
@@ -2748,4 +2753,21 @@ $bpi-orange: #ff8122;
     table {
         max-width: 100%;
     }
+}
+
+// Branding belongs to BPI's own native fragments, not the surrounding Odoo UI.
+.bader-brand.bpi-brand-stat-button {
+    color: var(--bader-ink);
+    .o_stat_text { color: var(--bader-ink); font-weight: 500; }
+}
+.bader-brand.bpi-brand-settings {
+    > h2 { color: var(--bader-ink); background: var(--bader-mist); font-weight: 500; }
+    .text-muted { color: var(--bader-muted) !important; }
+}
+// Only the wrapper's inherited default changes. Saved inline rich-text styles
+// still win on their own elements; no descendant !important reset is allowed.
+.bader-brand.bpi-website-description {
+    color: var(--bader-ink) !important;
+    font-family: var(--bader-font-body);
+    font-synthesis: none;
 }

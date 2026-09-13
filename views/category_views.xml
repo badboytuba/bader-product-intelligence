@@ -14,6 +14,7 @@
         <field name="arch" type="xml">
             <xpath expr="//tree" position="attributes">
                 <attribute name="string">Inteligencia de Categorías</attribute>
+                <attribute name="class" add="bader-brand bader-brand-view" separator=" "/>
             </xpath>
             <xpath expr="//tree/field[@name='display_name']" position="after">
                 <field name="parent_id" optional="show"/>
@@ -35,6 +36,7 @@
         <field name="arch" type="xml">
             <xpath expr="//form" position="attributes">
                 <attribute name="string">Inteligencia de Categoría</attribute>
+                <attribute name="class" add="bader-brand bader-brand-view" separator=" "/>
             </xpath>
             <xpath expr="//sheet" position="inside">
                 <group string="Producto Intelligence">

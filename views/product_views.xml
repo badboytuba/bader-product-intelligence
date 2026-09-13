@@ -8,7 +8,7 @@
             <xpath expr="//div[hasclass('oe_button_box')]" position="inside">
                 <button name="action_open_product_intelligence"
                         type="object"
-                        class="oe_stat_button"
+                        class="oe_stat_button bader-brand bpi-brand-stat-button"
                         icon="fa-line-chart"
                         groups="base.group_system">
                     <div class="o_stat_info">

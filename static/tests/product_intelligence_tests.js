@@ -2159,3 +2159,86 @@ QUnit.test('competitor evidence distinguishes observed keywords AI suggestions a
         assert.deepEqual(calls, ['/bader_product_intelligence/data']);
     } finally { app.destroy(); target.remove(); }
 });
+
+QUnit.test('official Bader home logo stays local accessible and scoped while KPI navigation remains read-only', async (assert) => {
+    const target = document.createElement('div');
+    const nativeSibling = document.createElement('button');
+    nativeSibling.className = 'btn btn-primary';
+    nativeSibling.textContent = 'Native Odoo';
+    document.body.append(target, nativeSibling);
+    const bodyClasses = document.body.className;
+    const calls = [];
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: {}, context: {} } },
+        env: { services: {
+            user: { context: { allowed_company_ids: [1] } }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route, params) => {
+                calls.push({route, params});
+                if (route.endsWith('/dashboard_overview')) return dashboardOverviewPayload();
+                if (route.endsWith('/dashboard')) return {products: [], pager: {total: 0}};
+                throw new Error('Brand navigation cannot call providers or writes: ' + route);
+            },
+        } },
+    });
+    try {
+        await app.mount(target);
+        assert.strictEqual(target.querySelectorAll('.o_action.bpi-app.bader-brand').length, 1);
+        const logo = target.querySelector('[data-bader-brand-logo]');
+        assert.ok(logo, 'home displays an official image instead of a recreated Bader wordmark');
+        assert.strictEqual(logo.tagName, 'IMG');
+        assert.strictEqual(logo.getAttribute('src'), '/bader_brand/static/src/img/bader_logotipo_verde_claro.svg');
+        assert.strictEqual(logo.getAttribute('alt'), 'Bader');
+        assert.ok(logo.closest('.bader-brand'), 'logo inherits only the owned module scope');
+        assert.strictEqual(document.body.className, bodyClasses, 'never brand the global body');
+        assert.strictEqual(nativeSibling.className, 'btn btn-primary', 'native sibling DOM untouched');
+        assert.notOk(nativeSibling.closest('.bader-brand'));
+        assert.strictEqual(calls.length, 1, 'brand adds no RPC at startup');
+        target.querySelector('[data-kpi-key="seo"]').click();
+        await workspacePatched();
+        assert.ok(target.querySelector('.bpi-home--catalog.bpi-home'));
+        assert.strictEqual(calls.length, 2);
+        assert.strictEqual(calls[1].route, '/bader_product_intelligence/dashboard');
+        assert.strictEqual(calls[1].params.quality_filter, 'seo');
+        assert.strictEqual(target.querySelector('[data-bader-brand-logo]').getAttribute('src'), logo.getAttribute('src'));
+    } finally { app.destroy(); target.remove(); nativeSibling.remove(); }
+});
+
+QUnit.test('official Bader detail scope preserves product identity editorial drafts and original section navigation', async (assert) => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    const detail = stabilizationPayload();
+    detail.product.brand = 'Product manufacturer';
+    const calls = [];
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: {
+            user: { context: { allowed_company_ids: [1] } }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async route => {
+                calls.push(route);
+                if (route.endsWith('/data')) return detail;
+                throw new Error('Brand detail navigation cannot request providers or writes: ' + route);
+            },
+        } },
+    });
+    try {
+        const action = await app.mount(target);
+        assert.strictEqual(target.querySelectorAll('.o_action.bpi-app.bader-brand').length, 1);
+        assert.ok(target.querySelector('.bpi-detail-workspace').closest('.bader-brand'));
+        assert.strictEqual(target.querySelector('.bpi-brand-badge').textContent, 'Product manufacturer', 'institutional brand must not overwrite manufacturer');
+        assert.strictEqual(target.querySelectorAll('[data-bader-brand-logo]').length, 0, 'compact detail keeps product identity rather than inserting another logo');
+        assert.deepEqual(calls, ['/bader_product_intelligence/data']);
+        target.querySelector('[data-detail-section="content"]').click();
+        await workspacePatched();
+        assert.strictEqual(action.state.activeTab, 'content');
+        action.state.contentForm.description = '<p>Editorial draft retained.</p>';
+        const mobileSelect = target.querySelector('#bpi-detail-section');
+        mobileSelect.value = 'seo';
+        mobileSelect.dispatchEvent(new Event('change', {bubbles: true}));
+        await workspacePatched();
+        assert.strictEqual(action.state.activeTab, 'seo');
+        assert.strictEqual(action.state.contentForm.description, '<p>Editorial draft retained.</p>');
+        assert.ok(target.querySelector('[data-detail-section="content"] .bpi-draft-dot'));
+        assert.deepEqual(calls, ['/bader_product_intelligence/data'], 'typography and navigation never start AI or ML refresh');
+        assert.strictEqual(target.querySelectorAll('.o_action.bpi-app.bader-brand').length, 1, 'scope survives section replacement');
+    } finally { app.destroy(); target.remove(); }
+});

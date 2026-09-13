@@ -1,10 +1,12 @@
 // Public product page: saved Producto Intelligence FAQs below the main product details.
 .bpi-website-faq {
+    font-family: var(--bader-font-body);
+    font-synthesis: none;
     width: 100%;
     margin-top: clamp(2rem, 4vw, 3.5rem);
     padding-top: clamp(1.75rem, 3vw, 2.75rem);
     border-top: 1px solid rgba(0, 56, 65, 0.16);
-    color: #003841;
+    color: var(--bader-green-dark);
 
     &__header,
     &__list {
@@ -19,19 +21,20 @@
 
         h2 {
             margin: 0.35rem 0 0.5rem;
-            color: #003841;
+            color: var(--bader-green-dark);
             font-size: clamp(1.5rem, 3vw, 2rem);
             line-height: 1.2;
+            font-weight: 500;
         }
 
         p {
             margin: 0;
-            color: #64777a;
+            color: var(--bader-muted);
         }
     }
 
     &__eyebrow {
-        color: #168a12;
+        color: var(--bader-green-action);
         font-size: 0.78rem;
         font-weight: 700;
         letter-spacing: 0.11em;
@@ -47,11 +50,11 @@
         overflow: hidden;
         border: 1px solid rgba(0, 56, 65, 0.16);
         border-radius: 0.875rem;
-        background: #fff;
+        background: var(--bader-white);
         box-shadow: 0 0.25rem 1rem rgba(0, 56, 65, 0.04);
 
         &[open] {
-            border-color: rgba(22, 138, 18, 0.34);
+            border-color: rgba(47, 125, 50, 0.34);
         }
 
         &[open] .bpi-website-faq__icon::after {
@@ -66,7 +69,7 @@
         justify-content: space-between;
         gap: 1rem;
         padding: 1rem 1.125rem;
-        color: #003841;
+        color: var(--bader-green-dark);
         font-weight: 700;
         line-height: 1.4;
         cursor: pointer;
@@ -77,7 +80,7 @@
         }
 
         &:focus-visible {
-            outline: 3px solid rgba(112, 212, 75, 0.55);
+            outline: 3px solid var(--bader-green-dark);
             outline-offset: -3px;
         }
     }
@@ -97,7 +100,7 @@
             left: 50%;
             width: 0.7rem;
             height: 2px;
-            background: #168a12;
+            background: var(--bader-green-action);
             content: "";
             transform: translate(-50%, -50%);
             transition: 0.18s ease;
@@ -110,7 +113,7 @@
 
     &__answer {
         padding: 0 1.125rem 1.125rem;
-        color: #4d6265;
+        color: var(--bader-ink);
         line-height: 1.65;
 
         p {

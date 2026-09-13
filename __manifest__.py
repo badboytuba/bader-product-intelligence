@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Producto Intelligence",
-    "version": "16.0.1.6.1",
+    "version": "16.0.1.6.2",
     "summary": "Producto Intelligence para Bader en Odoo 16",
     "description": """
 Producto Intelligence para Bader Argentina.
@@ -19,6 +19,7 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
     "license": "LGPL-3",
     "category": "Website",
     "depends": [
+        "bader_brand",
         "product",
         "web",
         "website_sale",

@@ -10,12 +10,12 @@
         <field name="arch" type="xml">
             <xpath expr="//div[@id='product_details']/p[@t-field='product.description_sale']" position="replace">
                 <div t-if="product.bpi_ai_generated_description"
-                     class="text-muted my-2 bpi-website-description"
+                     class="text-muted my-2 bpi-website-description bader-brand"
                      itemprop="description"
                      data-bpi-description="formatted"
                      t-field="product.bpi_ai_generated_description"/>
                 <p t-else=""
-                   class="text-muted my-2"
+                   class="text-muted my-2 bpi-website-description bader-brand"
                    itemprop="description"
                    placeholder="Una descripcion corta que aparecera tambien en documentos."
                    t-field="product.description_sale"/>
@@ -24,7 +24,7 @@
             <xpath expr="//div[@id='product_detail_main']" position="after">
                 <section t-if="product.bpi_technical_description"
                          id="bpi-product-technical-description"
-                         class="bpi-website-technical-description"
+                         class="bpi-website-technical-description bader-brand"
                          data-bpi-technical-description="formatted"
                          aria-labelledby="bpi-product-technical-description-title">
                     <div class="bpi-website-technical-description__header">
@@ -40,7 +40,7 @@
 
                 <section t-if="product.bpi_public_faqs"
                          id="bpi-product-faq"
-                         class="bpi-website-faq"
+                         class="bpi-website-faq bader-brand"
                          data-bpi-faq="public"
                          aria-labelledby="bpi-product-faq-title"
                          itemscope="itemscope"

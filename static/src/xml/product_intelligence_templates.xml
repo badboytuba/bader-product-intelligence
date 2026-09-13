@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <templates xml:space="preserve">
     <t t-name="bader_product_intelligence.ProductIntelligenceAction" owl="1">
-        <div class="o_action bpi-app">
+        <div class="o_action bpi-app bader-brand">
             <t t-if="state.loading">
                 <div class="bpi-loading-shell">
                     <div class="bpi-spinner"/>
@@ -19,7 +19,7 @@
                     <div t-att-class="'bpi-module-shell bpi-home' + (state.dashboardSection === 'catalog' ? ' bpi-home--catalog' : '')">
                         <header class="bpi-home-hero">
                             <div class="bpi-home-hero__copy">
-                                <div class="bpi-home-eyebrow"><span class="bpi-home-brand-mark"><i class="fa fa-cube"/></span> PRODUCT INTELLIGENCE <span class="bpi-home-eyebrow__divider"/> BADER</div>
+                                <div class="bpi-home-eyebrow"><img class="bpi-home-brand-logo" data-bader-brand-logo="true" width="703" height="150" src="/bader_brand/static/src/img/bader_logotipo_verde_claro.svg" alt="Bader"/><span class="bpi-home-eyebrow__divider" aria-hidden="true"/><span>PRODUCT INTELLIGENCE</span></div>
                                 <h1><t t-if="state.dashboardSection === 'catalog'">Catálogo de productos</t><t t-else="">Inteligencia del catálogo</t></h1>
                                 <p><t t-if="state.dashboardSection === 'catalog'">Organiza, revisa y mejora cada ficha desde un solo lugar.</t><t t-else="">Una visión clara de tu catálogo. Cada indicador, una oportunidad de mejora.</t></p>
                             </div>
@@ -878,7 +878,7 @@
                                         <div class="bpi-playground__form">
                                             <div class="bpi-playground__form-header">
                                                 <h3><i class="fa fa-magic"/> Editar Imagen con Nancy AI</h3>
-                                                <button type="button" class="bpi-playground__close" t-on-click="closeImageModal"><i class="fa fa-times"/></button>
+                                                <button type="button" class="bpi-playground__close" aria-label="Cerrar el estudio de imágenes" title="Cerrar el estudio de imágenes" t-on-click="closeImageModal"><i class="fa fa-times"/></button>
                                             </div>
                                             <div class="bpi-playground__form-body">
                                                 <!-- Image selection -->
