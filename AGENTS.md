@@ -1,3 +1,10 @@
+## 2026-09-15 — Instrumental approved copy and separated generation
+
+Release `16.0.1.8.1` adds `general_specs` (General short, saved specifications
+long) and a private dated import receipt. Read `docs/INSTRUMENTAL_COPY.md`.
+Preserve approved literal copy, report conflicting measurements without altering
+Datos y precios, and never use historic prose as technical evidence. QAS only.
+
 ## 2026-09-15 — Saved technical specifications
 
 Release `16.0.1.8.0` adds per-variant editorial cm/g measurements in Datos y

@@ -26,6 +26,10 @@ class TestBPIContentTemplates(TransactionCase):
         cls.templates = cls.env["bpi.content.template"]
         cls.general = cls.env.ref("bader_product_intelligence.content_template_general")
         cls.instrumental = cls.env.ref("bader_product_intelligence.content_template_instrumental")
+        # Keep legacy-renderer fixtures deterministic after an operator selects
+        # another supported format. TransactionCase rolls this fixture back.
+        cls.instrumental.write({"format": "two_sections", "short_min_words": 45,
+                                "short_max_words": 70, "long_min_words": 0, "long_max_words": 0})
         cls.root_category = cls.env["product.category"].create({"name": "BPI Template Root"})
         cls.child_category = cls.env["product.category"].create({
             "name": "Instrumental", "parent_id": cls.root_category.id,
@@ -698,3 +702,58 @@ class TestBPIContentTemplates(TransactionCase):
                 self.assertEqual(duplicate.categ_id, original.categ_id)
                 self.assertEqual(self.service.content_template_context(duplicate)["effective"]["id"], self.instrumental.id)
                 self.assertEqual(original.bpi_content_template_id.id or False, selection)
+
+    def test_general_specs_separates_fields_and_includes_all_saved_measurements(self):
+        recipe = self._new_template(format="general_specs", short_min_words=0, short_max_words=0)
+        variant = self.product.product_variant_id
+        self.env["bpi.product.specification"]._save_rows(self.product, [{
+            "variantId": variant.id, "revision": 0, "values": {"length": 17, "weight": 17, "height": 1.5},
+        }])
+        before = self._snapshot()
+        result, prompt = self._generate(self._structured_response(), template_id=recipe.id)
+        short, long = result["descriptionHtml"], result["technicalDescriptionHtml"]
+        self.assertEqual(len(html.fragment_fromstring(short, create_parent="div").xpath("./p")), 2)
+        self.assertNotIn("Descripción General", long)
+        self.assertIn("Especificaciones Técnicas", long)
+        for value in ("17 cm", "17 g", "1,5 cm"):
+            self.assertIn(value, long)
+            self.assertIn(value, prompt)
+        self.assertNotIn("OLD_AI_NOT_TECHNICAL_EVIDENCE", prompt)
+        self.assertFalse(result["warnings"])
+        self.assertEqual(before, self._snapshot())
+
+    def test_general_specs_invalid_ids_or_prose_do_not_retry_or_save(self):
+        recipe = self._new_template(format="general_specs")
+        before = self._snapshot()
+        for changes in ({"specificationIds": ["invented"]}, {"specificationIds": "weight"},
+                        {"generalParagraphs": ["<script>x</script>", "text"]},
+                        {"generalParagraphs": ["only one"]}):
+            with patch.object(type(self.service), "_openai_json", return_value=self._structured_response(**changes)) as provider:
+                with self.assertRaises(UserError):
+                    self.service.generate_content(self.product, template_id=recipe.id)
+                provider.assert_called_once()
+            self.assertEqual(before, self._snapshot())
+
+    def test_general_specs_unknown_facts_are_pending_not_zero(self):
+        recipe = self._new_template(format="general_specs", short_min_words=0, short_max_words=0)
+        result, unused = self._generate(self._structured_response(), template_id=recipe.id)
+        self.assertIn("pendientes de verificación", result["technicalDescriptionHtml"])
+        self.assertNotIn("0 cm", result["technicalDescriptionHtml"])
+        self.assertEqual(len(result["warnings"]), 1)
+
+    def test_editorial_receipt_is_private_and_not_generation_evidence(self):
+        self.product.bpi_editorial_import = {
+            "date": "2026-09-15 10:00:00", "sku": "fixture", "differences": [],
+            "contentHash": self.product._bpi_editorial_content_hash(),
+            "documentText": "APPROVED_PROSE_IS_NOT_SAVED_MEASUREMENT",
+        }
+        receipt = self.product.bpi_build_payload()["product"]["editorialImport"]
+        self.assertFalse(receipt["changedSinceImport"])
+        self.assertNotIn("documentText", receipt)
+        result, prompt = self._generate({"description": "Commercial", "technicalDescription": "Technical"})
+        self.assertNotIn("APPROVED_PROSE", prompt)
+        self.assertTrue(any("documento importado" in x for x in result["warnings"]))
+        self.product.bpi_technical_description = "<p>Edited after import</p>"
+        self.assertTrue(self.product.bpi_build_payload()["product"]["editorialImport"]["changedSinceImport"])
+        with self.assertRaises(AccessError):
+            self.product.with_user(self.non_manager).read(["bpi_editorial_import"])

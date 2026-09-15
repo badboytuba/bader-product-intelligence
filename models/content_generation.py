@@ -112,6 +112,32 @@ class ContentGenerationService(models.AbstractModel):
         )
 
     @api.model
+    def _content_general_specs_html(self, response, facts):
+        """Keep the legacy contract intact; the new layout separates the fields.
+
+        All saved measurements are rendered on the server, even when the model
+        omits them. Provider prose and historic copy can never rewrite values.
+        """
+        identifiers = response.get("specificationIds")
+        if not isinstance(identifiers, list):
+            raise UserError(_("La propuesta debe incluir una lista de datos confirmados."))
+        self._content_structured_html(response, facts)
+        # The legacy renderer has already validated/escaped both paragraphs and
+        # all IDs. Build each field independently, not by parsing provider HTML.
+        description = self._content_proposal_html("".join(
+            "<p>%s</p>" % escape(p.strip()) for p in response["generalParagraphs"]
+        ))
+        evidence = {fact["id"]: fact for fact in facts}
+        selected = list(identifiers)
+        selected.extend(key for key in evidence if key.startswith("spec:") and key not in selected)
+        specs = "<ul>%s</ul>" % "".join(
+            "<li>%s: %s</li>" % (escape(evidence[key]["label"]), escape(evidence[key]["value"]))
+            for key in selected
+        ) if selected else "<p>Especificaciones técnicas pendientes de verificación.</p>"
+        technical = self._content_proposal_html("<h3>Especificaciones Técnicas</h3>" + specs)
+        return description, technical, bool(selected)
+
+    @api.model
     def generate_content(self, product, tone="profesional", audience="clinicas", template_id=CONTENT_TEMPLATE_UNSET, template_revision=None):
         product.ensure_one()
         product = self._meli_product(product.id)
@@ -130,6 +156,15 @@ El primero explica función clínica y utilidad; el segundo construcción, conse
 Si faltan esos datos, usa una orientación neutral para consultar la ficha del fabricante; nunca atribuyas una propiedad no confirmada.
 specificationIds contiene SOLO IDs existentes en DATOS CONFIRMADOS; no inventes ni reescribas valores. Si no hay datos aplicables, devuelve [].
 El servidor monta Descripción General y Especificaciones Técnicas; no repitas el nombre del producto como título."""
+
+        if recipe["format"] == "general_specs":
+            schema = '{"generalParagraphs":["párrafo 1 en texto plano", "párrafo 2 en texto plano"], "specificationIds":["ID de dato confirmado"]}'
+            format_rules = """Descripción General corresponde EXCLUSIVAMENTE al campo corto: generalParagraphs contiene exactamente dos párrafos completos en texto plano, sin HTML, títulos ni listas.
+No es un resumen limitado a 45–70 palabras. Explica identificación, función y utilidad sin atribuir propiedades no confirmadas.
+La descripción larga contiene Especificaciones Técnicas. specificationIds selecciona SOLO IDs de DATOS CONFIRMADOS.
+El servidor añade todas las medidas guardadas de Datos y precios con sus unidades y variante; no las recalcules ni sustituyas por medidas de textos históricos.
+No dupliques Descripción General en la larga ni el título del producto en ningún campo.
+No inventes puntos destacados ni instrucciones de esterilización/mantenimiento cuando no existan datos confirmados."""
 
         def goal(prefix):
             low, high = recipe[prefix + "MinWords"], recipe[prefix + "MaxWords"]
@@ -182,10 +217,16 @@ CONTRATO DE FORMATO OBLIGATORIO:
         response = self._openai_json(prompt)
         if not isinstance(response, dict):
             raise UserError(_("Nancy devolvió una propuesta inválida. No se modificaron tus borradores."))
-        description = self._content_proposal_html(response.get("description"))
-        technical = self._content_structured_html(response, facts) if recipe["format"] == "two_sections" else self._content_proposal_html(response.get("technicalDescription"))
+        has_specs = bool(response.get("specificationIds"))
+        if recipe["format"] == "general_specs":
+            description, technical, has_specs = self._content_general_specs_html(response, facts)
+        else:
+            description = self._content_proposal_html(response.get("description"))
+            technical = self._content_structured_html(response, facts) if recipe["format"] == "two_sections" else self._content_proposal_html(response.get("technicalDescription"))
         warnings = []
-        if recipe["format"] == "two_sections" and not response.get("specificationIds"):
+        if product.bpi_editorial_import:
+            warnings.append(_("Esta es una nueva propuesta basada en datos Odoo guardados, no una copia literal del documento importado. Revisa las diferencias antes de guardar."))
+        if recipe["format"] in ("two_sections", "general_specs") and not has_specs:
             warnings.append(_("No se incluyeron especificaciones técnicas confirmadas. Completa y verifica los datos del producto."))
         for prefix, html, label in (("short", description, _("Descripción corta")), ("long", technical, _("Descripción larga"))):
             words = len(re.findall(r"\S+", self._description_plain_text(html)))

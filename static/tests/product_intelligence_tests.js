@@ -2571,3 +2571,34 @@ QUnit.test('actual technical card keeps empty values and drafts across section r
         assert.ok(target.querySelector('.bpi-technical-specs').textContent.includes('sin embalaje'));
     } finally { app.destroy(); target.remove(); }
 });
+
+QUnit.module('Bader editorial import');
+QUnit.test('literal import receipt and split labels are local, escaped and preserve drafts', async (assert) => {
+    const target = document.createElement('div'); document.body.appendChild(target);
+    const calls = [], detail = { ...stabilizationPayload(), contentTemplates: contentTemplateContext() };
+    detail.contentTemplates.effective.format = 'general_specs';
+    detail.contentTemplates.effective.shortMinWords = 0; detail.contentTemplates.effective.shortMaxWords = 0;
+    detail.product.editorialImport = { sku: '17/4065-3', date: '2026-09-15 10:00:00', changedSinceImport: false,
+        differences: [{ label: 'Largo <script>not executable</script>', document: '13 cm', saved: '17 cm' }] };
+    const app = new App(ProductIntelligenceAction, { templates, test: true,
+        props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: { user: { context: {} }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async route => { calls.push(route); if (route.endsWith('/data')) return detail; throw new Error('Unexpected write/provider'); },
+        } },
+    });
+    try {
+        const action = await app.mount(target);
+        await action.selectDetailSection('content'); await workspacePatched();
+        const receipt = target.querySelector('.bpi-editorial-import');
+        assert.ok(receipt); receipt.querySelector('summary').click(); await workspacePatched();
+        assert.ok(receipt.textContent.includes('13 cm')); assert.ok(receipt.textContent.includes('17 cm'));
+        assert.notOk(receipt.querySelector('script'));
+        assert.ok(target.textContent.includes('Especificaciones Técnicas'));
+        assert.ok(action.contentWordCountLabel().includes('Descripción General'));
+        action.state.contentForm.description = 'Literal approved draft';
+        await action.selectDetailSection('datos'); await workspacePatched();
+        await action.selectDetailSection('content'); await workspacePatched();
+        assert.strictEqual(action.state.contentForm.description, 'Literal approved draft');
+        assert.deepEqual(calls, ['/bader_product_intelligence/data']);
+    } finally { app.destroy(); target.remove(); }
+});

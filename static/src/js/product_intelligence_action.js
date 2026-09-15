@@ -2354,7 +2354,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     contentWordCountLabel() {
-        return `${this.contentWordCount()} palabras · ${this.contentTemplateWordTarget('short')} (resumen comercial corto)`;
+        return `${this.contentWordCount()} palabras · ${this.contentTemplateWordTarget('short')} (${this.currentContentTemplate()?.format === 'general_specs' ? 'Descripción General' : 'resumen comercial corto'})`;
     }
 
     technicalDescriptionWordCount() {

@@ -10,3 +10,4 @@ from . import content_template
 from . import content_generation
 from . import technical_specification
 from . import technical_import
+from . import editorial_import

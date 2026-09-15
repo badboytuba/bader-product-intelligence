@@ -22,6 +22,7 @@ class ContentTemplate(models.Model):
     long_max_words = fields.Integer(string="Máximo orientativo (larga)")
     format = fields.Selection([
         ("free", "Libre"), ("two_sections", "Ficha de dos secciones"),
+        ("general_specs", "General en corta · Especificaciones en larga"),
     ], required=True, default="free", string="Formato")
     revision = fields.Integer(default=1, readonly=True, copy=False)
     category_ids = fields.One2many(

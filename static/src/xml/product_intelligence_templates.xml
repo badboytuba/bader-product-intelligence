@@ -665,7 +665,7 @@
                                         <button t-elif="!state.contentTemplateContext" type="button" class="bpi-button bpi-button--secondary" t-on-click="refreshContentTemplateContext" t-att-disabled="state.contentTemplateBusy">Consultar modelo</button>
                                         <details t-if="currentContentTemplate()" class="bpi-content-template__instructions">
                                             <summary>Ver instrucciones del modelo</summary>
-                                            <p><b>Formato:</b> <t t-esc="currentContentTemplate().format === 'two_sections' ? 'Ficha de dos secciones' : 'Libre'"/></p>
+                                            <p><b>Formato:</b> <t t-esc="currentContentTemplate().format === 'general_specs' ? 'General en corta · Especificaciones en larga' : (currentContentTemplate().format === 'two_sections' ? 'Ficha de dos secciones' : 'Libre')"/></p>
                                             <h4>Descripción corta</h4>
                                             <p t-esc="currentContentTemplate().shortInstructions"/>
                                             <h4>Descripción larga</h4>
@@ -691,6 +691,14 @@
                                             </select>
                                         </div>
                                     </div>
+                                    <details t-if="product.editorialImport" class="bpi-content-template__warnings bpi-editorial-import">
+                                        <summary><strong>Documento aprobado importado</strong> · SKU <t t-esc="product.editorialImport.sku"/> · <t t-esc="product.editorialImport.date"/> UTC <span t-if="product.editorialImport.differences.length"> · Hay medidas divergentes</span></summary>
+                                        <p>Descripción General → corta. Especificaciones, puntos destacados y recomendaciones → larga. Texto copiado literalmente; las medidas de Datos y precios no se modificaron.</p>
+                                        <p t-if="product.editorialImport.changedSinceImport">El contenido guardado fue editado después de la importación.</p>
+                                        <p t-if="product.editorialImport.differences.length">Divergencias registradas al importar (no una comparación en vivo):</p>
+                                        <ul><li t-foreach="product.editorialImport.differences" t-as="difference" t-key="difference_index"><t t-esc="difference.label"/>: documento <t t-esc="difference.document"/> · Datos y precios <t t-esc="difference.saved"/></li></ul>
+                                        <p>Una nueva generación usa los datos Odoo guardados y no garantiza conservar el texto aprobado. Revisa antes de guardar.</p>
+                                    </details>
                                     <p class="bpi-content-template__saved-note"><i class="fa fa-database"/> Nancy utiliza los datos Odoo guardados, no los cambios pendientes. El resultado es una propuesta: no se guarda ni publica automáticamente.</p>
                                     <button type="button" class="bpi-button bpi-button--primary bpi-button--full" style="margin-top: 18px;" t-on-click="generateContent" t-att-disabled="state.contentBusy || state.contentTemplateBusy || state.contentTemplateAdminBusy || state.contentTemplateError">
                                         <i class="fa fa-magic"/>
@@ -704,7 +712,7 @@
                                         <div class="bpi-form-grid">
                                             <label>Nombre del Producto</label>
                                             <input class="bpi-input" t-att-value="state.contentForm.name" t-on-input="(ev) =&gt; this.updateContentField('name', ev.target.value)"/>
-                                            <label>Descripcion Optimizada <span class="bpi-label-hint">(resumen corto)</span></label>
+                                            <label><t t-if="currentContentTemplate()?.format === 'general_specs'">Descripción General</t><t t-else="">Descripcion Optimizada</t> <span class="bpi-label-hint">(descripción corta)</span></label>
                                         <div class="bpi-rich-editor-shell">
                                             <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion">
                                                 <div class="bpi-rich-editor-toolbar__group">
@@ -773,7 +781,7 @@
                                         </details>
                                         <p class="bpi-muted" data-content-word-target="short" t-esc="contentWordCountLabel()"/>
                                         <div class="bpi-content-divider" role="separator"/>
-                                        <label>Descripcion Tecnica <span class="bpi-label-hint">(contenido ampliado)</span></label>
+                                        <label><t t-if="currentContentTemplate()?.format === 'general_specs'">Especificaciones Técnicas</t><t t-else="">Descripcion Tecnica</t> <span class="bpi-label-hint">(descripción larga)</span></label>
                                         <div class="bpi-rich-editor-shell">
                                             <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion tecnica">
                                                 <div class="bpi-rich-editor-toolbar__group">
