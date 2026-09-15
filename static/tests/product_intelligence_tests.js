@@ -2513,3 +2513,61 @@ QUnit.test('actual template selector exposes source instructions and manual sele
         assert.ok(target.querySelector('[data-detail-section="content"] .bpi-draft-dot'));
     } finally { app.destroy(); target.remove(); }
 });
+
+QUnit.module('Bader technical specifications');
+
+QUnit.test('specifications are drafts included in contextual and atomic product save', (assert) => {
+    const action = contentTemplateAction();
+    const payload = { ...stabilizationPayload(), technicalSpecifications: [{ variantId: 15, revision: 2, values: { length: 17 }, sku: '17/4065-3', sources: {} }] };
+    action.applyDetailPayload(payload);
+    const row = action.state.productForm.technicalSpecifications[0];
+    action.updateTechnicalSpec(row, 'length', '18,5');
+    assert.strictEqual(action.productSaveValues().technicalSpecifications[0].values.length, '18,5');
+    assert.ok(action.detailHasUnsavedChanges());
+    assert.strictEqual(payload.technicalSpecifications[0].values.length, 17, 'saved facts remain independent of drafts');
+});
+
+QUnit.test('specification save merges concurrent edits and advances the revision', (assert) => {
+    const action = contentTemplateAction();
+    const sent = [{ variantId: 15, revision: 1, values: { length: '17', height: '1,5' } }];
+    const current = [{ variantId: 15, revision: 1, values: { length: '18', height: '1,5' } }];
+    const saved = [{ variantId: 15, revision: 2, values: { length: 17, height: 1.5 } }];
+    const merged = action.mergeSavedDraft(current, sent, saved);
+    assert.strictEqual(merged[0].values.length, '18');
+    assert.strictEqual(merged[0].values.height, 1.5);
+    assert.strictEqual(merged[0].revision, 2, 'next save uses new revision without discarding later edits');
+});
+
+QUnit.test('specification revision participates in generation freshness', (assert) => {
+    const action = contentTemplateAction();
+    const a = { ...contentTemplateContext(), specificationRevision: 'first' };
+    const b = { ...a, specificationRevision: 'changed' };
+    assert.notStrictEqual(action.contentTemplateFingerprint(a), action.contentTemplateFingerprint(b));
+});
+
+QUnit.test('actual technical card keeps empty values and drafts across section remounts', async (assert) => {
+    const target = document.createElement('div'); document.body.appendChild(target);
+    const calls = [];
+    const detail = { ...stabilizationPayload(), contentTemplates: contentTemplateContext(), technicalSpecifications: [{ variantId: 15, revision: 0, values: { length: 17 }, sku: 'BPI-TEST', name: 'Instrumento', active: true, sources: {} }] };
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: { user: { context: {} }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route) => { calls.push(route); if (route.endsWith('/data')) return detail; throw new Error('No other RPC expected'); },
+        } },
+    });
+    try {
+        const action = await app.mount(target);
+        await action.selectDetailSection('datos'); await workspacePatched();
+        const inputs = target.querySelectorAll('.bpi-technical-specs input');
+        assert.strictEqual(inputs.length, 6);
+        assert.strictEqual(inputs[0].value, '', 'unknown is empty, not zero');
+        assert.strictEqual(target.querySelector('#spec-15-length').value, '17', 'saved numeric values render in OWL');
+        inputs[0].value = '1,5'; inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+        await action.selectDetailSection('content'); await workspacePatched();
+        assert.notOk(target.querySelector('.bpi-technical-specs'));
+        await action.selectDetailSection('datos'); await workspacePatched();
+        assert.strictEqual(target.querySelector('.bpi-technical-specs input').value, '1,5');
+        assert.deepEqual(calls, ['/bader_product_intelligence/data']);
+        assert.ok(target.querySelector('.bpi-technical-specs').textContent.includes('sin embalaje'));
+    } finally { app.destroy(); target.remove(); }
+});

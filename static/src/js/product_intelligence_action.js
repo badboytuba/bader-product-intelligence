@@ -745,7 +745,7 @@ export class ProductIntelligenceAction extends Component {
     detailDraftSnapshot() {
         const pick = (value, keys) => Object.fromEntries(keys.map((key) => [key, value?.[key] ?? '']));
         return this.snapshotDraft({
-            datos: pick(this.state.productForm, ['name', 'sku', 'slug', 'brand', 'categoryId', 'priceUsd', 'previousPriceUsd', 'costUsd', 'featured', 'isPublished']),
+            datos: pick(this.state.productForm, ['name', 'sku', 'slug', 'brand', 'categoryId', 'priceUsd', 'previousPriceUsd', 'costUsd', 'featured', 'isPublished', 'technicalSpecifications']),
             categorization: pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory']),
             content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs', 'templateId']),
             seo: pick(this.state.seoForm, ['seoTitle', 'seoDescription', 'seoKeywords', 'geoTitle', 'geoDescription', 'geoKeywords', 'geoFeatures', 'seoScore', 'geoScore', 'competitivenessScore']),
@@ -965,6 +965,15 @@ export class ProductIntelligenceAction extends Component {
     }
 
     mergeSavedDraft(current, submitted, saved) {
+        if (Array.isArray(current) && Array.isArray(submitted) && Array.isArray(saved) &&
+            saved.length && saved.every(row => row && Number.isInteger(row.variantId) && row.values && Number.isInteger(row.revision))) {
+            return current.map(row => {
+                const before = submitted.find(item => item.variantId === row.variantId);
+                const after = saved.find(item => item.variantId === row.variantId);
+                if (!before || !after) return row;
+                return { ...row, revision: after.revision, values: this.mergeSavedDraft(row.values, before.values, after.values) };
+            });
+        }
         if (JSON.stringify(current) === JSON.stringify(submitted)) {
             return saved;
         }
@@ -1404,6 +1413,7 @@ export class ProductIntelligenceAction extends Component {
             priceUsd: this.toInput(product.priceUsd),
             previousPriceUsd: product.previousPriceUsd ? this.toInput(product.previousPriceUsd) : "",
             costUsd: product.costUsd ? this.toInput(product.costUsd) : "",
+            technicalSpecifications: (data.technicalSpecifications || []).map(row => ({ variantId: row.variantId, revision: row.revision, values: { ...row.values } })),
             qtyAvailable: this.toInput(product.qtyAvailable),
             featured: !!product.featured,
             isPublished: !!product.isPublished,
@@ -3070,8 +3080,28 @@ export class ProductIntelligenceAction extends Component {
         this.state.contentForm.faqs.splice(index, 1);
     }
 
+    technicalSpecFields() {
+        return [ ['height', 'Alto', 'cm'], ['widthMax', 'Ancho máximo', 'cm'],
+            ['widthMin', 'Ancho mínimo', 'cm'], ['length', 'Largo', 'cm'],
+            ['diameter', 'Diámetro', 'cm'], ['weight', 'Peso neto', 'g'] ];
+    }
+
+    technicalSpecMeta(variantId) {
+        return (this.state.detail?.technicalSpecifications || []).find(row => row.variantId === variantId) || {};
+    }
+
+    technicalSpecSource(variantId, key) {
+        const source = this.technicalSpecMeta(variantId).sources?.[key];
+        return source ? `${source.label || 'Dato guardado'} · ${source.date || ''}${source.row ? ' · Fila ' + source.row : ''}` : 'Sin dato guardado';
+    }
+
+    updateTechnicalSpec(row, key, value) {
+        row.values[key] = value;
+    }
+
     productSaveValues(form = this.state.productForm) {
         return {
+            technicalSpecifications: this.snapshotDraft(form.technicalSpecifications || []),
             name: form.name, sku: form.sku, slug: form.slug, brand: form.brand,
             categoryId: form.categoryId || false,
             priceUsd: this.parseNumber(form.priceUsd), previousPriceUsd: this.parseNumber(form.previousPriceUsd),
@@ -3124,6 +3154,7 @@ export class ProductIntelligenceAction extends Component {
             context?.selectionId || false, context?.effective?.id || false,
             context?.effective?.revision || false, context?.internalCategory?.id || false,
             context?.source?.kind || '', context?.source?.categoryId || false,
+            context?.specificationRevision || '',
         ]);
     }
 

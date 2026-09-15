@@ -1,0 +1,7 @@
+<odoo>
+    <record id="technical_specification_company_rule" model="ir.rule">
+        <field name="name">Especificaciones: empresas permitidas</field>
+        <field name="model_id" ref="model_bpi_product_specification"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>

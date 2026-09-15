@@ -364,6 +364,21 @@
                                         </div>
                                     </div>
                                 </div>
+                                <section class="bpi-panel bpi-technical-specs" aria-label="Especificaciones técnicas">
+                                    <div class="bpi-panel__title"><h3><i class="fa fa-sliders"/> Especificaciones técnicas</h3><p>Medidas del producto sin embalaje · centímetros (cm) y gramos (g).</p></div>
+                                    <p class="bpi-muted">Completa los datos comprobados. Vacío significa desconocido, no cero. Se guardan con Datos y precios; no cambian el peso logístico, los precios ni MercadoLibre.</p>
+                                    <fieldset t-foreach="state.productForm.technicalSpecifications || []" t-as="spec" t-key="spec.variantId" class="bpi-technical-specs__variant">
+                                        <legend><t t-esc="technicalSpecMeta(spec.variantId).sku || 'Sin SKU'"/> · <t t-esc="technicalSpecMeta(spec.variantId).name"/><t t-if="technicalSpecMeta(spec.variantId).active === false"> · Archivado</t></legend>
+                                        <div class="bpi-technical-specs__grid">
+                                            <div t-foreach="technicalSpecFields()" t-as="field" t-key="field[0]">
+                                                <label t-att-for="'spec-' + spec.variantId + '-' + field[0]"><t t-esc="field[1]"/> (<t t-esc="field[2]"/>)</label>
+                                                <input class="bpi-input" type="text" inputmode="decimal" placeholder="Sin dato" t-att-id="'spec-' + spec.variantId + '-' + field[0]" t-att-value="spec.values[field[0]] == null ? '' : templateString(spec.values[field[0]]).replace('.', ',')" t-on-input="(ev) =&gt; this.updateTechnicalSpec(spec, field[0], ev.target.value)"/>
+                                                <small t-esc="technicalSpecSource(spec.variantId, field[0])"/>
+                                            </div>
+                                        </div>
+                                    </fieldset>
+                                    <p class="bpi-muted"><i class="fa fa-info-circle"/> Nancy utiliza las especificaciones guardadas en la próxima generación. No modifica descripciones existentes automáticamente. Origen y fecha corresponden al último dato guardado.</p>
+                                </section>
                                 <div class="bpi-panel bpi-panel--success">
                                     <div class="bpi-margin-card">
                                         <div>

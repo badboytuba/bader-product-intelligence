@@ -8,3 +8,5 @@ from . import dashboard
 from . import meli_provider
 from . import content_template
 from . import content_generation
+from . import technical_specification
+from . import technical_import

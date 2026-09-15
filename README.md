@@ -1,3 +1,10 @@
+## 2026-09-15 — Saved technical specifications
+
+Release `16.0.1.8.0` adds per-variant editorial cm/g measurements in Datos y
+precios, separate from logistics/ML, and guarded exact-SKU imports. Read
+`docs/TECHNICAL_SPECIFICATIONS.md`. Preserve empty/unknown semantics, provenance,
+atomic saves, revision guards and existing content. QAS only.
+
 ## 2026-09-15 — Category-specific description models
 
 Release `16.0.1.7.0` adds an administrator-managed description-template library,

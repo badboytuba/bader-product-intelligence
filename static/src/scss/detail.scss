@@ -189,3 +189,13 @@
     .o_action.bpi-app .bpi-detail-workspace .bpi-content-template { padding: 13px; }
     .o_action.bpi-app .bpi-detail-workspace .bpi-content-template__controls > button { width: 100%; justify-content: center; }
 }
+
+.o_action.bpi-app .bpi-detail-workspace .bpi-technical-specs {
+    &__variant { min-width: 0; border: 0; padding: 16px 0; margin: 0; }
+    legend { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+    &__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    label { display: block; margin-bottom: 6px; font-weight: 600; }
+    small { display: block; margin-top: 6px; overflow-wrap: anywhere; color: var(--bader-green-dark); }
+    @media (max-width: 767px) { &__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 420px) { &__grid { grid-template-columns: minmax(0, 1fr); } }
+}

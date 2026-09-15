@@ -69,7 +69,7 @@ class ContentGenerationService(models.AbstractModel):
     def _content_template_assert_current(self, product, original, template_id=CONTENT_TEMPLATE_UNSET):
         def signature(context):
             return (context["selectionId"], context["effective"]["id"], context["effective"]["revision"],
-                    context["internalCategory"]["id"], context["source"])
+                    context["internalCategory"]["id"], context["source"], context.get("specificationRevision"))
         # Also detects modifications made in the current transaction/test.
         if signature(self.content_template_context(product, template_id)) != signature(original):
             raise UserError(_("El modelo o la categoría cambió durante la generación. Conservamos tus borradores; revisa el modelo antes de generar otra vez."))
