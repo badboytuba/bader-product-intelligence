@@ -1,3 +1,13 @@
+## 2026-09-15 — Category-specific description models
+
+Release `16.0.1.7.0` adds an administrator-managed description-template library,
+internal-category inheritance and explicitly saved product overrides. Read
+`docs/CONTENT_TEMPLATES.md` (or `CONTENT_TEMPLATES.md` beside this handoff).
+Preserve atomic saves, drafts, stale-response protection and the shared Bader
+brand. No historical content regeneration or publication on upgrade. QAS only;
+provider configuration and MercadoLibre safety flags remain unchanged. Runtime
+evidence is separate from the source version.
+
 ## 2026-09-13 — Official Bader identity
 
 Release `16.0.1.6.2` requires the shared `bader_brand` addon from `bader_brand_addons`. Read `docs/BADER_BRAND.md` (or `BADER_BRAND.md` alongside this handoff). Scope styles to explicit owned `.bader-brand` roots; never restyle native Odoo navbar/global forms or overwrite authored content. Logos/fonts are official local assets. Category-generation templates are not part of this cosmetic release. Preserve business/API/save/ML safety behavior; QAS only.

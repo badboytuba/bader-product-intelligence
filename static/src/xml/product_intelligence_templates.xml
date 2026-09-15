@@ -618,6 +618,46 @@
                                         <h3><i class="fa fa-magic"/> Nancy AI Studio</h3>
                                         <p>Genera descripciones optimizadas para SEO y GEO</p>
                                     </div>
+                                    <section class="bpi-content-template" aria-label="Modelo editorial de descripción" t-att-aria-busy="state.contentTemplateBusy ? 'true' : 'false'">
+                                        <div class="bpi-content-template__controls">
+                                            <div class="bpi-content-template__select">
+                                                <label for="bpi-content-template-select">Modelo de descripción</label>
+                                                <select id="bpi-content-template-select" class="bpi-input" t-on-change="changeContentTemplate" aria-describedby="bpi-content-template-help">
+                                                    <option value="" t-att-selected="!state.contentForm.templateId">Automático — según categoría interna</option>
+                                                    <option t-foreach="state.contentTemplateContext?.options || []" t-as="model" t-key="model.id" t-att-value="model.id" t-att-selected="model.id === state.contentForm.templateId" t-esc="model.name"/>
+                                                </select>
+                                            </div>
+                                            <button type="button" class="bpi-button bpi-button--secondary" data-content-template-refresh="" t-on-click="refreshContentTemplateContext" t-att-disabled="state.contentTemplateBusy || state.contentTemplateAdminBusy" title="Consultar la configuración guardada, sin generar contenido">
+                                                <i t-att-class="state.contentTemplateBusy ? 'fa fa-spinner fa-spin' : 'fa fa-refresh'"/> Actualizar modelo
+                                            </button>
+                                            <button type="button" class="bpi-button bpi-button--secondary" data-content-template-manage="" t-on-click="manageContentTemplates" t-att-disabled="state.contentTemplateAdminBusy">
+                                                <i class="fa fa-sliders"/> Administrar modelos
+                                            </button>
+                                        </div>
+                                        <div class="bpi-content-template__status" aria-live="polite">
+                                            <p t-if="state.contentTemplateBusy"><i class="fa fa-spinner fa-spin"/> Consultando modelo…</p>
+                                            <t t-elif="currentContentTemplate()">
+                                                <strong class="bpi-content-template__effective"><i class="fa fa-file-text-o"/> <t t-esc="currentContentTemplate().name"/> <small>Revisión <t t-esc="currentContentTemplate().revision"/></small></strong>
+                                                <p t-esc="contentTemplateSourceLabel()"/>
+                                                <p><b>Categoría interna Odoo:</b> <t t-esc="state.contentTemplateContext.internalCategory?.path || state.contentTemplateContext.internalCategory?.name || 'Sin categoría'"/></p>
+                                            </t>
+                                            <p t-else="">No hay información local del modelo. Consulta antes de elegir otro patrón.</p>
+                                        </div>
+                                        <div t-if="state.contentTemplateError" class="bpi-content-template__error" role="alert">
+                                            <span t-esc="state.contentTemplateError"/>
+                                            <button type="button" class="bpi-button bpi-button--secondary" t-on-click="refreshContentTemplateContext" t-att-disabled="state.contentTemplateBusy">Volver a consultar</button>
+                                        </div>
+                                        <button t-elif="!state.contentTemplateContext" type="button" class="bpi-button bpi-button--secondary" t-on-click="refreshContentTemplateContext" t-att-disabled="state.contentTemplateBusy">Consultar modelo</button>
+                                        <details t-if="currentContentTemplate()" class="bpi-content-template__instructions">
+                                            <summary>Ver instrucciones del modelo</summary>
+                                            <p><b>Formato:</b> <t t-esc="currentContentTemplate().format === 'two_sections' ? 'Ficha de dos secciones' : 'Libre'"/></p>
+                                            <h4>Descripción corta</h4>
+                                            <p t-esc="currentContentTemplate().shortInstructions"/>
+                                            <h4>Descripción larga</h4>
+                                            <p t-esc="currentContentTemplate().longInstructions"/>
+                                        </details>
+                                        <p id="bpi-content-template-help" class="bpi-content-template__help">La selección se conserva al guardar esta sección o la ficha. Automático elimina la excepción del producto. Cambiar el modelo no genera ni reemplaza descripciones.</p>
+                                    </section>
                                     <div class="bpi-grid bpi-grid--2">
                                         <div>
                                             <label>Tono</label>
@@ -636,11 +676,16 @@
                                             </select>
                                         </div>
                                     </div>
-                                    <button type="button" class="bpi-button bpi-button--primary bpi-button--full" style="margin-top: 18px;" t-on-click="generateContent" t-att-disabled="state.contentBusy">
+                                    <p class="bpi-content-template__saved-note"><i class="fa fa-database"/> Nancy utiliza los datos Odoo guardados, no los cambios pendientes. El resultado es una propuesta: no se guarda ni publica automáticamente.</p>
+                                    <button type="button" class="bpi-button bpi-button--primary bpi-button--full" style="margin-top: 18px;" t-on-click="generateContent" t-att-disabled="state.contentBusy || state.contentTemplateBusy || state.contentTemplateAdminBusy || state.contentTemplateError">
                                         <i class="fa fa-magic"/>
                                         <span t-if="!state.contentBusy">Generar Descripciones con Nancy AI</span>
                                         <span t-else="">Generando...</span>
                                     </button>
+                                    <div t-if="state.contentGenerationWarnings?.length" class="bpi-content-template__warnings" role="status">
+                                        <strong>Revisa antes de guardar</strong>
+                                        <ul><li t-foreach="state.contentGenerationWarnings" t-as="warning" t-key="warning_index" t-esc="warning"/></ul>
+                                    </div>
                                         <div class="bpi-form-grid">
                                             <label>Nombre del Producto</label>
                                             <input class="bpi-input" t-att-value="state.contentForm.name" t-on-input="(ev) =&gt; this.updateContentField('name', ev.target.value)"/>
@@ -702,7 +747,7 @@
                                                     <button type="button" class="bpi-editor-tool" title="Rehacer" aria-label="Rehacer" t-on-mousedown="onContentDescriptionToolbarMouseDown" t-on-click="() =&gt; this.applyContentDescriptionCommand('redo')"><i class="fa fa-repeat"/></button>
                                                 </div>
                                             </div>
-                                            <div class="bpi-rich-editor bpi-rich-editor--compact" contenteditable="true" t-ref="contentDescriptionEditor" t-on-input="onContentDescriptionInput" t-on-keyup="saveContentDescriptionSelection" t-on-mouseup="saveContentDescriptionSelection" t-on-blur="normalizeContentDescriptionEditor" aria-label="Descripcion Optimizada" data-placeholder="Resumen comercial breve de 45 a 70 palabras."/>
+                                            <div class="bpi-rich-editor bpi-rich-editor--compact" contenteditable="true" t-ref="contentDescriptionEditor" t-on-input="onContentDescriptionInput" t-on-keyup="saveContentDescriptionSelection" t-on-mouseup="saveContentDescriptionSelection" t-on-blur="normalizeContentDescriptionEditor" aria-label="Descripcion Optimizada" t-att-data-placeholder="'Resumen comercial breve · ' + contentTemplateWordTarget('short')"/>
                                         </div>
                                         <div class="bpi-editor-help">
                                             <i class="fa fa-eye"/> Este resumen aparece junto a las imágenes y botones de compra. Objetivo: lectura rápida.
@@ -711,7 +756,7 @@
                                             <summary>Ver/editar HTML fuente</summary>
                                             <textarea class="bpi-textarea bpi-textarea--mono" rows="3" t-att-value="state.contentForm.description" t-on-input="onContentDescriptionSourceInput"/>
                                         </details>
-                                        <p class="bpi-muted" t-esc="contentWordCountLabel()"/>
+                                        <p class="bpi-muted" data-content-word-target="short" t-esc="contentWordCountLabel()"/>
                                         <div class="bpi-content-divider" role="separator"/>
                                         <label>Descripcion Tecnica <span class="bpi-label-hint">(contenido ampliado)</span></label>
                                         <div class="bpi-rich-editor-shell">
@@ -780,7 +825,7 @@
                                             <summary>Ver/editar HTML técnico</summary>
                                             <textarea class="bpi-textarea bpi-textarea--mono" rows="12" t-att-value="state.contentForm.technicalDescription" t-on-input="onTechnicalDescriptionSourceInput"/>
                                         </details>
-                                        <p class="bpi-muted" t-esc="technicalDescriptionWordCountLabel()"/>
+                                        <p class="bpi-muted" data-content-word-target="long" t-esc="technicalDescriptionWordCountLabel()"/>
                                     </div>
                                     <button type="button" class="bpi-button bpi-button--secondary bpi-button--full" t-on-click="saveContentOnly" t-att-disabled="state.contentBusy">
                                         <i class="fa fa-floppy-o"/>

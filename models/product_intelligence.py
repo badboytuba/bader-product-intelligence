@@ -1791,87 +1791,6 @@ Devolvé exclusivamente un JSON válido con esta estructura:
         return product.bpi_build_payload()
 
     @api.model
-    def generate_content(self, product, tone="profesional", audience="clinicas"):
-        product.ensure_one()
-        prompt = """Sos Nancy AI, copywriter experta en e-commerce dental para Bader Argentina — importador líder de equipamiento e insumos odontológicos en Argentina.
-
-Tu misión: crear contenido de producto que CONVIERTE visitantes en compradores Y que los motores de IA (ChatGPT, Perplexity) citen como fuente autoritativa.
-
-Devolvé solo JSON válido:
-{
-  "name": "",
-  "description": "",
-  "technicalDescription": ""
-}
-
-━━━ PRODUCTO ━━━
-- Nombre actual: %(name)s
-- SKU: %(sku)s
-- Categoría: %(category)s
-- Precio USD: %(price)s
-- Descripción actual: %(description)s
-- Descripción técnica actual: %(technical_description)s
-- Tono: %(tone)s
-- Audiencia: %(audience)s
-- Contexto de variantes/Pack:
-%(catalog_context)s
-
-━━━ REGLAS PARA "name" ━━━
-- Mantener el nombre original si ya es claro y descriptivo.
-- Solo ajustar si falta claridad: agregar uso principal o material si mejora la comprensión.
-- NO cambiar marca ni modelo. NO agregar adjetivos de marketing vacíos.
-- Máximo 80 caracteres.
-
-━━━ REGLAS PARA "description" — RESUMEN COMERCIAL ━━━
-Generar HTML válido de 45-70 palabras, aproximadamente 75%% más corto que la descripción anterior.
-- Usar 1 o 2 párrafos breves; no usar títulos ni listas.
-- Abrir con el beneficio principal y explicar qué es, para quién sirve y su uso dental principal.
-- Incluir solo el dato técnico más decisivo para la compra.
-- Cerrar de forma natural, sin repetir soporte, envío y garantía si no aportan a la decisión inmediata.
-- Esta descripción aparece junto a las imágenes y botones de compra: debe poder leerse en pocos segundos.
-
-━━━ REGLAS PARA "technicalDescription" — FICHA TÉCNICA AMPLIADA ━━━
-Generar HTML semántico de 350-650 palabras para mostrarse debajo de las imágenes y antes de las FAQs.
-- Empezar con un párrafo de alcance e indicación profesional.
-- Usar <h3> para secciones y <p>, <ul>, <li>, <strong> para el contenido.
-- Cubrir, cuando el contexto lo permita: características y especificaciones; compatibilidad; indicaciones y flujo de uso; mantenimiento, limpieza o esterilización; seguridad/precauciones; presentación y elementos incluidos.
-- Separar claramente datos confirmados de recomendaciones generales de la categoría.
-- Omitir cualquier medida, material, certificación o compatibilidad no confirmada; nunca completar huecos inventando.
-- No diagnosticar ni sustituir el criterio del profesional odontológico.
-- Mantener una jerarquía clara y útil para lectura técnica, SEO y motores de IA.
-
-━━━ PRINCIPIOS DE CALIDAD ━━━
-- Tono: %(tone)s pero siempre profesional y creíble.
-- Español argentino natural.
-- NO inventar especificaciones clínicas que no surjan del contexto.
-- Usar HTML semántico: <p>, <ul>, <li>, <strong>.
-- El contenido debe ser "citation-worthy" — tan preciso que un motor de IA lo citaría.
-- Evitar frases genéricas ("la mejor calidad", "excelente rendimiento"). Preferir datos concretos.
-""" % {
-            "name": product.name,
-            "sku": product.default_code or "N/A",
-            "category": self._public_category_label(product),
-            "price": product.list_price,
-            "description": product.description_sale or product.description or "Sin descripción",
-            "technical_description": self._description_plain_text(product.bpi_technical_description) or "Sin descripción técnica",
-            "tone": tone or "profesional",
-            "audience": audience or "clinicas",
-            "catalog_context": product._bpi_ai_catalog_context() or "Producto simple",
-        }
-        response = self._openai_json(prompt)
-        description_html = response.get("description") or product.bpi_ai_generated_description or product.description_sale or product.description or ""
-        technical_description_html = response.get("technicalDescription") or product.bpi_technical_description or ""
-        return {
-            "name": response.get("name") or product.name,
-            "description": self._description_plain_text(description_html) or "",
-            "descriptionHtml": description_html,
-            "technicalDescription": self._description_plain_text(technical_description_html) or "",
-            "technicalDescriptionHtml": technical_description_html,
-            "tone": tone or "profesional",
-            "audience": audience or "clinicas",
-        }
-
-    @api.model
     def _save_faq_items(self, product, faqs):
         product.bpi_faq_ids.unlink()
         commands = []
@@ -1896,8 +1815,14 @@ Generar HTML semántico de 350-650 palabras para mostrarse debajo de las imágen
     @api.model
     def save_content(self, product, values):
         product.ensure_one()
+        product = self._meli_product(product.id)
         values = values or {}
+        if not isinstance(values, dict):
+            raise UserError(_("Los cambios de contenido deben ser un objeto válido."))
         write_values = {}
+        if "templateId" in values:
+            recipe = self.env["bpi.content.template"]._check_assignment(values["templateId"])
+            write_values["bpi_content_template_id"] = recipe.id or False
         if "name" in values:
             write_values["name"] = (values.get("name") or "").strip() or product.name
         if "description" in values:

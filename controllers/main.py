@@ -164,10 +164,17 @@ class BaderProductIntelligenceController(http.Controller):
         )
         return {"success": True, **payload}
 
+    @http.route("/bader_product_intelligence/content_template_context", type="json", auth="user")
+    def content_template_context(self, product_tmpl_id, **kwargs):
+        product = self._product(product_tmpl_id)
+        options = {"template_id": kwargs["template_id"]} if "template_id" in kwargs else {}
+        return request.env["bpi.service"].content_template_context(product, **options)
+
     @http.route("/bader_product_intelligence/generate_content", type="json", auth="user")
     def generate_content(self, product_tmpl_id, tone="profesional", audience="clinicas", **kwargs):
         product = self._product(product_tmpl_id)
-        return {"success": True, **request.env["bpi.service"].generate_content(product, tone=tone, audience=audience)}
+        options = {key: kwargs[key] for key in ("template_id", "template_revision") if key in kwargs}
+        return {"success": True, **request.env["bpi.service"].generate_content(product, tone=tone, audience=audience, **options)}
 
     @http.route("/bader_product_intelligence/save_content", type="json", auth="user")
     def save_content(self, product_tmpl_id, values=None, **kwargs):

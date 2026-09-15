@@ -277,7 +277,11 @@ class TestProductoIntelligence(TransactionCase):
                 "description": optimized_html,
                 "technicalDescription": technical_html,
             },
-        ) as mocked_openai:
+        ) as mocked_openai, patch.object(
+            type(self.service), "_content_template_fresh_context",
+            # This TransactionCase product is not visible to a second cursor.
+            return_value=self.service.content_template_context(self.product_new),
+        ):
             result = self.service.generate_content(self.product_new)
 
         prompt = mocked_openai.call_args.args[0]

@@ -846,6 +846,7 @@ class ProductTemplate(models.Model):
         }
 
         return {
+            "contentTemplates": service.content_template_context(self),
             "meli": service._meli_public_context(meli),
             "product": {
                 "id": self.id,

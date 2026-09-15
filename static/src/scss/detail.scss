@@ -172,3 +172,20 @@
     .bpi-competitor-row__metrics small { display: block; color: var(--bader-ink); }
     .bpi-expand-grid > div { min-width: 0; overflow-wrap: anywhere; }
 }
+
+// Editorial template controls belong only to the Bader product workspace.
+.o_action.bpi-app .bpi-detail-workspace {
+    .bpi-content-template { padding: 17px; margin-bottom: 20px; border: 1px solid var(--bader-line); border-radius: 10px; background: var(--bader-mist); min-width: 0; }
+    .bpi-content-template__controls { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; > button { flex: 0 1 auto; white-space: normal; } }
+    .bpi-content-template__select { flex: 1 1 280px; min-width: 0; label { display: block; margin-bottom: 7px; color: var(--bader-green-dark); font-size: 12px; font-weight: 700; } select { background: var(--bader-white); width: 100%; text-overflow: ellipsis; } }
+    .bpi-content-template__status { margin: 13px 0; overflow-wrap: anywhere; p { margin: 5px 0; font-size: 11px; line-height: 1.6; } }
+    .bpi-content-template__effective { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 13px; color: var(--bader-green-dark); small { border: 1px solid var(--bader-line); border-radius: 5px; padding: 3px 6px; font-size: 10px; font-weight: 400; } }
+    .bpi-content-template__instructions { border-top: 1px solid var(--bader-line); padding-top: 10px; summary { cursor: pointer; color: var(--bader-ink); font-size: 11px; font-weight: 700; } summary:focus-visible { outline: 3px solid var(--bader-ink); outline-offset: 3px; } h4 { margin: 14px 0 7px; font-size: 12px; font-weight: 700; } p { font-size: 11px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; margin: 7px 0; } }
+    .bpi-content-template__help, .bpi-content-template__saved-note { margin: 13px 0 0; color: var(--bader-ink); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+    .bpi-content-template__error, .bpi-content-template__warnings { border: 1px solid var(--bader-green-dark-300); background: var(--bader-green-dark-50); border-radius: 8px; padding: 12px; color: var(--bader-green-dark); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; margin-top: 12px; ul { padding-left: 18px; margin: 5px 0 0; } }
+    .bpi-content-template__error { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; > span { flex: 1 1 260px; } }
+}
+@media (max-width: 767px) {
+    .o_action.bpi-app .bpi-detail-workspace .bpi-content-template { padding: 13px; }
+    .o_action.bpi-app .bpi-detail-workspace .bpi-content-template__controls > button { width: 100%; justify-content: center; }
+}

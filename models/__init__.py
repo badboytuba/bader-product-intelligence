@@ -6,3 +6,5 @@ from . import ai_job
 from . import res_config_settings
 from . import dashboard
 from . import meli_provider
+from . import content_template
+from . import content_generation

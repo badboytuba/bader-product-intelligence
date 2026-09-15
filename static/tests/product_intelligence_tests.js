@@ -577,8 +577,9 @@ QUnit.test("newest request wins and stale failure cannot reset busy or notify", 
     assert.deepEqual(action.notifications, []);
     recent.resolve({ name: "Más reciente", description: "Contenido reciente" });
     await b;
-    assert.strictEqual(action.state.contentForm.name, "Más reciente");
-    assert.strictEqual(action.state.productForm.name, "Más reciente", "canonical product name stays synchronized");
+    assert.strictEqual(action.state.contentForm.name, "Producto 1", "generation does not rename products");
+    assert.strictEqual(action.state.productForm.name, "Producto 1", "canonical product name stays unchanged");
+    assert.strictEqual(action.state.contentForm.description, "Contenido reciente", "newest description proposal wins");
     assert.notOk(action.state.contentBusy);
 });
 
@@ -2247,5 +2248,268 @@ QUnit.test('official Bader detail scope preserves product identity editorial dra
         assert.ok(target.querySelector('[data-detail-section="content"] .bpi-draft-dot'));
         assert.deepEqual(calls, ['/bader_product_intelligence/data'], 'typography and navigation never start AI or ML refresh');
         assert.strictEqual(target.querySelectorAll('.o_action.bpi-app.bader-brand').length, 1, 'scope survives section replacement');
+    } finally { app.destroy(); target.remove(); }
+});
+
+QUnit.module('Bader description templates');
+
+function contentTemplateContext(selectionId = false, revision = 1) {
+    const general = { id: 1, name: 'General Bader', revision, format: 'free', shortMinWords: 45, shortMaxWords: 70,
+        longMinWords: 350, longMaxWords: 650, shortInstructions: 'Resumen comercial', longInstructions: 'Información ampliada' };
+    const instrumental = { id: 2, name: 'Instrumental Bader', revision, format: 'two_sections', shortMinWords: 45,
+        shortMaxWords: 70, longMinWords: 0, longMaxWords: 0, shortInstructions: 'Solo datos confirmados',
+        longInstructions: '<script>instrucción no ejecutable</script> Dos párrafos y especificaciones verificadas.' };
+    return {
+        selectionId, effective: selectionId === 1 ? general : instrumental, options: [general, instrumental],
+        internalCategory: { id: 94, name: 'Espátulas', path: 'Clínica / Instrumental / Espátulas' },
+        source: selectionId ? { kind: 'manual', categoryId: false, categoryName: '', categoryPath: '' }
+            : { kind: 'ancestor', categoryId: 11, categoryName: 'Instrumental', categoryPath: 'Clínica / Instrumental' },
+    };
+}
+
+function contentTemplateAction(selectionId = false) {
+    const action = stabilizationAction();
+    action.applyDetailPayload({ ...stabilizationPayload(), contentTemplates: contentTemplateContext(selectionId) });
+    return action;
+}
+
+function contentTemplateProposal(context = contentTemplateContext()) {
+    return { name: 'Producto 1', descriptionHtml: '<p>Resumen propuesto</p>',
+        technicalDescriptionHtml: '<h3>Descripción General</h3><p>Uno.</p><p>Dos.</p><h3>Especificaciones Técnicas</h3><p>Pendientes.</p>',
+        contentTemplates: context, warnings: ['Faltan especificaciones confirmadas.'] };
+}
+
+QUnit.test('template selection is draft-only, uses internal category and explicit false restores Automatic', async (assert) => {
+    const action = contentTemplateAction();
+    const calls = [];
+    action.rpc = async (route, params) => { calls.push({ route, params }); return contentTemplateContext(params.template_id); };
+    assert.strictEqual(action.currentContentTemplate().name, 'Instrumental Bader');
+    assert.ok(action.contentTemplateSourceLabel().includes('Heredado de Clínica / Instrumental'));
+    assert.notOk(action.detailHasUnsavedChanges());
+    action.state.contentForm.description = 'Texto pendiente';
+    await action.changeContentTemplate({ target: { value: '1' } });
+    assert.strictEqual(action.state.contentForm.templateId, 1);
+    assert.strictEqual(action.currentContentTemplate().name, 'General Bader');
+    assert.strictEqual(action.state.contentForm.description, 'Texto pendiente');
+    assert.strictEqual(action.state.productForm.categoryId, '11', 'shop category is not repurposed');
+    assert.strictEqual(action.state.contentTemplateContext.internalCategory.id, 94);
+    assert.strictEqual(action.contentSaveValues().templateId, 1);
+    assert.ok(action.detailDirtySections().some(section => section.id === 'content'));
+    await action.changeContentTemplate({ target: { value: '' } });
+    assert.strictEqual(action.state.contentForm.templateId, false);
+    assert.strictEqual(action.contentSaveValues().templateId, false, 'explicit Automatic clears persisted override');
+    assert.deepEqual(calls.map(call => call.route), Array(2).fill('/bader_product_intelligence/content_template_context'));
+    assert.notOk(action.state.contentBusy, 'selection has not generated or saved content');
+    const legacy = action.emptyContentForm(); delete legacy.templateId;
+    assert.notOk(Object.hasOwn(action.contentSaveValues(legacy), 'templateId'), 'omitted legacy selection stays omitted');
+});
+
+QUnit.test('template targets are dynamic and Instrumental has no forced long minimum', (assert) => {
+    const action = contentTemplateAction();
+    assert.ok(action.contentWordCountLabel().includes('objetivo 45-70'));
+    assert.ok(action.technicalDescriptionWordCountLabel().includes('sin mínimo obligatorio'));
+    action.state.contentTemplateContext = contentTemplateContext(1);
+    action.state.contentForm.templateId = 1;
+    assert.ok(action.technicalDescriptionWordCountLabel().includes('objetivo 350-650'));
+    action.state.contentTemplateContext.effective.longMinWords = 0;
+    assert.strictEqual(action.contentTemplateWordTarget('long'), 'objetivo máximo 650');
+    action.state.contentTemplateContext.effective.longMinWords = 100;
+    action.state.contentTemplateContext.effective.longMaxWords = 0;
+    assert.strictEqual(action.contentTemplateWordTarget('long'), 'objetivo mínimo 100');
+});
+
+QUnit.test('template context responses cannot cross choices, products or companies', async (assert) => {
+    const action = contentTemplateAction();
+    const first = stabilizationDeferred(), last = stabilizationDeferred();
+    let calls = 0;
+    action.rpc = () => (++calls === 1 ? first.promise : last.promise);
+    const selectingFirst = action.changeContentTemplate(1);
+    const selectingLast = action.changeContentTemplate(2);
+    first.reject(new Error('Stale failure'));
+    await selectingFirst;
+    assert.ok(action.state.contentTemplateBusy, 'newer request owns busy state');
+    assert.strictEqual(action.state.contentTemplateError, '');
+    last.resolve(contentTemplateContext(2)); await selectingLast;
+    assert.strictEqual(action.state.contentTemplateContext.selectionId, 2);
+    assert.notOk(action.state.contentTemplateBusy);
+    const old = stabilizationDeferred(); action.rpc = () => old.promise;
+    const loading = action.refreshContentTemplateContext();
+    action.invalidateProductRequests(); action.state.productId = 2;
+    action.applyDetailPayload(stabilizationPayload(2));
+    old.resolve(contentTemplateContext(2)); await loading;
+    assert.strictEqual(action.state.contentTemplateContext, null);
+    const companyAction = contentTemplateAction(); companyAction.user = { context: { allowed_company_ids: [1] } };
+    const companyPending = stabilizationDeferred(); companyAction.rpc = () => companyPending.promise;
+    const companyRead = companyAction.refreshContentTemplateContext();
+    companyAction.user.context.allowed_company_ids = [2];
+    companyPending.resolve(contentTemplateContext(1)); await companyRead;
+    assert.strictEqual(companyAction.state.contentTemplateContext.selectionId, false, 'old company metadata discarded');
+});
+
+QUnit.test('generation preserves concurrent text edits and verifies current template with read-only metadata', async (assert) => {
+    for (const editNameDuringGeneration of [false, true]) {
+    const action = contentTemplateAction();
+    action.state.contentForm.name = action.state.productForm.name = 'Nombre editado antes de generar';
+    const pending = stabilizationDeferred(), calls = [];
+    action.rpc = (route, params) => { calls.push({ route, params }); return route.endsWith('/generate_content') ? pending.promise : Promise.resolve(contentTemplateContext()); };
+    const generating = action.generateContent();
+    if (editNameDuringGeneration) action.state.contentForm.name = action.state.productForm.name = 'Nombre editado durante la generación';
+    action.state.contentForm.description = 'Edición durante la generación';
+    pending.resolve(contentTemplateProposal()); await generating;
+    assert.strictEqual(calls.length, 2);
+    assert.deepEqual(calls[0].params, { product_tmpl_id: 1, tone: 'profesional', audience: 'clinicas', template_id: false, template_revision: 1 });
+    assert.strictEqual(calls[1].route, '/bader_product_intelligence/content_template_context');
+    assert.strictEqual(action.state.contentForm.description, 'Edición durante la generación');
+    const expectedName = editNameDuringGeneration ? 'Nombre editado durante la generación' : 'Nombre editado antes de generar';
+    assert.strictEqual(action.state.contentForm.name, expectedName, 'saved-context name cannot overwrite an existing or newer draft');
+    assert.strictEqual(action.state.productForm.name, expectedName, 'generation never updates canonical product name');
+    assert.ok(action.state.contentForm.technicalDescription.includes('Descripción General'));
+    assert.deepEqual(action.state.contentGenerationWarnings, ['Faltan especificaciones confirmadas.']);
+    assert.notOk(action.state.contentBusy);
+    assert.ok(action.detailHasUnsavedChanges(), 'proposal is not saved');
+    }
+});
+
+QUnit.test('generation rejects template A-B-A changes even when final ID matches', async (assert) => {
+    const action = contentTemplateAction();
+    const pending = stabilizationDeferred(), calls = [];
+    action.rpc = (route, params) => { calls.push(route); return route.endsWith('/generate_content') ? pending.promise : Promise.resolve(contentTemplateContext(params.template_id)); };
+    const generating = action.generateContent();
+    await action.changeContentTemplate(1); await action.changeContentTemplate(false);
+    pending.resolve(contentTemplateProposal()); await generating;
+    assert.strictEqual(action.state.contentForm.description, 'Resumen 1');
+    assert.strictEqual(calls.filter(route => route.endsWith('/generate_content')).length, 1, 'no paid retry');
+    assert.ok(action.notifications.some(message => message.includes('modelo cambió')));
+    assert.notOk(action.state.contentBusy);
+});
+
+QUnit.test('generation rejects externally revised model or failed freshness check without replacing drafts', async (assert) => {
+    for (const unavailable of [false, true]) {
+        const action = contentTemplateAction(); const before = action.captureDrafts(); const calls = [];
+        action.rpc = async (route) => {
+            calls.push(route);
+            if (route.endsWith('/generate_content')) return contentTemplateProposal();
+            if (unavailable) throw new Error('Metadata unavailable');
+            return contentTemplateContext(false, 2);
+        };
+        await action.generateContent();
+        assert.deepEqual(action.captureDrafts(), before, 'all existing drafts remain unchanged');
+        assert.strictEqual(calls.length, 2, 'one generation and one local freshness read only');
+        assert.notOk(action.state.contentBusy);
+        assert.ok(action.notifications.some(message => message.includes('No se aplicó la propuesta')));
+    }
+});
+
+QUnit.test('incomplete template proposals and context failures preserve drafts without paid retries', async (assert) => {
+    const action = contentTemplateAction(); const before = action.captureDrafts(); let calls = 0;
+    action.rpc = async () => { calls++; return { ...contentTemplateProposal(), technicalDescriptionHtml: '<p><br></p>' }; };
+    await action.generateContent();
+    assert.strictEqual(calls, 1); assert.deepEqual(action.captureDrafts(), before);
+    assert.notOk(action.state.contentBusy);
+    action.rpc = async () => { calls++; throw { data: { name: 'odoo.exceptions.AccessError', message: 'No puedes consultar este modelo.' } }; };
+    await action.changeContentTemplate(1);
+    assert.strictEqual(action.state.contentTemplateError, 'No puedes consultar este modelo.');
+    const afterFailure = calls;
+    await action.generateContent();
+    assert.strictEqual(calls, afterFailure, 'generation blocked until metadata can be verified');
+    assert.strictEqual(action.state.contentForm.templateId, 1, 'failed read does not silently discard selection');
+});
+
+QUnit.test('atomic save retains a newer template selection and matching metadata as pending', async (assert) => {
+    const action = contentTemplateAction(); const pending = stabilizationDeferred(); const calls = [];
+    action.rpc = (route, params) => { calls.push({ route, params }); return route.endsWith('/save_all') ? pending.promise : Promise.resolve(contentTemplateContext(params.template_id)); };
+    await action.changeContentTemplate(2);
+    const saving = action.saveAll();
+    await action.changeContentTemplate(1);
+    action.state.contentForm.description = 'Más reciente que el guardado';
+    pending.resolve({ ...stabilizationPayload(), contentTemplates: contentTemplateContext(2) }); await saving;
+    const save = calls.find(call => call.route.endsWith('/save_all'));
+    assert.strictEqual(save.params.content_values.templateId, 2);
+    assert.strictEqual(action.state.contentForm.templateId, 1);
+    assert.strictEqual(action.currentContentTemplate().name, 'General Bader', 'metadata follows retained draft, not older saved override');
+    assert.strictEqual(action.state.contentForm.description, 'Más reciente que el guardado');
+    assert.ok(action.detailHasUnsavedChanges());
+    assert.strictEqual(calls.length, 3, 'one atomic save and explicit local selection lookups');
+});
+
+QUnit.test('failed save retains the selected template and every draft', async (assert) => {
+    const action = contentTemplateAction(2);
+    action.state.contentForm.templateId = false;
+    action.state.contentForm.description = 'Resumen pendiente';
+    const before = action.captureDrafts(); let calls = 0;
+    action.rpc = async () => { calls++; throw new Error('Save rejected'); };
+    await action.saveAll();
+    assert.deepEqual(action.captureDrafts(), before);
+    assert.strictEqual(calls, 1);
+    assert.ok(action.detailHasUnsavedChanges());
+    assert.notOk(action.state.saveBusy);
+});
+
+QUnit.test('model administration uses a modal and refreshes metadata only on close without losing drafts', async (assert) => {
+    const action = contentTemplateAction(); let opened, options; const calls = [];
+    action.user = { context: { allowed_company_ids: [2] } };
+    action.state.contentForm.description = 'Rascunho conservado';
+    const before = action.captureDrafts();
+    action.action = { doAction: async (definition, opts) => { opened = definition; options = opts; } };
+    action.rpc = async (route) => { calls.push(route); return contentTemplateContext(false, 2); };
+    await action.manageContentTemplates();
+    assert.strictEqual(opened.target, 'new'); assert.strictEqual(opened.res_model, 'bpi.content.template');
+    assert.deepEqual(opened.context.allowed_company_ids, [2]);
+    assert.strictEqual(calls.length, 0, 'opening the library does not generate or save product');
+    assert.ok(action.state.contentTemplateAdminBusy);
+    await options.onClose();
+    assert.deepEqual(calls, ['/bader_product_intelligence/content_template_context']);
+    assert.deepEqual(action.captureDrafts(), before);
+    assert.strictEqual(action.currentContentTemplate().revision, 2);
+    assert.notOk(action.state.contentTemplateAdminBusy);
+});
+
+QUnit.test('actual template selector exposes source instructions and manual selection without external or write calls', async (assert) => {
+    const target = document.createElement('div'); document.body.appendChild(target);
+    const calls = [];
+    const detail = { ...stabilizationPayload(), contentTemplates: contentTemplateContext() };
+    const app = new App(ProductIntelligenceAction, {
+        templates, test: true, props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: {
+            user: { context: { allowed_company_ids: [2] } }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async (route, params) => {
+                calls.push({ route, params });
+                if (route.endsWith('/data')) return detail;
+                if (route.endsWith('/content_template_context')) return contentTemplateContext(params.template_id);
+                throw new Error('Unexpected provider or write');
+            },
+        } },
+    });
+    try {
+        const action = await app.mount(target);
+        target.querySelector('[data-detail-section="content"]').click(); await workspacePatched();
+        const select = target.querySelector('#bpi-content-template-select');
+        assert.ok(select); assert.strictEqual(select.value, '');
+        assert.strictEqual(select.options.length, 3);
+        assert.ok(target.querySelector('.bpi-content-template__status').textContent.includes('Clínica / Instrumental / Espátulas'));
+        assert.ok(target.querySelector('.bpi-content-template__effective').textContent.includes('Instrumental Bader'));
+        assert.notOk(target.querySelector('.bpi-content-template script'), 'instructions are escaped text, never executable HTML');
+        const instructions = target.querySelector('.bpi-content-template__instructions');
+        instructions.querySelector('summary').click(); await workspacePatched();
+        assert.strictEqual(calls.length, 1, 'viewing instructions is fully local');
+        assert.ok(instructions.textContent.includes('<script>instrucción no ejecutable</script>'));
+        action.state.contentForm.description = 'Texto editable conservado';
+        select.value = '1'; select.dispatchEvent(new Event('change', { bubbles: true })); await workspacePatched();
+        assert.strictEqual(action.state.contentForm.templateId, 1);
+        assert.strictEqual(target.querySelector('#bpi-content-template-select').value, '1');
+        assert.ok(target.querySelector('.bpi-content-template__effective').textContent.includes('General Bader'));
+        assert.strictEqual(action.state.contentForm.description, 'Texto editable conservado');
+        assert.deepEqual(calls.map(call => call.route), ['/bader_product_intelligence/data', '/bader_product_intelligence/content_template_context']);
+        assert.deepEqual(calls[1].params.context.allowed_company_ids, [2]);
+        target.querySelector('[data-content-template-refresh]').click(); await workspacePatched();
+        assert.strictEqual(calls.length, 3);
+        assert.strictEqual(calls[2].route, '/bader_product_intelligence/content_template_context', 'explicit refresh reads local configuration only');
+        assert.strictEqual(calls[2].params.template_id, 1, 'refresh retains the pending manual choice');
+        assert.strictEqual(action.state.contentForm.description, 'Texto editable conservado');
+        await action.selectDetailSection('seo'); await workspacePatched();
+        assert.notOk(target.querySelector('#bpi-content-template-select'), 'leaving the section actually unmounts its select DOM');
+        await action.selectDetailSection('content'); await workspacePatched();
+        assert.strictEqual(target.querySelector('#bpi-content-template-select').value, '1', 'returning to section keeps selection');
+        assert.ok(target.querySelector('[data-detail-section="content"] .bpi-draft-dot'));
     } finally { app.destroy(); target.remove(); }
 });

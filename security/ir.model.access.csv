@@ -6,3 +6,4 @@ access_bpi_product_competitor_manager,bpi.product.competitor manager,model_bpi_p
 access_bpi_product_chat_session_manager,bpi.product.chat.session manager,model_bpi_product_chat_session,base.group_system,1,1,1,1
 access_bpi_product_chat_message_manager,bpi.product.chat.message manager,model_bpi_product_chat_message,base.group_system,1,1,1,1
 access_bpi_ai_job_manager,bpi.ai.job manager,model_bpi_ai_job,base.group_system,1,1,1,1
+access_bpi_content_template_manager,bpi.content.template manager,model_bpi_content_template,base.group_system,1,1,1,1

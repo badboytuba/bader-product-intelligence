@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="content_template_general" model="bpi.content.template">
+        <field name="name">General Bader</field>
+        <field name="format">free</field>
+        <field name="short_min_words">45</field>
+        <field name="short_max_words">70</field>
+        <field name="long_min_words">350</field>
+        <field name="long_max_words">650</field>
+        <field name="short_instructions">Usar 1 o 2 párrafos breves, sin títulos ni listas. Abrir con el beneficio principal y explicar qué es, para quién sirve y su uso dental. Incluir solo el dato técnico confirmado más decisivo. Lectura rápida junto a las imágenes y botones de compra. No repetir soporte, envío ni garantías sin evidencia.</field>
+        <field name="long_instructions">Ficha técnica ampliada con HTML semántico. Empezar con alcance e indicación profesional y usar títulos h3 y párrafos o listas. Cubrir características, especificaciones, compatibilidad, uso, mantenimiento, precauciones y presentación únicamente cuando existan datos confirmados. Separar datos guardados de recomendaciones generales; no rellenar la meta de palabras inventando detalles. No sustituir el criterio del profesional.</field>
+    </record>
+    <record id="content_template_instrumental" model="bpi.content.template">
+        <field name="name">Instrumental Bader</field>
+        <field name="format">two_sections</field>
+        <field name="short_min_words">45</field>
+        <field name="short_max_words">70</field>
+        <field name="long_min_words">0</field>
+        <field name="long_max_words">0</field>
+        <field name="short_instructions">Resumen comercial de 1 o 2 párrafos breves, sin títulos ni listas. Explicar qué instrumento es, su uso y beneficio principal para la práctica odontológica. Mencionar únicamente características confirmadas. Mantener el nombre exacto, la marca y el modelo.</field>
+        <field name="long_instructions">Seguir la ficha de dos secciones: Descripción General con exactamente dos párrafos de prosa continua y Especificaciones Técnicas con viñetas solo de datos confirmados. Primer párrafo: función clínica, utilidad y ventajas prácticas, sin atribuir ergonomía o resultados no documentados. Segundo párrafo: construcción, conservación, resistencia y respaldo únicamente si están confirmados; de lo contrario orientar de forma neutral a consultar las indicaciones del fabricante. No afirmar acero quirúrgico, radiolucidez, biocompatibilidad, autoclave, certificaciones, trayectoria ni garantías por pertenecer a Instrumental. Especificaciones: dimensiones, peso, formato o compatibilidad según datos disponibles. Coma decimal y espacio antes de la unidad SI. Sin subtítulos intermedios, negritas arbitrarias ni extensión mínima. No duplicar el título del producto.</field>
+    </record>
+</odoo>

@@ -269,6 +269,11 @@ export class ProductIntelligenceAction extends Component {
             seoJobMessage: "",
             seoPreviewPending: false,
             contentBusy: false,
+            contentTemplateContext: null,
+            contentTemplateBusy: false,
+            contentTemplateAdminBusy: false,
+            contentTemplateError: "",
+            contentGenerationWarnings: [],
             faqBusy: false,
             imageBusy: false,
             competitorBusy: false,
@@ -431,6 +436,7 @@ export class ProductIntelligenceAction extends Component {
 
     emptyContentForm() {
         return {
+            templateId: false,
             tone: "profesional",
             audience: "clinicas",
             name: "",
@@ -741,7 +747,7 @@ export class ProductIntelligenceAction extends Component {
         return this.snapshotDraft({
             datos: pick(this.state.productForm, ['name', 'sku', 'slug', 'brand', 'categoryId', 'priceUsd', 'previousPriceUsd', 'costUsd', 'featured', 'isPublished']),
             categorization: pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory']),
-            content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs']),
+            content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs', 'templateId']),
             seo: pick(this.state.seoForm, ['seoTitle', 'seoDescription', 'seoKeywords', 'geoTitle', 'geoDescription', 'geoKeywords', 'geoFeatures', 'seoScore', 'geoScore', 'competitivenessScore']),
             variants_pack: {
                 variants: (this.state.variantDrafts || []).map((v) => pick(v, ['id', 'sku', 'barcode', 'costUsdInput', 'active', 'imageReferenceToken', 'imageUploadDataUrl'])),
@@ -945,6 +951,12 @@ export class ProductIntelligenceAction extends Component {
         this.state.seoJobMessage = "";
         this.state.seoPreviewPending = false;
         this.state.showImageModal = false;
+        this.contentTemplateSelectionVersion = (this.contentTemplateSelectionVersion || 0) + 1;
+        this.state.contentTemplateContext = null;
+        this.state.contentTemplateBusy = false;
+        this.state.contentTemplateAdminBusy = false;
+        this.state.contentTemplateError = "";
+        this.state.contentGenerationWarnings = [];
         this.state.catalogReviewId = false;
         this.state.catalogBusyRows = {};
         this.contentDescriptionSelection = null;
@@ -972,6 +984,7 @@ export class ProductIntelligenceAction extends Component {
             return;
         }
         const retained = {};
+        const retainedTemplateContext = this.state.contentTemplateContext;
         const keys = ["productForm", "contentForm", "seoForm", "categoryForm", "imageForm", "competitorForm", "variantDrafts", "packForm", "componentSearch", "selectedVariantId", "chatMessages", "chatSessionKey", "chatInput", "chatBusy", "variantBusy", "packBusy", "componentSearchBusy"];
         for (const key of keys) retained[key] = this.state[key];
         this.applyDetailPayload(data);
@@ -1005,6 +1018,12 @@ export class ProductIntelligenceAction extends Component {
                 }
                 this.state[key] = updated;
             }
+        }
+        // A save may finish after the operator has selected a different model.
+        // Keep that selection's metadata together with its still-pending draft.
+        if (data.contentTemplates && this.contentTemplateSelectionId() !== (data.contentTemplates.selectionId || false)) {
+            this.state.contentTemplateContext = retainedTemplateContext;
+            if (!this.contentTemplateContextMatchesSelection()) void this.refreshContentTemplateContext();
         }
     }
 
@@ -1374,6 +1393,8 @@ export class ProductIntelligenceAction extends Component {
         }
 
         this.state.detail = data;
+        this.state.contentTemplateContext = data.contentTemplates || null;
+        this.state.contentTemplateError = "";
         this.state.productForm = {
             name: product.name || "",
             sku: product.sku || "",
@@ -1388,6 +1409,7 @@ export class ProductIntelligenceAction extends Component {
             isPublished: !!product.isPublished,
         };
         this.state.contentForm = {
+            templateId: data.contentTemplates?.selectionId || false,
             tone: seoData.aiTone || "profesional",
             audience: seoData.aiTargetAudience || "clinicas",
             name: product.name || "",
@@ -2322,7 +2344,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     contentWordCountLabel() {
-        return `${this.contentWordCount()} palabras · objetivo 45-70 (resumen comercial corto)`;
+        return `${this.contentWordCount()} palabras · ${this.contentTemplateWordTarget('short')} (resumen comercial corto)`;
     }
 
     technicalDescriptionWordCount() {
@@ -2334,7 +2356,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     technicalDescriptionWordCountLabel() {
-        return `${this.technicalDescriptionWordCount()} palabras · objetivo 350-650 (información técnica ampliada)`;
+        return `${this.technicalDescriptionWordCount()} palabras · ${this.contentTemplateWordTarget('long')} (información técnica ampliada)`;
     }
 
     filteredDashboardProducts() {
@@ -3065,10 +3087,108 @@ export class ProductIntelligenceAction extends Component {
         };
     }
 
+    contentTemplateSelectionId() {
+        return Number(this.state.contentForm?.templateId) || false;
+    }
+
+    contentTemplateContextMatchesSelection(context = this.state.contentTemplateContext) {
+        return !!context?.effective?.id && (context.selectionId || false) === this.contentTemplateSelectionId();
+    }
+
+    currentContentTemplate() {
+        return this.contentTemplateContextMatchesSelection() ? this.state.contentTemplateContext.effective : null;
+    }
+
+    contentTemplateWordTarget(kind) {
+        const template = this.currentContentTemplate();
+        if (!template) return kind === 'short' ? 'objetivo 45-70' : 'objetivo 350-650';
+        const min = Number(template[`${kind}MinWords`]) || 0;
+        const max = Number(template[`${kind}MaxWords`]) || 0;
+        if (min && max) return `objetivo ${min}-${max}`;
+        if (min) return `objetivo mínimo ${min}`;
+        if (max) return `objetivo máximo ${max}`;
+        return 'sin mínimo obligatorio';
+    }
+
+    contentTemplateSourceLabel() {
+        const source = this.state.contentTemplateContext?.source || {};
+        if (!this.contentTemplateContextMatchesSelection()) return 'Modelo pendiente de consultar';
+        if (source.kind === 'manual') return 'Selección manual para este producto';
+        if (source.kind === 'ancestor') return `Heredado de ${source.categoryPath || source.categoryName}`;
+        if (source.kind === 'category') return `Configurado en ${source.categoryPath || source.categoryName}`;
+        return 'Modelo general: la categoría interna no tiene otro modelo configurado';
+    }
+
+    contentTemplateFingerprint(context = this.state.contentTemplateContext) {
+        return JSON.stringify([
+            context?.selectionId || false, context?.effective?.id || false,
+            context?.effective?.revision || false, context?.internalCategory?.id || false,
+            context?.source?.kind || '', context?.source?.categoryId || false,
+        ]);
+    }
+
+    async changeContentTemplate(ev) {
+        this.state.contentForm.templateId = Number(ev?.target?.value ?? ev) || false;
+        this.contentTemplateSelectionVersion = (this.contentTemplateSelectionVersion || 0) + 1;
+        this.state.contentGenerationWarnings = [];
+        await this.refreshContentTemplateContext();
+    }
+
+    async refreshContentTemplateContext() {
+        if (!this.state.productId) return false;
+        const request = this.beginRequest('contentTemplate');
+        const selection = this.contentTemplateSelectionId();
+        const version = this.contentTemplateSelectionVersion || 0;
+        this.state.contentTemplateBusy = true;
+        this.state.contentTemplateError = '';
+        try {
+            const context = await this.rpc('/bader_product_intelligence/content_template_context', {
+                product_tmpl_id: request.productId, template_id: selection,
+            });
+            if (!this.isRequestCurrent(request) || version !== (this.contentTemplateSelectionVersion || 0) ||
+                selection !== this.contentTemplateSelectionId()) return false;
+            if (!this.contentTemplateContextMatchesSelection(context)) throw new Error('Invalid template context');
+            this.state.contentTemplateContext = context;
+            return context;
+        } catch (error) {
+            if (this.isRequestCurrent(request)) {
+                this.state.contentTemplateError = this.errorMessage(error, 'No se pudo consultar el modelo. Tus borradores se conservan.');
+            }
+            return false;
+        } finally {
+            if (this.isRequestCurrent(request)) this.state.contentTemplateBusy = false;
+        }
+    }
+
+    async manageContentTemplates() {
+        if (this.state.contentTemplateAdminBusy) return;
+        const request = this.beginRequest('contentTemplateAdmin');
+        this.contentTemplateSelectionVersion = (this.contentTemplateSelectionVersion || 0) + 1;
+        this.state.contentTemplateAdminBusy = true;
+        try {
+            await this.action.doAction({
+                type: 'ir.actions.act_window', name: 'Modelos de descripción',
+                res_model: 'bpi.content.template', views: [[false, 'list'], [false, 'form']],
+                target: 'new', context: { ...(this.user?.context || {}) },
+            }, {
+                onClose: async () => {
+                    if (!this.isRequestCurrent(request)) return;
+                    this.state.contentTemplateAdminBusy = false;
+                    await this.refreshContentTemplateContext();
+                },
+            });
+        } catch (error) {
+            if (!this.isRequestCurrent(request)) return;
+            this.state.contentTemplateAdminBusy = false;
+            this.notify(this.errorMessage(error, 'No se pudo abrir la biblioteca de modelos.'), 'danger');
+        }
+    }
+
     contentSaveValues(form = this.state.contentForm) {
         return {
             name: form.name, description: form.description, technicalDescription: form.technicalDescription,
             tone: form.tone, audience: form.audience,
+            ...(form.templateId !== undefined ? { templateId: Number(form.templateId) || false } : {}),
             faqs: (form.faqs || []).map((faq) => ({ question: faq.question, answer: faq.answer })),
         };
     }
@@ -3180,27 +3300,59 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async generateContent() {
-        if (this.state.saveBusy || this.state.categoryBusy || this.state.seoBusy) return;
+        if (this.state.saveBusy || this.state.categoryBusy || this.state.seoBusy ||
+            this.state.contentTemplateBusy || this.state.contentTemplateAdminBusy || this.state.contentTemplateError) return;
         const request = this.beginRequest("content", true);
+        const template = this.currentContentTemplate();
+        const selectionVersion = this.contentTemplateSelectionVersion || 0;
+        const fingerprint = this.contentTemplateFingerprint();
         this.state.contentBusy = true;
+        this.state.contentGenerationWarnings = [];
         try {
             const result = await this.rpc("/bader_product_intelligence/generate_content", {
                 product_tmpl_id: request.productId,
-                tone: this.state.contentForm.tone,
-                audience: this.state.contentForm.audience,
+                tone: request.drafts.contentForm.tone,
+                audience: request.drafts.contentForm.audience,
+                ...(template ? {
+                    template_id: Number(request.drafts.contentForm.templateId) || false,
+                    template_revision: template.revision,
+                } : {}),
             });
             if (!this.isRequestCurrent(request)) return;
+            if (selectionVersion !== (this.contentTemplateSelectionVersion || 0) ||
+                fingerprint !== this.contentTemplateFingerprint()) {
+                this.notify('El modelo cambió durante la generación. Se conservaron tus borradores; vuelve a generar cuando estés listo.', 'warning');
+                return;
+            }
+            if (template) {
+                const short = result.descriptionHtml || result.description;
+                const long = result.technicalDescriptionHtml || result.technicalDescription;
+                if (typeof short !== 'string' || typeof long !== 'string' ||
+                    !this.descriptionPlainText(short) || !this.technicalDescriptionPlainText(long)) {
+                    throw new Error('Incomplete description proposal');
+                }
+                // A fresh, read-only request also catches edits in another browser tab.
+                const fresh = await this.refreshContentTemplateContext();
+                if (!this.isRequestCurrent(request)) return;
+                if (!fresh || selectionVersion !== (this.contentTemplateSelectionVersion || 0) ||
+                    fingerprint !== this.contentTemplateFingerprint(fresh) ||
+                    fingerprint !== this.contentTemplateFingerprint(result.contentTemplates)) {
+                    this.notify('No se aplicó la propuesta: el modelo cambió o no pudo verificarse. Tus borradores se conservan.', 'warning');
+                    return;
+                }
+            }
             const proposal = {
                 ...request.drafts.contentForm,
-                name: result.name || request.drafts.contentForm.name,
+                // Generation never renames a product or rolls back an edited name.
+                // The backend name is saved context, not an editable name proposal.
                 description: result.descriptionHtml || result.description || request.drafts.contentForm.description,
                 technicalDescription: result.technicalDescriptionHtml || result.technicalDescription || request.drafts.contentForm.technicalDescription,
             };
             this.state.contentForm = this.mergeSavedDraft(this.state.contentForm, request.drafts.contentForm, proposal);
-            this.state.productForm.name = this.mergeSavedDraft(this.state.productForm.name, request.drafts.productForm.name, this.state.contentForm.name);
             this.syncContentDescriptionEditor(true);
             this.syncTechnicalDescriptionEditor(true);
-            this.notify("Descripciones comercial y técnica generadas con Nancy AI.");
+            this.state.contentGenerationWarnings = (result.warnings || []).filter((message) => typeof message === 'string');
+            this.notify("Propuesta comercial y técnica generada. Revisa el contenido y guarda explícitamente.");
         } catch (error) {
             if (!this.isRequestCurrent(request)) return;
             this.notify(this.errorMessage(error, "No se pudo generar el contenido."), "danger");
