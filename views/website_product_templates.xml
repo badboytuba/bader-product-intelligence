@@ -45,7 +45,7 @@
                         <div t-else="" class="bpi-product-documents__icon" aria-hidden="true"><i class="fa fa-book"/></div>
                     </div>
                     <div class="bpi-product-documents__body"><span class="bpi-documents-eyebrow">EXPLORA CADA DETALLE</span><h2 id="bpi-documents-public-title" t-out="bpi_documents['title'] or 'Catálogos y documentación'"/><p t-if="bpi_documents['intro']" t-out="bpi_documents['intro']"/>
-                        <div class="bpi-product-documents__actions"><a t-foreach="bpi_documents['buttons']" t-as="bpi_document" t-att-href="bpi_document['fileUrl'] or bpi_document['url']" target="_blank" rel="noopener noreferrer" class="bpi-product-documents__button"><i t-att-class="'fa fa-file-pdf-o' if bpi_document['kind'] == 'file' else 'fa fa-book'" aria-hidden="true"/><span t-out="bpi_document['label']"/><i class="fa fa-external-link" aria-hidden="true"/><span class="sr-only"> (abre en una pestaña nueva)</span></a></div><small>Documentación adicional · Se abre en una pestaña nueva</small>
+                        <div class="bpi-product-documents__actions"><a t-foreach="bpi_documents['buttons']" t-as="bpi_document" t-att-href="bpi_document['fileUrl'] or bpi_document['url']" target="_blank" rel="noopener noreferrer" class="bpi-product-documents__button"><i t-att-class="'fa fa-file-pdf-o' if bpi_document['kind'] == 'file' else 'fa fa-book'" aria-hidden="true"/><span t-out="bpi_document['label']"/><i class="fa fa-external-link" aria-hidden="true"/><span class="sr-only"> (abre en una pestaña nueva)</span></a></div>
                     </div>
                 </section>
 
