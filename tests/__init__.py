@@ -12,3 +12,4 @@ from . import test_content_templates
 from . import test_technical_specification
 
 from . import test_product_documents
+from . import test_taxonomy

@@ -12,3 +12,5 @@ from . import technical_specification
 from . import technical_import
 from . import editorial_import
 from . import product_documents
+from . import taxonomy
+from . import taxonomy_search

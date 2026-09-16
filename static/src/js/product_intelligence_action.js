@@ -279,6 +279,7 @@ export class ProductIntelligenceAction extends Component {
             competitorBusy: false,
             strategyBusy: false,
             categoryBusy: false,
+            classificationJob: null, taxonomyQuery: "", taxonomyFilters: [], taxonomyFacets: [],
             chatBusy: false,
             variantBusy: false,
             packBusy: false,
@@ -586,6 +587,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async openMeliFilter(key) {
+        this.state.taxonomyFilters = [];
         if (!this.meliFilterOptions().some((option) => option.value === key)) return;
         this.state.meliFilter = key;
         this.state.dashboardQualityFilter = '';
@@ -746,7 +748,7 @@ export class ProductIntelligenceAction extends Component {
         const pick = (value, keys) => Object.fromEntries(keys.map((key) => [key, value?.[key] ?? '']));
         return this.snapshotDraft({
             datos: pick(this.state.productForm, ['name', 'sku', 'slug', 'brand', 'categoryId', 'priceUsd', 'previousPriceUsd', 'costUsd', 'featured', 'isPublished', 'technicalSpecifications']),
-            categorization: pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory']),
+            categorization: pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory', 'classification']),
             content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs', 'templateId', 'documents']),
             seo: pick(this.state.seoForm, ['seoTitle', 'seoDescription', 'seoKeywords', 'geoTitle', 'geoDescription', 'geoKeywords', 'geoFeatures', 'seoScore', 'geoScore', 'competitivenessScore']),
             variants_pack: {
@@ -973,6 +975,9 @@ export class ProductIntelligenceAction extends Component {
                 if (!before || !after) return row;
                 return { ...row, revision: after.revision, values: this.mergeSavedDraft(row.values, before.values, after.values) };
             });
+        }
+        if (current && submitted && saved && Number.isInteger(saved.revision) && Array.isArray(saved.termIds)) {
+            return { ...saved, termIds: this.mergeSavedDraft(current.termIds, submitted.termIds, saved.termIds) };
         }
         if (current && submitted && saved && Number.isInteger(saved.revision) &&
             Array.isArray(saved.buttons) && saved.buttons.length === 3 && Array.isArray(current.buttons)) {
@@ -1241,6 +1246,7 @@ export class ProductIntelligenceAction extends Component {
 
     async openDashboardMetric(filter) {
         this.state.meliFilter = "";
+        this.state.taxonomyFilters = [];
         this.state.dashboardQualityFilter = filter === "all" ? "" : filter || "";
         return this.loadDashboard({ tab: "all", search: "", page: 1 }, { showSpinner: false });
     }
@@ -1351,11 +1357,13 @@ export class ProductIntelligenceAction extends Component {
             sort_key: this.state.dashboardSortKey || "catalog",
             ...(this.state.meliAccountId ? { meli_account_id: Number(this.state.meliAccountId) } : {}),
             ...(this.state.meliFilter ? { meli_filter: this.state.meliFilter } : {}),
+            ...(this.state.taxonomyFilters?.length ? { taxonomy_term_ids: [...this.state.taxonomyFilters] } : {}),
             ...this.dashboardRequestContext(),
         };
     }
 
     applyDashboardPayload(data, params) {
+        this.state.taxonomyFacets = data.taxonomyTerms || [];
         this.state.dashboardRows = data.products || [];
         this.state.meliCatalogContext = data.meli || {};
         this.state.dashboardStats = data.stats || this.dashboardDefaultStats();
@@ -1457,7 +1465,9 @@ export class ProductIntelligenceAction extends Component {
             geoScore: seoData.geoScore || 0,
             competitivenessScore: seoData.competitivenessScore || 0,
         };
+        this.state.classificationJob = data.classification?.job || null;
         this.state.categoryForm = {
+            classification: data.classification ? { revision: data.classification.revision, vocabularyRevision: data.classification.vocabularyRevision, termIds: [...data.classification.termIds] } : undefined,
             manualMode: !!product.intelligentCategoryManual,
             niches: product.intelligentNiches || [],
             type: this.normalizeChoiceValue(product.intelligentType, TYPE_OPTIONS, TYPE_ALIASES),
@@ -2442,6 +2452,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async clearCatalogFilters() {
+        this.state.taxonomyFilters = [];
         this.state.meliFilter = "";
         this.state.dashboardQualityFilter = "";
         this.state.dashboardSortKey = "catalog";
@@ -2449,7 +2460,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     catalogHasFilters() {
-        return !!(this.state.searchTerm || this.state.dashboardQualityFilter || this.state.meliFilter ||
+        return !!(this.state.taxonomyFilters?.length || this.state.searchTerm || this.state.dashboardQualityFilter || this.state.meliFilter ||
             (this.state.dashboardSortKey && this.state.dashboardSortKey !== "catalog"));
     }
 
@@ -3124,6 +3135,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     categorySaveValues(form = this.state.categoryForm, product = this.state.productForm) {
+        if (form.classification) return { classification: this.snapshotDraft(form.classification) };
         return {
             manualMode: !!form.manualMode, niches: [...(form.niches || [])],
             type: form.type || false, subcategory: form.subcategory || false,
@@ -3509,6 +3521,82 @@ export class ProductIntelligenceAction extends Component {
         } finally {
             if (this.isRequestCurrent(request)) this.state.contentBusy = false;
         }
+    }
+
+    get taxonomyAxes() { return [{ id: 'niche', label: 'Nicho' }, { id: 'commercial', label: 'Aplicación comercial' }, { id: 'technical', label: 'Aplicación técnica' }, { id: 'use', label: 'Uso / Procedimiento' }]; }
+
+    taxonomyOptions(axis) {
+        const query = (this.state.taxonomyQuery || '').toLocaleLowerCase();
+        return (this.state.detail?.classification?.terms || []).filter(t => t.axis === axis && (!query || [t.name, ...(t.aliases || [])].join(' ').toLocaleLowerCase().includes(query)));
+    }
+
+    toggleTaxonomyTerm(id) {
+        const form = this.state.categoryForm.classification;
+        if (!form) return;
+        form.termIds = form.termIds.includes(id) ? form.termIds.filter(x => x !== id) : [...form.termIds, id];
+    }
+
+    async toggleTaxonomyFilter(id) {
+        const ids = this.state.taxonomyFilters || [];
+        this.state.taxonomyFilters = ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id];
+        return this.loadDashboard({ page: 1 }, { showSpinner: false });
+    }
+
+    async refreshTaxonomyVocabulary() {
+        const request = this.beginRequest('taxonomyVocabulary');
+        try {
+            const current = await this.rpc('/bader_product_intelligence/classification/context', { product_tmpl_id: request.productId });
+            if (!this.isRequestCurrent(request)) return;
+            this.state.detail.classification = current;
+            // Never update product revision behind the user's draft: stale saves must fail.
+            this.state.categoryForm.classification.vocabularyRevision = current.vocabularyRevision;
+            this.state.classificationJob = current.job || null;
+        } catch (error) { if (this.isRequestCurrent(request)) this.notify(this.errorMessage(error, 'No se pudo actualizar el vocabulario.'), 'danger'); }
+    }
+
+    async openTaxonomyLibrary() {
+        await this.action.doAction({ type: 'ir.actions.act_window', name: 'Vocabulario de clasificación', res_model: 'bpi.taxonomy.term', views: [[false, 'list'], [false, 'form']], target: 'new' }, { onClose: () => this.refreshTaxonomyVocabulary() });
+    }
+
+    async analyzeClassification() {
+        if (this.state.categoryBusy) return;
+        const request = this.beginRequest('classificationJob');
+        this.state.categoryBusy = true;
+        try {
+            const result = await this.rpc('/bader_product_intelligence/classification/analyze', { product_tmpl_id: request.productId });
+            if (!this.isRequestCurrent(request)) return;
+            this.state.classificationJob = result.job;
+            this.pollClassification(result.job.id, request);
+        } catch (error) { if (this.isRequestCurrent(request)) { this.state.categoryBusy = false; this.notify(this.errorMessage(error, 'No se pudo solicitar el análisis.'), 'danger'); } }
+    }
+
+    async pollClassification(jobId, request = this.beginRequest('classificationJob')) {
+        try {
+            const result = await this.rpc('/bader_product_intelligence/ai_job/status', { job_id: jobId });
+            if (!this.isRequestCurrent(request)) return;
+            this.state.classificationJob = result.job;
+            if (['pending', 'running'].includes(result.job.state)) {
+                setTimeout(() => { if (this.isRequestCurrent(request)) this.pollClassification(jobId, request); }, 2500);
+            } else { this.state.categoryBusy = false; }
+        } catch (error) { if (this.isRequestCurrent(request)) { this.state.categoryBusy = false; this.notify(this.errorMessage(error, 'No se pudo consultar el trabajo. Usa Actualizar.'), 'danger'); } }
+    }
+
+    async applyClassificationProposal(legacy = false) {
+        const proposal = legacy ? null : this.state.classificationJob?.resultPayload?.classificationProposal;
+        if (!legacy && !proposal) return;
+        const request = this.beginRequest('classificationApply');
+        const draft = this.snapshotDraft(this.state.categoryForm.classification);
+        try {
+            const current = await this.rpc('/bader_product_intelligence/classification/context', { product_tmpl_id: request.productId });
+            if (!this.isRequestCurrent(request) || JSON.stringify(draft) !== JSON.stringify(this.state.categoryForm.classification)) return;
+            if (!legacy && (proposal.sourceRevision !== current.sourceRevision || proposal.vocabularyRevision !== current.vocabularyRevision || proposal.revision !== current.revision)) {
+                this.notify('La propuesta quedó desactualizada. No se modificó el borrador.', 'warning'); return;
+            }
+            if (draft.revision !== current.revision) { this.notify('La clasificación guardada cambió. Recarga antes de aplicar.', 'warning'); return; }
+            this.state.detail.classification = current;
+            this.state.categoryForm.classification = { revision: current.revision, vocabularyRevision: current.vocabularyRevision, termIds: [...(legacy ? current.legacyTermIds : proposal.termIds)] };
+            this.notify('Propuesta en borrador. Revisa y guarda para incorporarla a la búsqueda.');
+        } catch (error) { if (this.isRequestCurrent(request)) this.notify(this.errorMessage(error, 'No se pudo revisar la propuesta.'), 'danger'); }
     }
 
     async reclassifyCategory() {

@@ -1,0 +1,14 @@
+<odoo>
+ <template id="bpi_search_marker" inherit_id="website.layout" priority="95"><xpath expr="//div[@id='wrapwrap']" position="inside"><span t-if="website.bpi_taxonomy_search_enabled" data-bpi-header-search="1" hidden="hidden"/></xpath></template>
+ <template id="bpi_shop_facets" inherit_id="website_sale.products" priority="95"><xpath expr="//div[@id='products_grid']/*[1]" position="before">
+  <section t-if="website.bpi_taxonomy_search_enabled and bpi_taxonomy_facets" class="bpi-shop-facets bader-brand col-12">
+   <details><summary>Filtrar por clasificación</summary><form method="get" t-att-action="request.httprequest.path" data-bpi-facet-form="1">
+    <input t-foreach="bpi_taxonomy_preserved" t-as="pair" type="hidden" t-att-name="pair[0]" t-att-value="pair[1]"/>
+    <input type="hidden" name="bpi_terms" t-att-value="','.join(str(i) for i in bpi_taxonomy_selected)"/>
+    <div class="bpi-facet-grid"><fieldset t-foreach="bpi_taxonomy_axes" t-as="axis"><legend t-out="axis[1]"/><label t-foreach="[t for t in bpi_taxonomy_facets if t['axis']==axis[0]]" t-as="term" class="bpi-taxonomy-option"><input type="checkbox" data-bpi-term="1" t-att-value="term['id']" t-att-checked="term['selected']"/><span><t t-out="term['name']"/> (<t t-out="term['count']"/>)</span></label></fieldset></div>
+    <div class="bpi-facet-actions"><button type="submit" class="btn btn-primary">Aplicar filtros</button><a t-att-href="keep(bpi_terms=0)" class="btn btn-outline-primary">Limpiar clasificación</a></div>
+   </form></details>
+   <a t-foreach="[t for t in bpi_taxonomy_facets if t['selected']]" t-as="term" class="bpi-facet-chip" t-att-href="keep(bpi_terms=','.join(str(i) for i in bpi_taxonomy_selected if i != term['id']) or 0)"><t t-out="term['name']"/> ×</a>
+  </section>
+ </xpath></template>
+</odoo>

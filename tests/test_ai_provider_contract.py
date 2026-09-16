@@ -161,6 +161,12 @@ class TestBPIAIProviderContract(TransactionCase):
         product = self.env["product.template"].create({"name": "BPI provider contract", "description_sale": "Saved content"})
         with patch.object(type(self.service), "_openai_response", return_value="[]"), \
                 patch.object(type(product), "write", side_effect=AssertionError("Invalid proposal cannot be saved")):
-            for method in (self.service.generate_content, self.service.generate_faq, self.service.reclassify_category):
+            for method in (self.service.generate_content, self.service.generate_faq):
                 with self.subTest(method=method.__name__), self.assertRaises(UserError):
                     method(product)
+
+    def test_classification_invalid_json_fails_before_product_write(self):
+        product = self.env['product.template'].create({'name': 'Classifier contract'})
+        with patch.object(type(self.service), '_openai_json', return_value=[]), patch.object(type(product), 'write', side_effect=AssertionError('No proposal write')):
+            with self.assertRaises(UserError):
+                self.service._classification_proposal(product, {}, [])

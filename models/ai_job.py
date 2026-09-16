@@ -148,7 +148,7 @@ class BPIAIJob(models.Model):
     def _finish_job(self, result_payload):
         self.write({
             "state": "done", "progress": 100,
-            "message": _("Propuesta SEO lista. Revisa y guarda los cambios."),
+            "message": _("Propuesta de clasificación lista. Revisa y guarda los cambios.") if self.job_type == "classification" else _("Propuesta SEO lista. Revisa y guarda los cambios."),
             "result_payload": result_payload,
             "finished_at": fields.Datetime.now(), "error_message": False,
         })
@@ -232,16 +232,19 @@ class BPIAIJob(models.Model):
             try:
                 self.write({
                     "state": "running", "progress": 10,
-                    "message": _("Nancy AI está preparando una propuesta SEO..."),
+                    "message": _("Nancy AI está preparando una clasificación...") if self.job_type == "classification" else _("Nancy AI está preparando una propuesta SEO..."),
                     "started_at": fields.Datetime.now(), "error_message": False,
                 })
                 self._commit_for_visibility()
                 # Include finalization in the failure boundary. A savepoint also
                 # keeps TransactionCase/no-commit callers usable after SQL errors.
                 with self.env.cr.savepoint():
-                    if self.job_type != "seo":
+                    if self.job_type == "seo":
+                        result_payload = self._process_seo_job()
+                    elif self.job_type == "classification":
+                        result_payload = self._process_classification_job()
+                    else:
                         raise ValueError("Unsupported BPI AI job type")
-                    result_payload = self._process_seo_job()
                     self._finish_job(result_payload)
                 self._commit_for_visibility()
             except Exception as error:

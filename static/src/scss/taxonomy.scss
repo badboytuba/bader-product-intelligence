@@ -1,0 +1,8 @@
+.bpi-taxonomy-workspace, .bpi-taxonomy-catalog-filters, .bpi-shop-facets {
+    .bpi-taxonomy-option { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border: 1px solid #d6e5df; border-radius: 10px; margin: 8px 0; cursor: pointer; color: #003841; background: #f7faf9; input { margin-top: 5px; accent-color: #007a83; } span { min-width: 0; overflow-wrap: anywhere; } small { display: block; color: #41666a; } &:focus-within { outline: 2px solid #007a83; } }
+    fieldset { min-width: 0; } legend { font-size: 1rem; font-weight: 600; } summary { cursor: pointer; font-weight: 600; padding: 12px 0; color: #003841; }
+}
+.bpi-taxonomy-options { max-height: 310px; overflow: auto; }
+.bpi-taxonomy-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; .bpi-input { max-width: 320px; } }
+.bpi-taxonomy-catalog-filters { padding: 16px; }
+.bpi-shop-facets { padding: 16px; margin: 14px 0; background: #f3f8f6; border: 1px solid #d6e5df; border-radius: 14px; .bpi-facet-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; } .bpi-facet-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; } .bpi-facet-chip { display: inline-flex; gap: 6px; padding: 5px 9px; margin: 4px; border-radius: 20px; background: #e2efea; color: #003841; } @media(max-width:767px) { .bpi-facet-grid { grid-template-columns: 1fr; } } }

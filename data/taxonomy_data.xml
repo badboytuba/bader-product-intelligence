@@ -1,0 +1,27 @@
+<odoo noupdate="1">
+<record id="taxonomy_seed_0" model="bpi.taxonomy.term"><field name="name">Clínica Dental</field><field name="axis">niche</field><field name="aliases_text">clinica
+clinicas dentales</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_1" model="bpi.taxonomy.term"><field name="name">Laboratorio Dental</field><field name="axis">niche</field><field name="aliases_text">laboratorio
+laboratorios dentales</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_2" model="bpi.taxonomy.term"><field name="name">Estudiantes</field><field name="axis">niche</field><field name="aliases_text">estudiante</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_3" model="bpi.taxonomy.term"><field name="name">Mayorista</field><field name="axis">niche</field><field name="aliases_text">mayoristas</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_4" model="bpi.taxonomy.term"><field name="name">Instituciones educativas</field><field name="axis">niche</field><field name="aliases_text">instituciones de enseñanza</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_5" model="bpi.taxonomy.term"><field name="name">Instrumental</field><field name="axis">commercial</field><field name="aliases_text">instrumentos dentales</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_6" model="bpi.taxonomy.term"><field name="name">Rotatorios</field><field name="axis">commercial</field><field name="aliases_text">instrumental rotatorio</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_7" model="bpi.taxonomy.term"><field name="name">Mobiliario</field><field name="axis">commercial</field><field name="aliases_text">muebles dentales</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_8" model="bpi.taxonomy.term"><field name="name">Equipos</field><field name="axis">commercial</field><field name="aliases_text">equipo</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_9" model="bpi.taxonomy.term"><field name="name">Consumibles</field><field name="axis">commercial</field><field name="aliases_text">consumible</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_10" model="bpi.taxonomy.term"><field name="name">Cirugía</field><field name="axis">technical</field><field name="aliases_text">cirugia dental</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_11" model="bpi.taxonomy.term"><field name="name">Implantología</field><field name="axis">technical</field><field name="aliases_text">implantologia dental</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_12" model="bpi.taxonomy.term"><field name="name">Endodoncia</field><field name="axis">technical</field><field name="aliases_text"></field><field name="state">approved</field></record>
+<record id="taxonomy_seed_13" model="bpi.taxonomy.term"><field name="name">Ortodoncia</field><field name="axis">technical</field><field name="aliases_text"></field><field name="state">approved</field></record>
+<record id="taxonomy_seed_14" model="bpi.taxonomy.term"><field name="name">Restauración</field><field name="axis">technical</field><field name="aliases_text">restauracion dental</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_15" model="bpi.taxonomy.term"><field name="name">Prótesis</field><field name="axis">technical</field><field name="aliases_text">protesis dental</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_16" model="bpi.taxonomy.term"><field name="name">Laboratorio</field><field name="axis">technical</field><field name="aliases_text"></field><field name="state">approved</field></record>
+<record id="taxonomy_seed_17" model="bpi.taxonomy.term"><field name="name">Radiología</field><field name="axis">technical</field><field name="aliases_text"></field><field name="state">approved</field></record>
+<record id="taxonomy_seed_18" model="bpi.taxonomy.term"><field name="name">Extracción dental</field><field name="axis">use</field><field name="aliases_text">exodoncia</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_19" model="bpi.taxonomy.term"><field name="name">Aislamiento</field><field name="axis">use</field><field name="aliases_text">aislamiento dental</field><field name="state">approved</field></record>
+<record id="taxonomy_seed_20" model="bpi.taxonomy.term"><field name="name">Impresión dental</field><field name="axis">use</field><field name="aliases_text"></field><field name="state">approved</field></record>
+<record id="taxonomy_seed_21" model="bpi.taxonomy.term"><field name="name">Pulido</field><field name="axis">use</field><field name="aliases_text"></field><field name="state">approved</field></record>
+<record id="taxonomy_seed_22" model="bpi.taxonomy.term"><field name="name">Esterilización</field><field name="axis">use</field><field name="aliases_text"></field><field name="state">approved</field></record>
+</odoo>

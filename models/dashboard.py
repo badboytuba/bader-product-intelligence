@@ -293,7 +293,7 @@ class BPIDashboardService(models.AbstractModel):
         }
 
     @api.model
-    def dashboard_payload(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False):
+    def dashboard_payload(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False, taxonomy_term_ids=None):
         self._ensure_manager()
         if tab not in ("all", "new", "discontinued"):
             raise UserError(_("Selecciona una sección válida del catálogo."))
@@ -313,6 +313,7 @@ class BPIDashboardService(models.AbstractModel):
         domain = expression.AND([
             self._dashboard_base_domain(), self._dashboard_category_domain(category),
             self._dashboard_search_domain(search),
+            product_model._bpi_filter_domain(product_model._bpi_filter_ids(taxonomy_term_ids)),
         ])
         coverage = None
         if quality_filter != "all":
@@ -331,8 +332,8 @@ class BPIDashboardService(models.AbstractModel):
         total_rows = tab_counts[tab]
         page_count = max(1, int(math.ceil(total_rows / float(safe_limit))))
         safe_page = min(safe_page, page_count)
-        products = product_model.search(
-            expression.AND([domain, self._dashboard_tab_domain(tab)]),
+        products = product_model._bpi_ranked_search(
+            expression.AND([domain, self._dashboard_tab_domain(tab)]), search if sort_key == "catalog" else "",
             order=self._CATALOG_SORT_ORDERS[sort_key], offset=(safe_page - 1) * safe_limit,
             limit=safe_limit,
         )
@@ -355,6 +356,7 @@ class BPIDashboardService(models.AbstractModel):
             "exchangeRate": exchange_rate, "stats": self._dashboard_stats(category), "tabCounts": tab_counts,
             "categoryId": category.id or False, "qualityFilter": quality_filter, "sortKey": sort_key,
             "meli": self._meli_public_context(meli), "meliFilter": meli_filter,
+            "taxonomyTerms": product_model._bpi_facets(expression.AND([domain, self._dashboard_tab_domain(tab)]), product_model._bpi_filter_ids(taxonomy_term_ids)),
             "pager": {
                 "page": safe_page, "pageCount": page_count, "total": total_rows, "limit": safe_limit,
                 "hasNext": safe_page < page_count, "hasPrevious": safe_page > 1,
@@ -362,8 +364,8 @@ class BPIDashboardService(models.AbstractModel):
         }
 
     @api.model
-    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False):
+    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False, taxonomy_term_ids=None):
         return self.dashboard_payload(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
-            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter,
+            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter, taxonomy_term_ids=taxonomy_term_ids,
         )

@@ -2666,3 +2666,46 @@ QUnit.test('late file reads never attach to another product or overwrite a chang
         assert.notOk(action.documentPanel().buttons[0].hasFile);
     }finally{window.FileReader=Native;}
 });
+
+QUnit.module('Bader taxonomy');
+function taxonomyContext() {
+    return {revision:0,vocabularyRevision:'v1',sourceRevision:'s1',termIds:[],legacyTermIds:[],reviewedAt:false,job:false,
+        terms:[{id:10,axis:'use',name:'Extracción dental',aliases:['exodoncia'],definition:'Procedimiento',universal:false},
+            {id:11,axis:'niche',name:'Mayorista',aliases:[],definition:'Todos',universal:true}]};
+}
+QUnit.test('classification selection is draft only and save does not send store category', assert=>{
+    const action=contentTemplateAction(); action.state.categoryForm.classification={revision:0,vocabularyRevision:'v1',termIds:[]};
+    action.toggleTaxonomyTerm(10);
+    assert.deepEqual(action.categorySaveValues(),{classification:{revision:0,vocabularyRevision:'v1',termIds:[10]}});
+    assert.ok(action.detailHasUnsavedChanges()); action.toggleTaxonomyTerm(10); assert.deepEqual(action.state.categoryForm.classification.termIds,[]);
+});
+QUnit.test('classification edits during save survive acknowledged revision', assert=>{
+    const action=contentTemplateAction(),sent={revision:0,vocabularyRevision:'v1',termIds:[10]},now={...sent,termIds:[10,12]},saved={...sent,revision:1};
+    const result=action.mergeSavedDraft(now,sent,saved);assert.strictEqual(result.revision,1);assert.deepEqual(result.termIds,[10,12]);
+});
+QUnit.test('obsolete proposal never replaces classification draft', async assert=>{
+    const action=contentTemplateAction();action.state.detail.classification=taxonomyContext();
+    action.state.categoryForm.classification={revision:0,vocabularyRevision:'v1',termIds:[12]};
+    action.state.classificationJob={resultPayload:{classificationProposal:{revision:0,sourceRevision:'old',vocabularyRevision:'v1',termIds:[10]}}};
+    action.rpc=async()=>taxonomyContext();await action.applyClassificationProposal();assert.deepEqual(action.state.categoryForm.classification.termIds,[12]);
+});
+QUnit.test('approved current proposal still requires explicit save', async assert=>{
+    const action=contentTemplateAction();action.state.detail.classification=taxonomyContext();action.state.categoryForm.classification={revision:0,vocabularyRevision:'v1',termIds:[]};
+    action.state.classificationJob={resultPayload:{classificationProposal:{revision:0,sourceRevision:'s1',vocabularyRevision:'v1',termIds:[10]}}};
+    const calls=[];action.rpc=async route=>{calls.push(route);return taxonomyContext();};
+    await action.applyClassificationProposal();assert.deepEqual(action.state.categoryForm.classification.termIds,[10]);assert.deepEqual(calls,['/bader_product_intelligence/classification/context']);
+});
+QUnit.test('four axes render without paid calls and keep drafts through navigation', async assert=>{
+    const target=document.createElement('div');document.body.appendChild(target);const calls=[];
+    const detail={...stabilizationPayload(),classification:taxonomyContext()};
+    const app=new App(ProductIntelligenceAction,{templates,test:true,props:{action:{params:{product_tmpl_id:1},context:{}}},
+        env:{services:{user:{context:{}},notification:{add(){}},action:{doAction(){}},rpc:async route=>{calls.push(route);if(route.endsWith('/data'))return detail;throw new Error('Unexpected call');}}}});
+    try{
+        const action=await app.mount(target);await action.selectDetailSection('categorization');await workspacePatched();
+        assert.strictEqual(target.querySelectorAll('[data-taxonomy-axis]').length,4);
+        assert.ok(target.querySelector('[data-taxonomy-axis="niche"] input').disabled);
+        target.querySelector('[data-taxonomy-axis="use"] input').click();await workspacePatched();
+        await action.selectDetailSection('content');await workspacePatched();await action.selectDetailSection('categorization');await workspacePatched();
+        assert.ok(target.querySelector('[data-taxonomy-axis="use"] input').checked);assert.deepEqual(calls,['/bader_product_intelligence/data']);
+    }finally{app.destroy();target.remove();}
+});

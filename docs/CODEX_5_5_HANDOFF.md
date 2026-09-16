@@ -1,3 +1,12 @@
+## 2026-09-16 — Reviewed classification and integrated search
+
+Release `16.0.1.10.0` adds four per-product classification axes, an approved
+canonical dictionary and explicit asynchronous Nancy proposals. Read
+`docs/TAXONOMY_SEARCH.md`. Only saved approved assignments feed shared server-side
+header/shop/BPI matching; legacy fields are preserved as suggestions. Website
+activation and V5 migration require a checksum-guarded QAS operation, not addon
+installation alone. Preserve category independence, drafts and all prior content.
+
 ## 2026-09-15 — Optional product catalogs and documents
 
 Release `16.0.1.9.0` adds the privately stored catalog/PDF card before public

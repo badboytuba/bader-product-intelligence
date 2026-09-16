@@ -59,11 +59,11 @@ class BaderProductIntelligenceController(http.Controller):
         return job
 
     @http.route("/bader_product_intelligence/dashboard", type="json", auth="user")
-    def dashboard(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False, **kwargs):
+    def dashboard(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False, taxonomy_term_ids=None, **kwargs):
         self._ensure_manager()
         return request.env["bpi.service"].dashboard_payload(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
-            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter,
+            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter, taxonomy_term_ids=taxonomy_term_ids,
         )
 
     @http.route("/bader_product_intelligence/dashboard_overview", type="json", auth="user")
@@ -72,11 +72,11 @@ class BaderProductIntelligenceController(http.Controller):
         return request.env["bpi.service"].dashboard_overview(category_id=category_id, meli_account_id=meli_account_id)
 
     @http.route("/bader_product_intelligence/sync_catalog", type="json", auth="user")
-    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False, **kwargs):
+    def sync_catalog(self, tab="all", search="", page=1, limit=40, category_id=False, quality_filter=False, sort_key="catalog", meli_account_id=False, meli_filter=False, taxonomy_term_ids=None, **kwargs):
         self._ensure_manager()
         payload = request.env["bpi.service"].sync_catalog(
             tab=tab, search=search, page=page, limit=limit, category_id=category_id, quality_filter=quality_filter,
-            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter,
+            sort_key=sort_key, meli_account_id=meli_account_id, meli_filter=meli_filter, taxonomy_term_ids=taxonomy_term_ids,
         )
         return {"success": True, **payload}
 
@@ -198,6 +198,16 @@ class BaderProductIntelligenceController(http.Controller):
         product = self._product(product_tmpl_id)
         payload = request.env["bpi.service"].reclassify_category(product)
         return {"success": True, **payload}
+
+    @http.route('/bader_product_intelligence/classification/context', type='json', auth='user')
+    def classification_context(self, product_tmpl_id, **kwargs):
+        return self._product(product_tmpl_id)._bpi_classification_payload()
+
+    @http.route('/bader_product_intelligence/classification/analyze', type='json', auth='user')
+    def classification_analyze(self, product_tmpl_id, **kwargs):
+        product = self._product(product_tmpl_id)
+        return {'job': request.env['bpi.ai.job']._create_classification_job(product).bpi_to_payload()}
+
 
     @http.route("/bader_product_intelligence/analyze_seo", type="json", auth="user")
     def analyze_seo(self, product_tmpl_id, target_audience="clinicas", **kwargs):
