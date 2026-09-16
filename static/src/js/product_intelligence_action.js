@@ -279,7 +279,7 @@ export class ProductIntelligenceAction extends Component {
             competitorBusy: false,
             strategyBusy: false,
             categoryBusy: false,
-            classificationJob: null, taxonomyQuery: "", taxonomyFilters: [], taxonomyFacets: [],
+            taxonomyPicker: "", taxonomyNotice: "", taxonomyAnalyzing: false, classificationJob: null, taxonomyQuery: "", taxonomyFilters: [], taxonomyFacets: [],
             chatBusy: false,
             variantBusy: false,
             packBusy: false,
@@ -977,7 +977,7 @@ export class ProductIntelligenceAction extends Component {
             });
         }
         if (current && submitted && saved && Number.isInteger(saved.revision) && Array.isArray(saved.termIds)) {
-            return { ...saved, termIds: this.mergeSavedDraft(current.termIds, submitted.termIds, saved.termIds) };
+            return { ...saved, termIds: this.mergeSavedDraft(current.termIds, submitted.termIds, saved.termIds), ...(saved.excludedTermIds ? { excludedTermIds: this.mergeSavedDraft(current.excludedTermIds || [], submitted.excludedTermIds || [], saved.excludedTermIds) } : {}) };
         }
         if (current && submitted && saved && Number.isInteger(saved.revision) &&
             Array.isArray(saved.buttons) && saved.buttons.length === 3 && Array.isArray(current.buttons)) {
@@ -1466,8 +1466,9 @@ export class ProductIntelligenceAction extends Component {
             competitivenessScore: seoData.competitivenessScore || 0,
         };
         this.state.classificationJob = data.classification?.job || null;
+        this.state.taxonomyPicker = ""; this.state.taxonomyNotice = ""; this.state.taxonomyAnalyzing = false;
         this.state.categoryForm = {
-            classification: data.classification ? { revision: data.classification.revision, vocabularyRevision: data.classification.vocabularyRevision, termIds: [...data.classification.termIds] } : undefined,
+            classification: data.classification ? { revision: data.classification.revision, vocabularyRevision: data.classification.vocabularyRevision, termIds: [...data.classification.termIds], excludedTermIds: [...(data.classification.excludedTermIds || [])] } : undefined,
             manualMode: !!product.intelligentCategoryManual,
             niches: product.intelligentNiches || [],
             type: this.normalizeChoiceValue(product.intelligentType, TYPE_OPTIONS, TYPE_ALIASES),
@@ -3523,80 +3524,143 @@ export class ProductIntelligenceAction extends Component {
         }
     }
 
-    get taxonomyAxes() { return [{ id: 'niche', label: 'Nicho' }, { id: 'commercial', label: 'Aplicación comercial' }, { id: 'technical', label: 'Aplicación técnica' }, { id: 'use', label: 'Uso / Procedimiento' }]; }
+    get taxonomyAxes() {
+        return [
+            {id:'niche',label:'Nicho',question:'¿Quién lo busca?',hint:'Los públicos a los que se dirige.',icon:'fa-users',number:'01'},
+            {id:'commercial',label:'Aplicación comercial',question:'¿Qué producto es?',hint:'Su naturaleza y familia comercial.',icon:'fa-cube',number:'02'},
+            {id:'technical',label:'Aplicación técnica',question:'¿En qué área se utiliza?',hint:'La especialidad o el contexto de uso.',icon:'fa-crosshairs',number:'03'},
+            {id:'use',label:'Uso / Procedimiento',question:'¿Para qué lo necesita?',hint:'La tarea que el cliente quiere realizar.',icon:'fa-hand-pointer-o',number:'04'},
+        ];
+    }
 
+    taxonomyNormalize(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase().replace(/\s+/g,' ').trim(); }
     taxonomyOptions(axis) {
-        const query = (this.state.taxonomyQuery || '').toLocaleLowerCase();
-        return (this.state.detail?.classification?.terms || []).filter(t => t.axis === axis && (!query || [t.name, ...(t.aliases || [])].join(' ').toLocaleLowerCase().includes(query)));
+        const query=this.taxonomyNormalize(this.state.taxonomyQuery);
+        return (this.state.detail?.classification?.terms || []).filter(t=>t.axis===axis && (!query || this.taxonomyNormalize([t.name,...(t.aliases || [])].join(' ')).includes(query)));
     }
-
+    taxonomySelected(axis) {
+        const ids=this.state.categoryForm.classification?.termIds || [];
+        return (this.state.detail?.classification?.terms || []).filter(t=>t.axis===axis && !t.universal && ids.includes(t.id));
+    }
+    taxonomyAvailable(axis) { const ids=this.state.categoryForm.classification?.termIds || [];return this.taxonomyOptions(axis).filter(t=>!t.universal && !ids.includes(t.id)); }
+    get taxonomyUnavailableCount() {
+        const approved=new Set((this.state.detail?.classification?.terms || []).map(t=>t.id));
+        return (this.state.categoryForm.classification?.termIds || []).filter(id=>!approved.has(id)).length;
+    }
+    taxonomyClearUnavailable() {
+        const approved=new Set((this.state.detail?.classification?.terms || []).map(t=>t.id)),form=this.state.categoryForm.classification;
+        form.termIds=form.termIds.filter(id=>approved.has(id));form.excludedTermIds=(form.excludedTermIds || []).filter(id=>approved.has(id));
+    }
+    get taxonomySelectedCount() { return this.state.categoryForm.classification?.termIds?.length || 0; }
+    get taxonomyDirty() {
+        const form=this.state.categoryForm.classification, saved=this.state.detail?.classification;
+        const key=ids=>[...(ids || [])].sort((a,b)=>a-b).join(',');
+        return !!form && !!saved && (key(form.termIds)!==key(saved.termIds) || key(form.excludedTermIds)!==key(saved.excludedTermIds));
+    }
+    get taxonomyJobActive() { return !!this.state.taxonomyAnalyzing || ['pending','running'].includes(this.state.classificationJob?.state); }
+    get taxonomyAnalysisLabel() { return this.state.taxonomyAnalyzing ? 'Analizando producto…' : this.taxonomyJobActive ? 'Consultar análisis' : 'Analizar producto'; }
+    onTaxonomyPickerKeydown(ev) { if (ev.key === 'Escape') this.state.taxonomyPicker = ''; }
+    taxonomyOpenPicker(axis) { this.state.taxonomyPicker=this.state.taxonomyPicker===axis ? '' : axis;this.state.taxonomyQuery=''; }
     toggleTaxonomyTerm(id) {
-        const form = this.state.categoryForm.classification;
-        if (!form) return;
-        form.termIds = form.termIds.includes(id) ? form.termIds.filter(x => x !== id) : [...form.termIds, id];
+        const form=this.state.categoryForm.classification;if(!form)return;
+        const removing=form.termIds.includes(id), excluded=new Set(form.excludedTermIds || []);
+        if(removing){form.termIds=form.termIds.filter(x=>x!==id);excluded.add(id);}
+        else {form.termIds=[...form.termIds,id];excluded.delete(id);}
+        if(excluded.size || form.excludedTermIds)form.excludedTermIds=[...excluded];
     }
-
+    taxonomyAddTerm(id) { if(!this.state.categoryForm.classification.termIds.includes(id))this.toggleTaxonomyTerm(id);this.state.taxonomyQuery=''; }
     async toggleTaxonomyFilter(id) {
-        const ids = this.state.taxonomyFilters || [];
-        this.state.taxonomyFilters = ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id];
-        return this.loadDashboard({ page: 1 }, { showSpinner: false });
+        const ids=this.state.taxonomyFilters || [];this.state.taxonomyFilters=ids.includes(id)?ids.filter(x=>x!==id):[...ids,id];
+        return this.loadDashboard({page:1},{showSpinner:false});
     }
-
     async refreshTaxonomyVocabulary() {
-        const request = this.beginRequest('taxonomyVocabulary');
+        const request=this.beginRequest('taxonomyVocabulary');
         try {
-            const current = await this.rpc('/bader_product_intelligence/classification/context', { product_tmpl_id: request.productId });
-            if (!this.isRequestCurrent(request)) return;
-            this.state.detail.classification = current;
-            // Never update product revision behind the user's draft: stale saves must fail.
-            this.state.categoryForm.classification.vocabularyRevision = current.vocabularyRevision;
-            this.state.classificationJob = current.job || null;
-        } catch (error) { if (this.isRequestCurrent(request)) this.notify(this.errorMessage(error, 'No se pudo actualizar el vocabulario.'), 'danger'); }
+            const current=await this.rpc('/bader_product_intelligence/classification/context',{product_tmpl_id:request.productId});
+            if(!this.isRequestCurrent(request))return;
+            this.state.detail.classification=current;
+            this.state.categoryForm.classification.vocabularyRevision=current.vocabularyRevision;
+            const available=new Set(current.terms.map(t=>t.id));
+            this.state.categoryForm.classification.excludedTermIds=(this.state.categoryForm.classification.excludedTermIds || []).filter(id=>available.has(id));
+            this.state.classificationJob=current.job || null;
+        }catch(error){if(this.isRequestCurrent(request))this.notify(this.errorMessage(error,'No se pudo actualizar el vocabulario.'),'danger');}
     }
-
     async openTaxonomyLibrary() {
-        await this.action.doAction({ type: 'ir.actions.act_window', name: 'Vocabulario de clasificación', res_model: 'bpi.taxonomy.term', views: [[false, 'list'], [false, 'form']], target: 'new' }, { onClose: () => this.refreshTaxonomyVocabulary() });
+        const request=this.beginRequest('taxonomyLibrary');
+        await this.action.doAction({type:'ir.actions.act_window',name:'Vocabulario de clasificación',res_model:'bpi.taxonomy.term',views:[[false,'list'],[false,'form']],target:'new'},
+            {onClose:()=>{if(this.isRequestCurrent(request))return this.refreshTaxonomyVocabulary();}});
     }
-
+    taxonomyCanCreate(axis) {
+        const query=this.taxonomyNormalize(this.state.taxonomyQuery);
+        return !!query && !this.taxonomyOptions(axis).some(t=>[t.name,...t.aliases].some(x=>this.taxonomyNormalize(x)===query));
+    }
+    taxonomyPending(axis) {
+        const approved=new Set((this.state.detail?.classification?.terms || []).map(t=>t.id));
+        return (this.state.classificationJob?.resultPayload?.classificationProposal?.newTerms || []).filter(t=>t.axis===axis && !approved.has(t.id));
+    }
+    async taxonomyReviewTerm(term) {
+        const request=this.beginRequest('taxonomyLibrary');
+        await this.action.doAction({type:'ir.actions.act_window',name:'Revisar nueva palabra',res_model:'bpi.taxonomy.term',res_id:term.id,views:[[false,'form']],target:'new'},
+            {onClose:()=>{if(this.isRequestCurrent(request))return this.refreshTaxonomyVocabulary();}});
+    }
+    async taxonomyCreateTerm(axis) {
+        const name=(this.state.taxonomyQuery || '').trim();if(!name || name.length>100)return;
+        const request=this.beginRequest('taxonomyLibrary');
+        await this.action.doAction({type:'ir.actions.act_window',name:'Proponer una nueva etiqueta',res_model:'bpi.taxonomy.term',views:[[false,'form']],target:'new',
+            context:{...(this.user?.context || {}),default_axis:axis,default_name:name,default_state:'draft'}},
+            {onClose:async()=>{if(!this.isRequestCurrent(request))return;await this.refreshTaxonomyVocabulary();if(this.isRequestCurrent(request))this.state.taxonomyNotice='La palabra se vincula solo después de aprobarla y seleccionarla. Tus etiquetas no cambiaron.';}});
+    }
+    taxonomyEvidenceDraft() {
+        return JSON.stringify(this.snapshotDraft({product:this.state.productForm,content:this.state.contentForm}));
+    }
     async analyzeClassification() {
-        if (this.state.categoryBusy) return;
-        const request = this.beginRequest('classificationJob');
-        this.state.categoryBusy = true;
+        if(this.state.taxonomyAnalyzing)return;
+        const request=this.beginRequest('classificationJob');
+        request.evidenceDraft=this.taxonomyEvidenceDraft();
+        this.state.taxonomyAnalyzing=true;this.state.taxonomyNotice='';
         try {
-            const result = await this.rpc('/bader_product_intelligence/classification/analyze', { product_tmpl_id: request.productId });
-            if (!this.isRequestCurrent(request)) return;
-            this.state.classificationJob = result.job;
-            this.pollClassification(result.job.id, request);
-        } catch (error) { if (this.isRequestCurrent(request)) { this.state.categoryBusy = false; this.notify(this.errorMessage(error, 'No se pudo solicitar el análisis.'), 'danger'); } }
+            const existing=this.state.classificationJob;
+            const result=['pending','running'].includes(existing?.state)?{job:existing}:await this.rpc('/bader_product_intelligence/classification/analyze',{product_tmpl_id:request.productId});
+            if(!this.isRequestCurrent(request))return;
+            this.state.classificationJob=result.job;
+            await this.pollClassification(result.job.id,request);
+        }catch(error){if(this.isRequestCurrent(request)){this.state.taxonomyAnalyzing=false;this.notify(this.errorMessage(error,'No se pudo solicitar el análisis.'),'danger');}}
     }
-
-    async pollClassification(jobId, request = this.beginRequest('classificationJob')) {
+    async pollClassification(jobId, request=this.beginRequest('classificationJob')) {
         try {
-            const result = await this.rpc('/bader_product_intelligence/ai_job/status', { job_id: jobId });
-            if (!this.isRequestCurrent(request)) return;
-            this.state.classificationJob = result.job;
-            if (['pending', 'running'].includes(result.job.state)) {
-                setTimeout(() => { if (this.isRequestCurrent(request)) this.pollClassification(jobId, request); }, 2500);
-            } else { this.state.categoryBusy = false; }
-        } catch (error) { if (this.isRequestCurrent(request)) { this.state.categoryBusy = false; this.notify(this.errorMessage(error, 'No se pudo consultar el trabajo. Usa Actualizar.'), 'danger'); } }
-    }
-
-    async applyClassificationProposal(legacy = false) {
-        const proposal = legacy ? null : this.state.classificationJob?.resultPayload?.classificationProposal;
-        if (!legacy && !proposal) return;
-        const request = this.beginRequest('classificationApply');
-        const draft = this.snapshotDraft(this.state.categoryForm.classification);
-        try {
-            const current = await this.rpc('/bader_product_intelligence/classification/context', { product_tmpl_id: request.productId });
-            if (!this.isRequestCurrent(request) || JSON.stringify(draft) !== JSON.stringify(this.state.categoryForm.classification)) return;
-            if (!legacy && (proposal.sourceRevision !== current.sourceRevision || proposal.vocabularyRevision !== current.vocabularyRevision || proposal.revision !== current.revision)) {
-                this.notify('La propuesta quedó desactualizada. No se modificó el borrador.', 'warning'); return;
+            const result=await this.rpc('/bader_product_intelligence/ai_job/status',{job_id:jobId});
+            if(!this.isRequestCurrent(request))return;
+            this.state.classificationJob=result.job;
+            if(['pending','running'].includes(result.job.state)) {
+                setTimeout(()=>{if(this.isRequestCurrent(request))this.pollClassification(jobId,request);},2500);
+            }else {
+                this.state.taxonomyAnalyzing=false;
+                if(result.job.state==='done' && request.evidenceDraft!==undefined)await this.applyClassificationProposal(false,request);
             }
-            if (draft.revision !== current.revision) { this.notify('La clasificación guardada cambió. Recarga antes de aplicar.', 'warning'); return; }
-            this.state.detail.classification = current;
-            this.state.categoryForm.classification = { revision: current.revision, vocabularyRevision: current.vocabularyRevision, termIds: [...(legacy ? current.legacyTermIds : proposal.termIds)] };
-            this.notify('Propuesta en borrador. Revisa y guarda para incorporarla a la búsqueda.');
-        } catch (error) { if (this.isRequestCurrent(request)) this.notify(this.errorMessage(error, 'No se pudo revisar la propuesta.'), 'danger'); }
+        }catch(error){if(this.isRequestCurrent(request)){this.state.taxonomyAnalyzing=false;this.notify(this.errorMessage(error,'No se pudo consultar el análisis. Pulsa Consultar análisis para continuar.'),'danger');}}
+    }
+    async applyClassificationProposal(legacy=false, analysisRequest=null) {
+        const proposal=legacy?null:this.state.classificationJob?.resultPayload?.classificationProposal;
+        if(!legacy && !proposal)return;
+        if(analysisRequest && !this.isRequestCurrent(analysisRequest))return;
+        if(analysisRequest && analysisRequest.evidenceDraft!==this.taxonomyEvidenceDraft()) {
+            this.state.taxonomyNotice='Cambiaste datos o contenido durante el análisis. Conservamos tus cambios; revisa el resultado en los detalles.';return;
+        }
+        const request=this.beginRequest('classificationApply');
+        try {
+            const current=await this.rpc('/bader_product_intelligence/classification/context',{product_tmpl_id:request.productId});
+            if(!this.isRequestCurrent(request) || (analysisRequest && (!this.isRequestCurrent(analysisRequest) || analysisRequest.evidenceDraft!==this.taxonomyEvidenceDraft())))return;
+            const draft=this.state.categoryForm.classification;
+            if(!legacy && (proposal.sourceRevision!==current.sourceRevision || proposal.vocabularyRevision!==current.vocabularyRevision || proposal.revision!==current.revision)) {
+                this.state.taxonomyNotice='Los datos o el vocabulario cambiaron. El análisis anterior no se aplicó; tus etiquetas se conservan.';return;
+            }
+            if(draft.revision!==current.revision){this.notify('La clasificación guardada cambió. Recarga antes de aplicar.','warning');return;}
+            const excluded=new Set(draft.excludedTermIds || []),allowed=new Set(current.terms.filter(t=>!t.universal).map(t=>t.id));
+            const incoming=(legacy?current.legacyTermIds:proposal.termIds).filter(id=>allowed.has(id) && !excluded.has(id));
+            this.state.detail.classification=current;
+            this.state.categoryForm.classification={...draft,vocabularyRevision:current.vocabularyRevision,termIds:[...new Set([...draft.termIds,...incoming])]};
+            this.state.taxonomyNotice='Etiquetas añadidas al borrador. Conservamos tus selecciones y exclusiones. Revisa y guarda cuando estés listo.';
+        }catch(error){if(this.isRequestCurrent(request))this.notify(this.errorMessage(error,'No se pudo revisar el resultado.'),'danger');}
     }
 
     async reclassifyCategory() {

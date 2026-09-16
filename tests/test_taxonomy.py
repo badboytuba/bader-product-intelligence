@@ -189,3 +189,26 @@ class TestTaxonomy(TransactionCase):
         with patch.object(type(self.service),'_openai_json',return_value={'termIds':[], 'reasons':'Sin evidencia suficiente','warnings':[],'newTerms':[]}):
             job.with_context(lang='en_US')._process_job()
         self.assertEqual(job.state,'done',job.error_message)
+
+    def test_manual_exclusions_persist_and_reselect_clears(self):
+        values=self.values([]);values['classification']['excludedTermIds']=[self.use.id]
+        self.service.save_category(self.product,values)
+        self.assertEqual(self.product._bpi_classification_payload()['excludedTermIds'],[self.use.id])
+        # Old clients omit the new key: selecting the term explicitly removes its exclusion.
+        self.save([self.use.id])
+        self.assertFalse(self.product.bpi_classification_excluded_ids)
+        self.assertEqual(self.product.bpi_taxonomy_term_ids,self.use)
+
+    def test_exclusions_permissions_validation_and_copy(self):
+        with self.assertRaises(AccessError):self.product.with_user(self.user).write({'bpi_classification_excluded_ids':[self.use.id]})
+        for value in [[True],[9999999],'invalid']:
+            data=self.values();data['classification']['excludedTermIds']=value
+            with self.assertRaises(ValidationError):self.service.save_category(self.product,data)
+        self.product.write({'bpi_classification_excluded_ids':[self.use.id]})
+        self.assertFalse(self.product.copy().bpi_classification_excluded_ids)
+        self.assertFalse(self.Model.search([('id','=',self.product.id)]+self.Model._bpi_query_domain('exodoncia fixture')))
+
+    def test_exclusions_save_all_failure_is_atomic(self):
+        data=self.values();data['classification']['excludedTermIds']=[self.use.id]
+        with self.assertRaises(ValueError):self.service.save_all(self.product,category_values=data,content_values={'tone':'invalid tone'})
+        self.assertFalse(self.product.bpi_classification_excluded_ids)

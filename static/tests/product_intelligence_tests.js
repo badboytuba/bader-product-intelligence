@@ -2703,9 +2703,54 @@ QUnit.test('four axes render without paid calls and keep drafts through navigati
     try{
         const action=await app.mount(target);await action.selectDetailSection('categorization');await workspacePatched();
         assert.strictEqual(target.querySelectorAll('[data-taxonomy-axis]').length,4);
-        assert.ok(target.querySelector('[data-taxonomy-axis="niche"] input').disabled);
-        target.querySelector('[data-taxonomy-axis="use"] input').click();await workspacePatched();
+        assert.ok(target.querySelector('.bpi-tax-wholesale').textContent.includes('Mayorista'));
+        assert.strictEqual(target.querySelectorAll('.bpi-taxonomy-prime input[type=checkbox]').length,0);
+        target.querySelector('[data-taxonomy-add="use"]').click();await workspacePatched();
+        target.querySelector('[data-taxonomy-choice="10"]').click();await workspacePatched();
         await action.selectDetailSection('content');await workspacePatched();await action.selectDetailSection('categorization');await workspacePatched();
-        assert.ok(target.querySelector('[data-taxonomy-axis="use"] input').checked);assert.deepEqual(calls,['/bader_product_intelligence/data']);
+        assert.ok(target.querySelector('[data-taxonomy-remove="10"]'));assert.deepEqual(calls,['/bader_product_intelligence/data']);
     }finally{app.destroy();target.remove();}
+});
+
+QUnit.module('Bader premium classification');
+function primeAction() {
+    const action=contentTemplateAction();action.state.detail.classification=taxonomyContext();
+    action.state.categoryForm.classification={revision:0,vocabularyRevision:'v1',termIds:[],excludedTermIds:[]};
+    action.state.classificationJob={id:44,state:'done',resultPayload:{classificationProposal:{revision:0,sourceRevision:'s1',vocabularyRevision:'v1',termIds:[10],warnings:[],newTerms:[]}}};
+    action.rpc=async()=>taxonomyContext();return action;
+}
+QUnit.test('manual removal survives later analysis and explicit re-add clears exclusion',async assert=>{
+    const a=primeAction();a.taxonomyAddTerm(10);a.toggleTaxonomyTerm(10);
+    await a.applyClassificationProposal();assert.deepEqual(a.state.categoryForm.classification.termIds,[]);assert.deepEqual(a.state.categoryForm.classification.excludedTermIds,[10]);
+    a.taxonomyAddTerm(10);assert.deepEqual(a.state.categoryForm.classification.excludedTermIds,[]);
+});
+QUnit.test('analysis complements existing manual choices rather than replacing them',async assert=>{
+    const a=primeAction();a.state.categoryForm.classification.termIds=[12];await a.applyClassificationProposal();assert.deepEqual(a.state.categoryForm.classification.termIds,[12,10]);
+});
+QUnit.test('completed explicit analysis auto fills draft without saving',async assert=>{
+    const a=primeAction(),calls=[],job=a.state.classificationJob;a.state.classificationJob=null;
+    a.rpc=async route=>{calls.push(route);return route.endsWith('/context')?taxonomyContext():{job};};
+    await a.analyzeClassification();assert.deepEqual(a.state.categoryForm.classification.termIds,[10]);assert.notOk(a.state.taxonomyAnalyzing);
+    assert.deepEqual(calls,['/bader_product_intelligence/classification/analyze','/bader_product_intelligence/ai_job/status','/bader_product_intelligence/classification/context']);
+});
+QUnit.test('changed evidence draft prevents automatic application',async assert=>{
+    const a=primeAction(),req=a.beginRequest('classificationJob');req.evidenceDraft=a.taxonomyEvidenceDraft();a.state.productForm.name='Edited name';
+    await a.applyClassificationProposal(false,req);assert.deepEqual(a.state.categoryForm.classification.termIds,[]);assert.ok(a.state.taxonomyNotice.includes('Cambiaste'));
+});
+QUnit.test('manual removal during context fetch is preserved',async assert=>{
+    const a=primeAction();a.state.categoryForm.classification.termIds=[10];let resolve;
+    a.rpc=()=>new Promise(r=>{resolve=r;});const pending=a.applyClassificationProposal();a.toggleTaxonomyTerm(10);resolve(taxonomyContext());await pending;
+    assert.deepEqual(a.state.categoryForm.classification.termIds,[]);assert.deepEqual(a.state.categoryForm.classification.excludedTermIds,[10]);
+});
+QUnit.test('in-flight save preserves edits to exclusions',assert=>{
+    const a=primeAction(),sent={revision:0,vocabularyRevision:'v1',termIds:[10],excludedTermIds:[]};
+    const result=a.mergeSavedDraft({...sent,termIds:[],excludedTermIds:[10]},sent,{...sent,revision:1});assert.strictEqual(result.revision,1);assert.deepEqual(result.excludedTermIds,[10]);assert.deepEqual(result.termIds,[]);
+});
+QUnit.test('new words open pending scoped form without changing product',async assert=>{
+    const a=primeAction();a.state.taxonomyQuery='Nuevo procedimiento';let spec;a.action={doAction:async value=>{spec=value;}};await a.taxonomyCreateTerm('use');
+    assert.strictEqual(spec.context.default_state,'draft');assert.strictEqual(spec.context.default_axis,'use');assert.deepEqual(a.state.categoryForm.classification.termIds,[]);
+});
+QUnit.test('picker normalizes accents and avoids duplicate canonical synonyms',assert=>{
+    const a=primeAction();a.state.taxonomyQuery='EXTRACCION';assert.strictEqual(a.taxonomyAvailable('use')[0].id,10);
+    a.state.taxonomyQuery='exodoncia';assert.notOk(a.taxonomyCanCreate('use'));assert.strictEqual(a.taxonomySelectedCount,0);
 });

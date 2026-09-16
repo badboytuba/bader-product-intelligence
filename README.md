@@ -1,3 +1,12 @@
+## 2026-09-16 — Premium tag editor
+
+Release `16.0.1.11.0` replaces long classification checklists with four editable
+chip cards and one explicit analysis action. Completed requested analyses only
+complement the draft, preserving selected and manually excluded terms. Saved
+exclusions persist across reopening; new words remain subject to approval.
+Read `docs/TAXONOMY_SEARCH.md`. QAS only, no automatic product changes or new
+public search behavior. Keep the official flat Bader palette and local fonts.
+
 ## 2026-09-16 — Reviewed classification and integrated search
 
 Release `16.0.1.10.0` adds four per-product classification axes, an approved

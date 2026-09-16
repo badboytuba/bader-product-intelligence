@@ -69,3 +69,23 @@ OWL regression includes draft preservation, mid-save changes, stale proposals,
 explicit apply and four-axis rendering without provider calls.
 Deployment evidence belongs in the private project audit_outputs directory;
 source version alone does not imply QAS/main delivery or a completed live pilot.
+
+
+## Premium editor —16.0.1.11.0
+
+Four compact tag cards replace the full vocabulary lists. `Analizar producto`
+queues or resumes an explicitly requested analysis and complements the draft
+when complete. It never saves. Current selections survive; removed labels are
+kept in `excludedTermIds`, a private validated per-product list saved atomically
+with classification. Re-selecting a label explicitly clears its exclusion.
+Existing clients may omit excludedTermIds without erasing prior exclusions.
+Fresh source/vocabulary/product revisions and local product/content draft
+fingerprints are checked before automatic completion; edits made while fetching
+results are merged conservatively. Old completed jobs do not apply on page open.
+
+`Añadir etiqueta` searches approved terms locally, accent-insensitive. Creating
+a word opens a focused Odoo form defaulting to draft; approving and assigning
+remain distinct explicit steps. Dictionary management, historical suggestions,
+justifications and proposed synonyms move to collapsible secondary details.
+Removing a chip affects this product only. No new paid pilot/mass generation is
+part of this cosmetic/interaction delivery; validate async responses with mocks.
