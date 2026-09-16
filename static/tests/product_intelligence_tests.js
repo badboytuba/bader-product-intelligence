@@ -2754,3 +2754,249 @@ QUnit.test('picker normalizes accents and avoids duplicate canonical synonyms',a
     const a=primeAction();a.state.taxonomyQuery='EXTRACCION';assert.strictEqual(a.taxonomyAvailable('use')[0].id,10);
     a.state.taxonomyQuery='exodoncia';assert.notOk(a.taxonomyCanCreate('use'));assert.strictEqual(a.taxonomySelectedCount,0);
 });
+
+QUnit.module('Bader semantic map');
+function semanticMapContext() {
+    return {
+        ...taxonomyContext(), excludedTermIds: [],
+        terms: [...taxonomyContext().terms,
+            { id: 12, axis: 'niche', name: 'Clínica Dental', aliases: [], definition: 'Uso profesional', universal: false },
+            { id: 13, axis: 'niche', name: 'Estudiantes', aliases: ['Alumnos'], definition: 'Formación supervisada', universal: false },
+            { id: 14, axis: 'technical', name: 'Cirugía', aliases: [], definition: 'Especialidad', universal: false }],
+    };
+}
+function semanticMapAction() {
+    const action = primeAction();
+    action.state.detail.classification = semanticMapContext();
+    action.rpc = async () => semanticMapContext();
+    return action;
+}
+QUnit.test('mind map keeps all four axes independent and distinguishes an unreviewed map', assert => {
+    const action = semanticMapAction();
+    assert.deepEqual(action.taxonomyAxes.map(axis => axis.id), ['niche', 'commercial', 'technical', 'use']);
+    assert.strictEqual(action.taxonomyMapStatus, 'Pendiente de revisar');
+    action.taxonomyAddTerm(12); action.taxonomyAddTerm(13); action.taxonomyAddTerm(10);
+    assert.strictEqual(action.taxonomySelected('niche').length, 2);
+    assert.strictEqual(action.taxonomySelected('use').length, 1);
+    action.toggleTaxonomyTerm(12);
+    assert.deepEqual(action.state.categoryForm.classification.termIds, [13, 10], 'removing a niche does not remove other branches');
+    assert.strictEqual(action.taxonomyMapStatus, 'Cambios en borrador');
+    assert.strictEqual(action.taxonomyAddedCount, 2);
+    assert.strictEqual(action.taxonomySavedCount, 0);
+});
+QUnit.test('only new additions from an applied analysis receive AI draft provenance', async assert => {
+    const action = semanticMapAction();
+    action.taxonomyAddTerm(13);
+    action.state.classificationJob.resultPayload.classificationProposal.termIds = [10, 13];
+    assert.strictEqual(action.taxonomyTermOrigin(13), 'draft', 'old proposal membership is not provenance');
+    await action.applyClassificationProposal();
+    assert.strictEqual(action.taxonomyTermOrigin(13), 'draft', 'manual choice stays manual');
+    assert.strictEqual(action.taxonomyTermOrigin(10), 'ai');
+    action.toggleTaxonomyTerm(10); action.taxonomyAddTerm(10);
+    assert.strictEqual(action.taxonomyTermOrigin(10), 'draft', 'manual re-selection clears AI provenance');
+    action.state.detail.classification.termIds = [13];
+    assert.strictEqual(action.taxonomyTermOrigin(13), 'saved');
+    assert.strictEqual(action.taxonomyTermOriginLabel(13), 'Guardada');
+    assert.notOk(Object.hasOwn(action.categorySaveValues().classification, 'taxonomyAiTermIds'), 'UI provenance is not a product write contract');
+});
+QUnit.test('AI provenance survives same-product refresh but never crosses product identity', async assert => {
+    const action = semanticMapAction(); await action.applyClassificationProposal();
+    const request = action.beginRequest('refresh', true);
+    action.applyDetailUpdate({ ...stabilizationPayload(), classification: semanticMapContext() }, request, {});
+    assert.strictEqual(action.taxonomyTermOrigin(10), 'ai');
+    assert.ok(action.state.categoryForm.classification.termIds.includes(10));
+    action.applyDetailPayload({ ...stabilizationPayload(2), classification: semanticMapContext() });
+    assert.deepEqual(action.state.taxonomyAiTermIds, []);
+    assert.strictEqual(action.state.taxonomyTermDetail, null);
+});
+QUnit.test('removal counters and inspected canonical details reflect only the current product draft', assert => {
+    const action = semanticMapAction(); action.state.detail.classification.termIds = [10, 13];
+    action.state.categoryForm.classification.termIds = [10, 13];
+    action.taxonomyInspectTerm(action.taxonomySelected('use')[0]);
+    assert.strictEqual(action.taxonomyInspectedTerm('use').id, 10);
+    assert.strictEqual(action.taxonomyInspectedTerm('niche'), null);
+    assert.strictEqual(action.taxonomySynonymTerms('niche')[0].name, 'Estudiantes');
+    action.toggleTaxonomyTerm(10);
+    assert.strictEqual(action.taxonomyInspectedTerm('use'), null);
+    assert.strictEqual(action.taxonomyRemovedCount, 1);
+    assert.strictEqual(action.taxonomyAddedCount, 0);
+    assert.deepEqual(action.state.detail.classification.termIds, [10, 13], 'saved map not edited');
+});
+QUnit.test('unapproved AI terms can be edited or hidden without approval or assignment side effects', async assert => {
+    const action = semanticMapAction();
+    const term = { id: 99, axis: 'use', name: 'Nuevo uso', definition: 'Revisar evidencia', aliases_text: '' };
+    action.state.classificationJob.resultPayload.classificationProposal.newTerms = [term];
+    assert.strictEqual(action.taxonomyPending('use').length, 1);
+    let spec; action.action = { doAction: async value => { spec = value; } };
+    await action.taxonomyReviewTerm(term);
+    assert.strictEqual(spec.res_id, 99); assert.strictEqual(spec.target, 'new');
+    action.taxonomyDismissPending(term);
+    assert.strictEqual(action.taxonomyPending('use').length, 0);
+    assert.deepEqual(action.taxonomyProposal.newTerms, [term], 'hidden proposal remains available in analysis details');
+    assert.deepEqual(action.state.categoryForm.classification.termIds, [], 'neither approval nor assignment is implicit');
+    action.state.classificationJob.id = 45;
+    assert.strictEqual(action.taxonomyPending('use').length, 1, 'hiding is scoped to the current analysis');
+});
+QUnit.test('optional rationale arrays tolerate legacy proposals and stay separate from assigned terms', assert => {
+    const action = semanticMapAction();
+    assert.deepEqual(action.taxonomyNicheEvaluations, []); assert.deepEqual(action.taxonomyBranchIntents('use'), []);
+    action.state.classificationJob.resultPayload.classificationProposal.nicheEvaluations = [
+        { termId: 13, decision: 'suggested', reason: 'Formación supervisada' },
+        { termId: 12, decision: 'insufficient_evidence', reason: 'Faltan datos' },
+        { termId: 11, decision: 'suggested', reason: 'Universal' },
+        { termId: 9999, decision: 'suggested', reason: 'Unknown' },
+    ];
+    action.state.classificationJob.resultPayload.classificationProposal.intentPhrases = [
+        { axis: 'use', text: 'instrumental para exodoncia', termIds: [10] },
+        { axis: 'technical', text: 'instrumental de cirugía', termIds: [14] },
+    ];
+    assert.deepEqual(action.taxonomyNicheEvaluations.map(row => row.name), ['Estudiantes', 'Clínica Dental']);
+    assert.strictEqual(action.taxonomyNicheEvaluations[1].label, 'Falta evidencia');
+    assert.deepEqual(action.state.categoryForm.classification.termIds, []);
+    assert.deepEqual(action.taxonomyBranchIntents('use'), [], 'unselected proposal terms do not create active intent branches');
+    action.taxonomyAddTerm(10);
+    assert.strictEqual(action.taxonomyBranchIntents('use')[0].text, 'instrumental para exodoncia');
+    action.toggleTaxonomyTerm(10);
+    assert.deepEqual(action.taxonomyBranchIntents('use'), [], 'removing a term removes its intent from the editable map');
+    action.taxonomyAddTerm(14);
+    action.state.classificationJob.resultPayload.classificationProposal.intentPhrases.push({ axis: 'use', text: 'wrong branch', termIds: [14] });
+    assert.deepEqual(action.taxonomyBranchIntents('use'), [], 'cross-axis term IDs cannot attach a phrase to the wrong branch');
+});
+QUnit.test('semantic revision is part of content fingerprint and stale content proposals preserve drafts', async assert => {
+    const action = contentTemplateAction(); action.state.contentTemplateContext.semanticRevision = 'sem-1';
+    const before = action.captureDrafts(), calls = [];
+    assert.notEqual(action.contentTemplateFingerprint(), action.contentTemplateFingerprint({ ...action.state.contentTemplateContext, semanticRevision: 'sem-2' }));
+    action.rpc = async route => {
+        calls.push(route);
+        if (route.endsWith('/generate_content')) {
+            const proposal = contentTemplateProposal(); proposal.contentTemplates.semanticRevision = 'sem-1'; return proposal;
+        }
+        return { ...contentTemplateContext(), semanticRevision: 'sem-2' };
+    };
+    await action.generateContent();
+    assert.deepEqual(action.captureDrafts(), before);
+    assert.strictEqual(calls.length, 2, 'one generation, one read, no automatic retry');
+    assert.ok(action.notifications.some(message => message.includes('No se aplicó la propuesta')));
+
+    // Saving classification must refresh the context of a still-unsaved manual
+    // template, not leave its old semantic fingerprint blocking the next result.
+    const pendingAction = contentTemplateAction(), fresh = stabilizationDeferred(), reads = [];
+    pendingAction.state.contentForm.templateId = 1;
+    pendingAction.state.contentForm.description = 'Texto editorial pendiente';
+    pendingAction.state.contentTemplateContext = { ...contentTemplateContext(1), semanticRevision: 'sem-1' };
+    const pendingDrafts = pendingAction.captureDrafts();
+    let refreshing;
+    const refresh = pendingAction.refreshContentTemplateContext.bind(pendingAction);
+    pendingAction.refreshContentTemplateContext = () => { refreshing = refresh(); return refreshing; };
+    pendingAction.rpc = (route, params) => { reads.push({ route, params }); return fresh.promise; };
+    pendingAction.applyDetailUpdate({ ...stabilizationPayload(), contentTemplates: { ...contentTemplateContext(), semanticRevision: 'sem-2' } }, pendingAction.beginRequest('save', true), {});
+    assert.strictEqual(pendingAction.state.contentForm.templateId, 1, 'unsaved manual model is retained');
+    assert.ok(pendingAction.state.contentTemplateBusy, 'refresh blocks paid generation until current context is available');
+    await pendingAction.generateContent();
+    assert.deepEqual(reads, [{ route: '/bader_product_intelligence/content_template_context', params: { product_tmpl_id: 1, template_id: 1 } }], 'only the selected model metadata is refreshed');
+    fresh.resolve({ ...contentTemplateContext(1), semanticRevision: 'sem-2' }); await refreshing;
+    assert.strictEqual(pendingAction.state.contentTemplateContext.semanticRevision, 'sem-2');
+    assert.strictEqual(pendingAction.state.contentTemplateContext.selectionId, 1);
+    assert.deepEqual(pendingAction.captureDrafts(), pendingDrafts, 'classification refresh never discards editorial or other pending edits');
+    assert.notOk(pendingAction.state.contentTemplateBusy);
+});
+QUnit.test('new semantic SEO jobs verify fresh saved context and preserve concurrent edits', async assert => {
+    for (const stale of [false, true]) {
+        const action = contentTemplateAction(), calls = [];
+        const before = action.captureDrafts(), request = action.beginRequest('seoJob', true);
+        const job = { id: 71, productId: 1, state: 'done', resultPayload: { semanticRevision: 'sem-1', seoData: { seoTitle: 'Propuesta SEO', geoTitle: 'Propuesta GEO' } } };
+        action.rpc = async route => {
+            calls.push(route);
+            if (route.endsWith('/status')) return { job };
+            if (!stale) action.state.seoForm.seoTitle = 'Edición manual durante verificación';
+            return { semanticRevision: stale ? 'sem-2' : 'sem-1' };
+        };
+        await action.pollSeoJob(71, request);
+        assert.deepEqual(calls, ['/bader_product_intelligence/ai_job/status', '/bader_product_intelligence/content_template_context']);
+        if (stale) {
+            assert.deepEqual(action.captureDrafts(), before);
+            assert.notOk(action.state.seoPreviewPending);
+        } else {
+            assert.strictEqual(action.state.seoForm.seoTitle, 'Edición manual durante verificación');
+            assert.strictEqual(action.state.seoForm.geoTitle, 'Propuesta GEO');
+            assert.ok(action.state.seoPreviewPending);
+        }
+        assert.notOk(action.state.seoBusy);
+    }
+});
+QUnit.test('legacy SEO jobs remain compatible without a new freshness read', async assert => {
+    const action = contentTemplateAction(), calls = [];
+    action.rpc = async route => { calls.push(route); return { job: { id: 72, productId: 1, state: 'done', resultPayload: { seoData: { seoTitle: 'Legacy preview' } } } }; };
+    await action.pollSeoJob(72, action.beginRequest('seoJob', true));
+    assert.deepEqual(calls, ['/bader_product_intelligence/ai_job/status']);
+    assert.strictEqual(action.state.seoForm.seoTitle, 'Legacy preview');
+});
+QUnit.test('new FAQ context must remain current and legacy FAQ responses still apply', async assert => {
+    for (const mode of ['current', 'stale', 'legacy']) {
+        const action = contentTemplateAction(), calls = [], before = action.captureDrafts();
+        action.rpc = async route => {
+            calls.push(route);
+            if (route.endsWith('/generate_faq')) return { faqs: [{ question: 'Nueva pregunta', answer: 'Nueva respuesta' }], ...(mode !== 'legacy' ? { semanticRevision: 'sem-1' } : {}) };
+            return { semanticRevision: mode === 'stale' ? 'sem-2' : 'sem-1' };
+        };
+        await action.generateFaq();
+        if (mode === 'stale') assert.deepEqual(action.captureDrafts(), before);
+        else assert.strictEqual(action.state.contentForm.faqs[0].question, 'Nueva pregunta');
+        assert.strictEqual(calls.length, mode === 'legacy' ? 1 : 2);
+        assert.notOk(action.state.faqBusy);
+    }
+});
+QUnit.test('late semantic freshness reads never apply SEO to a different product', async assert => {
+    const action = contentTemplateAction(), fresh = stabilizationDeferred();
+    action.rpc = async route => route.endsWith('/status')
+        ? { job: { id: 73, productId: 1, state: 'done', resultPayload: { semanticRevision: 'sem-1', seoData: { seoTitle: 'Old product preview' } } } }
+        : fresh.promise;
+    const poll = action.pollSeoJob(73, action.beginRequest('seoJob', true));
+    await Promise.resolve(); await Promise.resolve();
+    action.invalidateProductRequests(); action.state.productId = 2; action.applyDetailPayload(stabilizationPayload(2));
+    const title = action.state.seoForm.seoTitle;
+    fresh.resolve({ semanticRevision: 'sem-1' }); await poll;
+    assert.strictEqual(action.state.seoForm.seoTitle, title);
+    assert.notOk(action.state.seoPreviewPending);
+});
+QUnit.test('mounted mind map exposes editable branches, optional AI explanations and keyboard-safe picker', async assert => {
+    const target = document.createElement('div'); document.body.appendChild(target); const calls = [];
+    const classification = semanticMapContext(); classification.termIds = [10, 12, 13]; classification.reviewedAt = '2026-09-16 10:00:00';
+    classification.job = { id: 80, state: 'done', resultPayload: { classificationProposal: {
+        reasons: 'Propuesta para revisión humana', warnings: [], termIds: [10, 12, 13],
+        newTerms: [{ id: 99, axis: 'use', name: 'Uso por revisar', definition: 'Definición pendiente', aliases_text: '' }],
+        nicheEvaluations: [{ termId: 13, decision: 'suggested', reason: 'Para formación supervisada' }],
+        intentPhrases: [{ axis: 'use', text: 'instrumental para extracción', termIds: [10] }],
+    } } };
+    const semanticContext = { source: 'saved_approved_classification', axes: { niche: classification.terms.filter(term => [12, 13].includes(term.id)), use: [classification.terms[0]], commercial: [], technical: [] } };
+    const detail = { ...stabilizationPayload(), classification, semanticContext };
+    const app = new App(ProductIntelligenceAction, { templates, test: true, props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: { user: { context: {} }, notification: { add() {} }, action: { doAction() {} }, rpc: async route => { calls.push(route); if (route.endsWith('/data')) return detail; throw new Error('Unexpected call'); } } } });
+    try {
+        const action = await app.mount(target); await action.selectDetailSection('categorization'); await workspacePatched();
+        assert.strictEqual(target.querySelectorAll('[data-taxonomy-root]').length, 1);
+        assert.strictEqual(target.querySelectorAll('.bpi-tax-analyze').length, 1);
+        assert.deepEqual([...target.querySelectorAll('[data-taxonomy-axis]')].map(node => node.dataset.taxonomyAxis), ['niche', 'commercial', 'technical', 'use']);
+        assert.strictEqual(target.querySelector('.bpi-tax-status strong').textContent, 'Clasificación guardada');
+        assert.ok(target.querySelector('.bpi-map-evaluations').textContent.includes('Estudiantes'));
+        assert.ok(target.querySelector('.bpi-map-intents').textContent.includes('no se indexan'));
+        target.querySelector('[data-taxonomy-inspect="10"]').click(); await workspacePatched();
+        assert.ok(target.querySelector('[data-taxonomy-term-detail="10"]').textContent.includes('Equivale a: exodoncia'));
+        target.querySelector('[data-taxonomy-add="technical"]').click(); await workspacePatched();
+        const input = target.querySelector('#bpi-tax-search-technical'); assert.strictEqual(document.activeElement, input, 'opening picker moves focus to the search');
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await workspacePatched();
+        assert.notOk(target.querySelector('#bpi-tax-search-technical'));
+        assert.strictEqual(document.activeElement, target.querySelector('[data-taxonomy-add="technical"]'), 'Escape returns focus to the triggering button');
+        target.querySelector('[data-taxonomy-dismiss="99"]').click(); await workspacePatched();
+        assert.notOk(target.querySelector('[data-taxonomy-dismiss="99"]'));
+        assert.ok(target.querySelector('.bpi-tax-details').textContent.includes('Uso por revisar'));
+        target.querySelector('[data-taxonomy-remove="13"]').click(); await workspacePatched();
+        await action.selectDetailSection('content'); await workspacePatched();
+        const notice = target.querySelector('.bpi-semantic-context');
+        assert.ok(notice.textContent.includes('Clínica Dental · Estudiantes'), 'content context reflects saved niches, not draft removals');
+        assert.ok(notice.textContent.includes('sin guardar'));
+        await action.selectDetailSection('seo'); await workspacePatched();
+        assert.ok(target.querySelector('.bpi-semantic-context'));
+        assert.deepEqual(calls, ['/bader_product_intelligence/data'], 'opening, reviewing and editing the map call no providers or writes');
+    } finally { app.destroy(); target.remove(); }
+});

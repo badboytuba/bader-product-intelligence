@@ -14,8 +14,20 @@ from odoo.tools import mute_logger
 class TestBPIAIJob(TransactionCase):
     def setUp(self):
         super().setUp()
-        self.jobs = self.env["bpi.ai.job"].with_context(bpi_no_job_commit=True)
+        # Odoo TransactionCase defaults to the inactive superuser/OdooBot;
+        # queued paid work must have a real active administrator requester.
+        self.jobs = self.env["bpi.ai.job"].with_user(self.env.ref("base.user_admin")).with_context(bpi_no_job_commit=True)
         self.product = self.env["product.template"].create({"name": "BPI job regression", "bpi_ai_generated_description": "<p>Manual commercial text</p>"})
+
+        # Fixtures are uncommitted; production's separate READ ONLY cursor
+        # cannot see them. Keep the real comparison, replacing only visibility.
+        # Dedicated semantic tests exercise stale pre/post-provider rejection.
+        def fixture_semantic_context(service, product_id):
+            return service._meli_product(product_id)._bpi_semantic_context()
+
+        freshness = patch.object(type(self.env["bpi.service"]), "_semantic_context_fresh", fixture_semantic_context)
+        freshness.start()
+        self.addCleanup(freshness.stop)
 
     def test_active_jobs_are_deduplicated_and_constraint_guarded(self):
         job = self.jobs.create_seo_job(self.product)
@@ -31,8 +43,10 @@ class TestBPIAIJob(TransactionCase):
         preview = {"seoTitle": "Suggested title", "seoKeywords": ["dental"]}
         with patch.object(type(self.env["bpi.service"]), "analyze_seo", return_value=preview) as provider:
             result = job._process_job()
-            self.assertEqual(result["state"], "done")
-            self.assertEqual(result["resultPayload"], {"seoData": preview})
+            self.assertEqual(result["state"], "done", job.error_message)
+            self.assertEqual(result["resultPayload"], {
+                "seoData": preview, "semanticRevision": job.semantic_request["revision"],
+            })
             job._process_job()
             provider.assert_called_once()
         self.assertIn("Manual commercial text", self.product.bpi_ai_generated_description)

@@ -280,6 +280,7 @@ export class ProductIntelligenceAction extends Component {
             strategyBusy: false,
             categoryBusy: false,
             taxonomyPicker: "", taxonomyNotice: "", taxonomyAnalyzing: false, classificationJob: null, taxonomyQuery: "", taxonomyFilters: [], taxonomyFacets: [],
+            taxonomyAiTermIds: [], taxonomyTermDetail: null, taxonomyDismissedPending: [],
             chatBusy: false,
             variantBusy: false,
             packBusy: false,
@@ -315,6 +316,7 @@ export class ProductIntelligenceAction extends Component {
         this.contentDescriptionEditorRef = useRef("contentDescriptionEditor");
         this.technicalDescriptionEditorRef = useRef("technicalDescriptionEditor");
         this.detailLeaveDialogRef = useRef("detailLeaveDialog");
+        this.taxonomyMapRef = useRef("taxonomyMap");
         this.lastContentDescriptionEditorHtml = "";
         this.lastTechnicalDescriptionEditorHtml = "";
         this.contentDescriptionSelection = null;
@@ -347,6 +349,7 @@ export class ProductIntelligenceAction extends Component {
             this.syncContentDescriptionEditor();
             this.syncTechnicalDescriptionEditor();
             this.syncDetailLeaveFocus();
+            this.syncTaxonomyFocus();
         });
 
         onWillUnmount(() => {
@@ -1012,7 +1015,7 @@ export class ProductIntelligenceAction extends Component {
         }
         const retained = {};
         const retainedTemplateContext = this.state.contentTemplateContext;
-        const keys = ["productForm", "contentForm", "seoForm", "categoryForm", "imageForm", "competitorForm", "variantDrafts", "packForm", "componentSearch", "selectedVariantId", "chatMessages", "chatSessionKey", "chatInput", "chatBusy", "variantBusy", "packBusy", "componentSearchBusy"];
+        const keys = ["productForm", "contentForm", "seoForm", "categoryForm", "imageForm", "competitorForm", "variantDrafts", "packForm", "componentSearch", "selectedVariantId", "chatMessages", "chatSessionKey", "chatInput", "chatBusy", "variantBusy", "packBusy", "componentSearchBusy", "taxonomyAiTermIds", "taxonomyTermDetail", "taxonomyDismissedPending"];
         for (const key of keys) retained[key] = this.state[key];
         this.applyDetailPayload(data);
         for (const key of keys) {
@@ -1050,7 +1053,12 @@ export class ProductIntelligenceAction extends Component {
         // Keep that selection's metadata together with its still-pending draft.
         if (data.contentTemplates && this.contentTemplateSelectionId() !== (data.contentTemplates.selectionId || false)) {
             this.state.contentTemplateContext = retainedTemplateContext;
-            if (!this.contentTemplateContextMatchesSelection()) void this.refreshContentTemplateContext();
+            // The pending editorial model stays selected, but its saved product
+            // context may have changed when another section was saved. Refresh
+            // that model's metadata before allowing another paid generation.
+            const semanticChanged = data.contentTemplates.semanticRevision !== undefined &&
+                retainedTemplateContext?.semanticRevision !== data.contentTemplates.semanticRevision;
+            if (!this.contentTemplateContextMatchesSelection() || semanticChanged) void this.refreshContentTemplateContext();
         }
     }
 
@@ -1125,6 +1133,18 @@ export class ProductIntelligenceAction extends Component {
                 this.state.seoJobId = false;
                 this.state.seoJobMessage = "";
                 if (job.state === "done") {
+                    // New semantic jobs must still match the saved, approved map.
+                    // Do not trust this tab's potentially stale detail payload.
+                    if (job.resultPayload?.semanticRevision) {
+                        const context = await this.rpc('/bader_product_intelligence/content_template_context', {
+                            product_tmpl_id: request.productId, template_id: this.contentTemplateSelectionId(),
+                        });
+                        if (!this.isRequestCurrent(request)) return;
+                        if (context?.semanticRevision !== job.resultPayload.semanticRevision) {
+                            this.notify('La clasificación guardada cambió. No se aplicó la propuesta SEO; tus borradores se conservan.', 'warning');
+                            return;
+                        }
+                    }
                     this.applySeoJobPayload(job, request);
                     this.notify("Propuesta SEO lista. Revisa los metadatos y pulsa Guardar para aplicarlos.", "info");
                 } else {
@@ -1467,6 +1487,8 @@ export class ProductIntelligenceAction extends Component {
         };
         this.state.classificationJob = data.classification?.job || null;
         this.state.taxonomyPicker = ""; this.state.taxonomyNotice = ""; this.state.taxonomyAnalyzing = false;
+        this.state.taxonomyAiTermIds = []; this.state.taxonomyTermDetail = null; this.state.taxonomyDismissedPending = [];
+        this.taxonomyFocusSelector = null;
         this.state.categoryForm = {
             classification: data.classification ? { revision: data.classification.revision, vocabularyRevision: data.classification.vocabularyRevision, termIds: [...data.classification.termIds], excludedTermIds: [...(data.classification.excludedTermIds || [])] } : undefined,
             manualMode: !!product.intelligentCategoryManual,
@@ -3182,6 +3204,7 @@ export class ProductIntelligenceAction extends Component {
             context?.effective?.revision || false, context?.internalCategory?.id || false,
             context?.source?.kind || '', context?.source?.categoryId || false,
             context?.specificationRevision || '',
+            context?.semanticRevision || '',
         ]);
     }
 
@@ -3442,7 +3465,7 @@ export class ProductIntelligenceAction extends Component {
             if (!this.isRequestCurrent(request)) return;
             if (selectionVersion !== (this.contentTemplateSelectionVersion || 0) ||
                 fingerprint !== this.contentTemplateFingerprint()) {
-                this.notify('El modelo cambió durante la generación. Se conservaron tus borradores; vuelve a generar cuando estés listo.', 'warning');
+                this.notify('El modelo cambió durante la generación, o cambió el contexto guardado. Se conservaron tus borradores; vuelve a generar cuando estés listo.', 'warning');
                 return;
             }
             if (template) {
@@ -3458,7 +3481,7 @@ export class ProductIntelligenceAction extends Component {
                 if (!fresh || selectionVersion !== (this.contentTemplateSelectionVersion || 0) ||
                     fingerprint !== this.contentTemplateFingerprint(fresh) ||
                     fingerprint !== this.contentTemplateFingerprint(result.contentTemplates)) {
-                    this.notify('No se aplicó la propuesta: el modelo cambió o no pudo verificarse. Tus borradores se conservan.', 'warning');
+                    this.notify('No se aplicó la propuesta: el modelo o el contexto guardado cambió o no pudo verificarse. Tus borradores se conservan.', 'warning');
                     return;
                 }
             }
@@ -3492,6 +3515,16 @@ export class ProductIntelligenceAction extends Component {
                 audience: this.state.contentForm.audience,
             });
             if (!this.isRequestCurrent(request)) return;
+            if (result.semanticRevision) {
+                const context = await this.rpc('/bader_product_intelligence/content_template_context', {
+                    product_tmpl_id: request.productId, template_id: this.contentTemplateSelectionId(),
+                });
+                if (!this.isRequestCurrent(request)) return;
+                if (context?.semanticRevision !== result.semanticRevision) {
+                    this.notify('La clasificación guardada cambió. No se aplicaron las FAQs; tus borradores se conservan.', 'warning');
+                    return;
+                }
+            }
             const faqs = (result.faqs || []).map((faq) => ({
                 question: faq.question || "",
                 answer: faq.answer || "",
@@ -3533,6 +3566,57 @@ export class ProductIntelligenceAction extends Component {
         ];
     }
 
+    get taxonomyProposal() { return this.state.classificationJob?.resultPayload?.classificationProposal || null; }
+    get taxonomyMapStatus() {
+        if (this.taxonomyDirty) return 'Cambios en borrador';
+        return this.state.detail?.classification?.reviewedAt ? 'Clasificación guardada' : 'Pendiente de revisar';
+    }
+    get taxonomySavedCount() { return this.state.detail?.classification?.termIds?.length || 0; }
+    get taxonomyAddedCount() {
+        const saved = new Set(this.state.detail?.classification?.termIds || []);
+        return (this.state.categoryForm.classification?.termIds || []).filter(id => !saved.has(id)).length;
+    }
+    get taxonomyRemovedCount() {
+        const selected = new Set(this.state.categoryForm.classification?.termIds || []);
+        return (this.state.detail?.classification?.termIds || []).filter(id => !selected.has(id)).length;
+    }
+    taxonomyTermOrigin(id) {
+        if ((this.state.detail?.classification?.termIds || []).includes(id)) return 'saved';
+        return (this.state.taxonomyAiTermIds || []).includes(id) ? 'ai' : 'draft';
+    }
+    taxonomyTermOriginLabel(id) {
+        return { saved: 'Guardada', ai: 'IA · borrador', draft: 'Borrador' }[this.taxonomyTermOrigin(id)];
+    }
+    taxonomyInspectTerm(term) { this.state.taxonomyTermDetail = this.state.taxonomyTermDetail === term.id ? null : term.id; }
+    taxonomyInspectedTerm(axis) { return this.taxonomySelected(axis).find(term => term.id === this.state.taxonomyTermDetail) || null; }
+    taxonomySynonymTerms(axis) { return this.taxonomySelected(axis).filter(term => term.aliases?.length); }
+    taxonomyBranchIntents(axis) {
+        const selected = new Set(this.taxonomySelected(axis).map(term => term.id));
+        return (this.taxonomyProposal?.intentPhrases || []).filter(row => row.axis === axis &&
+            typeof row.text === 'string' && row.text.trim() && Array.isArray(row.termIds) &&
+            row.termIds.length && row.termIds.every(id => selected.has(id)));
+    }
+    get taxonomyNicheEvaluations() {
+        const terms = this.state.detail?.classification?.terms || [];
+        const labels = { suggested: 'Sugerido', not_suggested: 'No sugerido', insufficient_evidence: 'Falta evidencia' };
+        return (this.taxonomyProposal?.nicheEvaluations || []).flatMap(row => {
+            const term = terms.find(item => item.id === row.termId && item.axis === 'niche' && !item.universal);
+            return term && labels[row.decision] ? [{ ...row, name: term.name, label: labels[row.decision] }] : [];
+        });
+    }
+    get taxonomySavedNiches() {
+        return (this.state.detail?.semanticContext?.axes?.niche || []).map(term => term.name).join(' · ');
+    }
+    get taxonomySavedSemanticCount() {
+        return this.taxonomyAxes.reduce((count, axis) => count + (this.state.detail?.semanticContext?.axes?.[axis.id]?.length || 0), 0);
+    }
+    syncTaxonomyFocus() {
+        if (!this.taxonomyFocusSelector) return;
+        const element = this.taxonomyMapRef?.el?.querySelector(this.taxonomyFocusSelector);
+        this.taxonomyFocusSelector = null;
+        if (element) element.focus();
+    }
+
     taxonomyNormalize(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase().replace(/\s+/g,' ').trim(); }
     taxonomyOptions(axis) {
         const query=this.taxonomyNormalize(this.state.taxonomyQuery);
@@ -3559,13 +3643,23 @@ export class ProductIntelligenceAction extends Component {
     }
     get taxonomyJobActive() { return !!this.state.taxonomyAnalyzing || ['pending','running'].includes(this.state.classificationJob?.state); }
     get taxonomyAnalysisLabel() { return this.state.taxonomyAnalyzing ? 'Analizando producto…' : this.taxonomyJobActive ? 'Consultar análisis' : 'Analizar producto'; }
-    onTaxonomyPickerKeydown(ev) { if (ev.key === 'Escape') this.state.taxonomyPicker = ''; }
-    taxonomyOpenPicker(axis) { this.state.taxonomyPicker=this.state.taxonomyPicker===axis ? '' : axis;this.state.taxonomyQuery=''; }
+    onTaxonomyPickerKeydown(ev) {
+        if (ev.key !== 'Escape') return;
+        ev.preventDefault(); ev.stopPropagation();
+        this.taxonomyFocusSelector = `[data-taxonomy-add="${this.state.taxonomyPicker}"]`;
+        this.state.taxonomyPicker = '';
+    }
+    taxonomyOpenPicker(axis) {
+        this.state.taxonomyPicker=this.state.taxonomyPicker===axis ? '' : axis;this.state.taxonomyQuery='';
+        this.taxonomyFocusSelector = this.state.taxonomyPicker ? `#bpi-tax-search-${axis}` : null;
+    }
     toggleTaxonomyTerm(id) {
         const form=this.state.categoryForm.classification;if(!form)return;
         const removing=form.termIds.includes(id), excluded=new Set(form.excludedTermIds || []);
         if(removing){form.termIds=form.termIds.filter(x=>x!==id);excluded.add(id);}
         else {form.termIds=[...form.termIds,id];excluded.delete(id);}
+        this.state.taxonomyAiTermIds = (this.state.taxonomyAiTermIds || []).filter(termId => termId !== id);
+        if (removing && this.state.taxonomyTermDetail === id) this.state.taxonomyTermDetail = null;
         if(excluded.size || form.excludedTermIds)form.excludedTermIds=[...excluded];
     }
     taxonomyAddTerm(id) { if(!this.state.categoryForm.classification.termIds.includes(id))this.toggleTaxonomyTerm(id);this.state.taxonomyQuery=''; }
@@ -3596,11 +3690,16 @@ export class ProductIntelligenceAction extends Component {
     }
     taxonomyPending(axis) {
         const approved=new Set((this.state.detail?.classification?.terms || []).map(t=>t.id));
-        return (this.state.classificationJob?.resultPayload?.classificationProposal?.newTerms || []).filter(t=>t.axis===axis && !approved.has(t.id));
+        return (this.taxonomyProposal?.newTerms || []).filter(t=>t.axis===axis && !approved.has(t.id) && !(this.state.taxonomyDismissedPending || []).includes(this.taxonomyPendingKey(t)));
     }
-    async taxonomyReviewTerm(term) {
+    taxonomyPendingKey(term) { return `${this.state.classificationJob?.id || ''}:${term.id}`; }
+    taxonomyDismissPending(term) {
+        this.state.taxonomyDismissedPending = [...new Set([...(this.state.taxonomyDismissedPending || []), this.taxonomyPendingKey(term)])];
+        this.state.taxonomyNotice = 'Sugerencia ocultada de este mapa. No se vinculó ni se eliminó del vocabulario; puedes revisarla en los detalles.';
+    }
+    async taxonomyReviewTerm(term, existing = false) {
         const request=this.beginRequest('taxonomyLibrary');
-        await this.action.doAction({type:'ir.actions.act_window',name:'Revisar nueva palabra',res_model:'bpi.taxonomy.term',res_id:term.id,views:[[false,'form']],target:'new'},
+        await this.action.doAction({type:'ir.actions.act_window',name:existing ? 'Editar término y sinónimos compartidos' : 'Revisar nueva palabra',res_model:'bpi.taxonomy.term',res_id:term.id,views:[[false,'form']],target:'new'},
             {onClose:()=>{if(this.isRequestCurrent(request))return this.refreshTaxonomyVocabulary();}});
     }
     async taxonomyCreateTerm(axis) {
@@ -3657,6 +3756,12 @@ export class ProductIntelligenceAction extends Component {
             if(draft.revision!==current.revision){this.notify('La clasificación guardada cambió. Recarga antes de aplicar.','warning');return;}
             const excluded=new Set(draft.excludedTermIds || []),allowed=new Set(current.terms.filter(t=>!t.universal).map(t=>t.id));
             const incoming=(legacy?current.legacyTermIds:proposal.termIds).filter(id=>allowed.has(id) && !excluded.has(id));
+            if (!legacy) {
+                // Only genuinely new AI additions get provenance. Manual choices
+                // and historical proposals are never retroactively labelled AI.
+                const additions = incoming.filter(id => !draft.termIds.includes(id));
+                this.state.taxonomyAiTermIds = [...new Set([...(this.state.taxonomyAiTermIds || []), ...additions])];
+            }
             this.state.detail.classification=current;
             this.state.categoryForm.classification={...draft,vocabularyRevision:current.vocabularyRevision,termIds:[...new Set([...draft.termIds,...incoming])]};
             this.state.taxonomyNotice='Etiquetas añadidas al borrador. Conservamos tus selecciones y exclusiones. Revisa y guarda cuando estés listo.';

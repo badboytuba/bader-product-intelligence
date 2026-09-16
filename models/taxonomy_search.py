@@ -87,7 +87,13 @@ class SearchProduct(models.Model):
                     units.append((phrase, vocabulary[phrase])); index = end; matched = True; break
             if not matched:
                 units.append((words[index], [])); index += 1
-        return units
+        # Connector words in natural multiword queries are not independent
+        # product requirements. Match canonical phrases first so their own
+        # connectors remain intact; never strip negation, SKU fragments, or
+        # turn an all-connector query into an unrestricted catalog listing.
+        connectors = {'de', 'del', 'la', 'el', 'los', 'las', 'para', 'en', 'con', 'y', 'un', 'una'}
+        meaningful = [(word, ids) for word, ids in units if ids or word not in connectors]
+        return meaningful if len(units) > 1 and meaningful else units
 
     @api.model
     def _bpi_query_domain(self, query, descriptions=False, identity_only=False):

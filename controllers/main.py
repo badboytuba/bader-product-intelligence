@@ -212,8 +212,11 @@ class BaderProductIntelligenceController(http.Controller):
     @http.route("/bader_product_intelligence/analyze_seo", type="json", auth="user")
     def analyze_seo(self, product_tmpl_id, target_audience="clinicas", **kwargs):
         product = self._product(product_tmpl_id)
-        seo_data = request.env["bpi.service"].analyze_seo(product, target_audience)
-        return {"success": True, "seoData": seo_data}
+        service = request.env["bpi.service"]
+        revision = product._bpi_semantic_context()["revision"]
+        seo_data = service.analyze_seo(product, target_audience)
+        service._semantic_context_assert_current(product, revision, fresh=True)
+        return {"success": True, "seoData": seo_data, "semanticRevision": revision}
 
     @http.route("/bader_product_intelligence/ai_job/start_seo", type="json", auth="user")
     def start_seo_job(self, product_tmpl_id, target_audience="clinicas", **kwargs):

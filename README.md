@@ -1,3 +1,12 @@
+## 2026-09-16 — Editable semantic map
+
+Release `16.0.1.12.0` connects the product to four independent multi-value axes
+in an editable mental map. Explicit Nancy proposals evaluate audiences separately;
+only reviewed saved assignments feed search and the shared content/SEO/FAQ context.
+Semantic labels are not technical evidence. Generation stays explicit, guarded by
+saved semantic revisions, and never republishes historical descriptions on upgrade.
+Read `docs/SEMANTIC_MAP.md`. QAS only; preserve exclusions, brand, ML and Git.
+
 ## 2026-09-16 — Premium tag editor
 
 Release `16.0.1.11.0` replaces long classification checklists with four editable

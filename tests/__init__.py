@@ -13,3 +13,5 @@ from . import test_technical_specification
 
 from . import test_product_documents
 from . import test_taxonomy
+from . import test_semantic_context
+from . import test_semantic_search

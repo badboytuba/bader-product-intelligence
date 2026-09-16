@@ -53,6 +53,8 @@ class BPIAIJob(models.Model):
     progress = fields.Integer(default=0)
     message = fields.Char(default="En cola")
     result_payload = fields.Json(default=dict)
+    # Empty on historical jobs: keep their existing processing/result contract.
+    semantic_request = fields.Json(default=dict, copy=False)
     error_message = fields.Text()
     started_at = fields.Datetime()
     finished_at = fields.Datetime()
@@ -80,6 +82,9 @@ class BPIAIJob(models.Model):
     @api.model
     def create_seo_job(self, product, target_audience="clinicas", user=False):
         product.ensure_one()
+        requester = user or self.env.user
+        service = self.env["bpi.service"].with_user(requester)
+        product = service._meli_product(product.id)
         target_audience = target_audience or "clinicas"
         if target_audience not in ("clinicas", "laboratorios", "estudiantes", "general"):
             raise UserError(_("Selecciona una audiencia válida."))
@@ -101,6 +106,11 @@ class BPIAIJob(models.Model):
                 "job_type": "seo",
                 "product_tmpl_id": product.id,
                 "requested_by_id": user.id if user else self.env.user.id,
+                "semantic_request": {
+                    "revision": product._bpi_semantic_context()["revision"],
+                    "companies": service.env.companies.ids,
+                    "language": service.env.context.get("lang") or requester.lang,
+                },
                 "target_audience": target_audience,
                 "state": "pending",
                 "progress": 0,
@@ -257,6 +267,22 @@ class BPIAIJob(models.Model):
 
     def _process_seo_job(self):
         self.ensure_one()
+        data = self.semantic_request or {}
+        if data:
+            if not self.requested_by_id or not self.requested_by_id.active:
+                raise UserError(_("El solicitante ya no está disponible."))
+            service = self.env["bpi.service"].with_user(self.requested_by_id).with_context(
+                allowed_company_ids=data.get("companies", []),
+                lang=data.get("language") or self.requested_by_id.lang,
+            )
+            product = service._meli_product(self.product_tmpl_id.id)
+            revision = data.get("revision")
+            # Reject changed assignments/linked aliases before spending and
+            # after generation, including concurrent committed transactions.
+            service._semantic_context_assert_current(product, revision, fresh=True)
+            seo_data = service.analyze_seo(product, self.target_audience or "clinicas")
+            service._semantic_context_assert_current(product, revision, fresh=True)
+            return {"seoData": seo_data, "semanticRevision": revision}
         product = self.product_tmpl_id.sudo().exists()
         if not product:
             raise ValueError("Producto no encontrado")
