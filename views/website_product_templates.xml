@@ -38,6 +38,17 @@
                          t-field="product.bpi_technical_description"/>
                 </section>
 
+                <t t-set="bpi_documents" t-value="product._bpi_public_document_panel(website)"/>
+                <section t-if="bpi_documents" class="bpi-product-documents bader-brand" aria-labelledby="bpi-documents-public-title" data-bpi-documents="public">
+                    <div class="bpi-product-documents__cover">
+                        <img t-if="bpi_documents['coverUrl']" t-att-src="bpi_documents['coverUrl']" t-att-alt="bpi_documents['title'] or 'Catálogos y documentación'" loading="lazy"/>
+                        <div t-else="" class="bpi-product-documents__icon" aria-hidden="true"><i class="fa fa-book"/></div>
+                    </div>
+                    <div class="bpi-product-documents__body"><span class="bpi-documents-eyebrow">EXPLORA CADA DETALLE</span><h2 id="bpi-documents-public-title" t-out="bpi_documents['title'] or 'Catálogos y documentación'"/><p t-if="bpi_documents['intro']" t-out="bpi_documents['intro']"/>
+                        <div class="bpi-product-documents__actions"><a t-foreach="bpi_documents['buttons']" t-as="bpi_document" t-att-href="bpi_document['fileUrl'] or bpi_document['url']" target="_blank" rel="noopener noreferrer" class="bpi-product-documents__button"><i t-att-class="'fa fa-file-pdf-o' if bpi_document['kind'] == 'file' else 'fa fa-book'" aria-hidden="true"/><span t-out="bpi_document['label']"/><i class="fa fa-external-link" aria-hidden="true"/><span class="sr-only"> (abre en una pestaña nueva)</span></a></div><small>Documentación adicional · Se abre en una pestaña nueva</small>
+                    </div>
+                </section>
+
                 <section t-if="product.bpi_public_faqs"
                          id="bpi-product-faq"
                          class="bpi-website-faq bader-brand"

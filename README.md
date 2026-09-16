@@ -1,3 +1,10 @@
+## 2026-09-15 — Optional product catalogs and documents
+
+Release `16.0.1.9.0` adds the privately stored catalog/PDF card before public
+FAQs. Read `docs/PRODUCT_DOCUMENTS.md`. Preserve optional/empty semantics,
+atomic content drafts, publication/company/website gates and private attachments.
+QAS only; no resources are populated automatically and ML/AI remain unchanged.
+
 ## 2026-09-15 — Instrumental approved copy and separated generation
 
 Release `16.0.1.8.1` adds `general_specs` (General short, saved specifications

@@ -2602,3 +2602,67 @@ QUnit.test('literal import receipt and split labels are local, escaped and prese
         assert.deepEqual(calls, ['/bader_product_intelligence/data']);
     } finally { app.destroy(); target.remove(); }
 });
+
+QUnit.module('Bader product documents');
+QUnit.test('document drafts are explicit, included in contextual save and survive a save in flight', (assert) => {
+    const action = contentTemplateAction();
+    action.state.contentForm.documents = action.emptyDocumentPanel();
+    action.updateDocumentPanel('title', 'Catálogo'); action.updateDocumentButton(0, 'label', 'Abrir');
+    action.updateDocumentButton(0, 'url', 'https://example.com/catalog.pdf');
+    const submitted = action.snapshotDraft(action.state.contentForm.documents);
+    const saved = { ...action.snapshotDraft(submitted), revision: 1 };
+    action.updateDocumentPanel('title', 'Nueva edición');
+    const merged = action.mergeSavedDraft(action.state.contentForm.documents, submitted, saved);
+    assert.strictEqual(merged.title, 'Nueva edición'); assert.strictEqual(merged.revision, 1);
+    assert.strictEqual(action.contentSaveValues().documents.buttons[0].url, 'https://example.com/catalog.pdf');
+    assert.ok(action.detailHasUnsavedChanges());
+    action.clearDocumentButton(0); assert.strictEqual(action.documentPanel().buttons[0].url, '');
+});
+QUnit.test('acknowledged uploads are removed from draft buffers but newer uploads remain pending', (assert) => {
+    const action = contentTemplateAction(), submitted = action.emptyDocumentPanel();
+    submitted.cover = 'OLD_COVER'; submitted.buttons[0] = {label:'PDF',kind:'file',upload:'OLD_PDF',filename:'a.pdf'};
+    const current=action.snapshotDraft(submitted),saved=action.emptyDocumentPanel();
+    saved.revision=2; saved.coverUrl='/cover?v=2'; saved.buttons[0]={label:'PDF',kind:'file',filename:'a.pdf',hasFile:true,fileUrl:'/1?v=2'};
+    current.title='Edited during save';current.buttons[0].label='New label';
+    let merged=action.mergeSavedDraft(current,submitted,saved);
+    assert.notOk('cover' in merged);assert.notOk('upload' in merged.buttons[0]);
+    assert.strictEqual(merged.buttons[0].label,'New label');assert.strictEqual(merged.buttons[0].fileUrl,'/1?v=2');
+    current.cover='NEW_COVER';current.buttons[0].upload='NEW_PDF';
+    merged=action.mergeSavedDraft(current,submitted,saved);
+    assert.strictEqual(merged.cover,'NEW_COVER');assert.strictEqual(merged.buttons[0].upload,'NEW_PDF');
+});
+QUnit.test('actual document editor is local, accessible, and persists drafts across sections', async (assert) => {
+    const target=document.createElement('div');document.body.appendChild(target);
+    const helper=contentTemplateAction(),detail={...stabilizationPayload(),documents:helper.emptyDocumentPanel()},calls=[];
+    const app=new App(ProductIntelligenceAction,{templates,test:true,props:{action:{params:{product_tmpl_id:1},context:{}}},
+        env:{services:{user:{context:{}},notification:{add(){}},action:{doAction(){}},rpc:async route=>{calls.push(route);if(route.endsWith('/data'))return detail;throw new Error('Unexpected write');}}}});
+    try {
+        const action=await app.mount(target);await action.selectDetailSection('content');await workspacePatched();
+        assert.ok(target.querySelector('#bpi-documents-title'));assert.strictEqual(target.querySelectorAll('.bpi-document-row').length,3);
+        const input=target.querySelector('#bpi-doc-label-0');input.value='Catálogo';input.dispatchEvent(new Event('input',{bubbles:true}));
+        assert.strictEqual(action.documentPanel().buttons[0].label,'Catálogo');
+        await action.selectDetailSection('datos');await workspacePatched();await action.selectDetailSection('content');await workspacePatched();
+        assert.strictEqual(target.querySelector('#bpi-doc-label-0').value,'Catálogo');
+        assert.deepEqual(calls,['/bader_product_intelligence/data']);
+    }finally{app.destroy();target.remove();}
+});
+
+QUnit.test('late file reads never attach to another product or overwrite a changed slot', async (assert) => {
+    const action=contentTemplateAction();action.state.contentForm.documents=action.emptyDocumentPanel();
+    action.updateDocumentButton(0,'kind','file');
+    const Native=window.FileReader;let reader;
+    window.FileReader=class { constructor(){reader=this;} readAsDataURL(){this.result='data:application/pdf;base64,UEZERg==';} };
+    try {
+        let pending=action.selectDocumentFile({target:{files:[{name:'a.pdf',size:4,type:'application/pdf'}],value:'a'}},0);
+        action.updateDocumentButton(0,'label','Edited during read');reader.onload();await pending;
+        assert.strictEqual(action.documentPanel().buttons[0].upload,'UEZERg==');
+        action.clearDocumentButton(0);action.updateDocumentButton(0,'kind','file');
+        pending=action.selectDocumentFile({target:{files:[{name:'b.pdf',size:4,type:'application/pdf'}],value:'b'}},0);
+        action.clearDocumentButton(0);reader.onload();await pending;
+        assert.notOk(action.documentPanel().buttons[0].hasFile);
+        action.updateDocumentButton(0,'kind','file');
+        pending=action.selectDocumentFile({target:{files:[{name:'c.pdf',size:4,type:'application/pdf'}],value:'c'}},0);
+        action.state.productId=2;reader.onload();await pending;
+        assert.notOk(action.documentPanel().buttons[0].hasFile);
+    }finally{window.FileReader=Native;}
+});

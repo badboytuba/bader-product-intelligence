@@ -10,3 +10,5 @@ from . import test_ai_provider_contract
 from . import test_competitor_metadata
 from . import test_content_templates
 from . import test_technical_specification
+
+from . import test_product_documents

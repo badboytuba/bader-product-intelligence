@@ -8,3 +8,4 @@ access_bpi_product_chat_message_manager,bpi.product.chat.message manager,model_b
 access_bpi_ai_job_manager,bpi.ai.job manager,model_bpi_ai_job,base.group_system,1,1,1,1
 access_bpi_content_template_manager,bpi.content.template manager,model_bpi_content_template,base.group_system,1,1,1,1
 access_bpi_product_specification_admin,bpi.product.specification admin,model_bpi_product_specification,base.group_system,1,1,1,1
+access_bpi_product_document_panel_admin,bpi.product.document.panel admin,model_bpi_product_document_panel,base.group_system,1,1,1,1

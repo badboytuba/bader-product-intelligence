@@ -747,7 +747,7 @@ export class ProductIntelligenceAction extends Component {
         return this.snapshotDraft({
             datos: pick(this.state.productForm, ['name', 'sku', 'slug', 'brand', 'categoryId', 'priceUsd', 'previousPriceUsd', 'costUsd', 'featured', 'isPublished', 'technicalSpecifications']),
             categorization: pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory']),
-            content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs', 'templateId']),
+            content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs', 'templateId', 'documents']),
             seo: pick(this.state.seoForm, ['seoTitle', 'seoDescription', 'seoKeywords', 'geoTitle', 'geoDescription', 'geoKeywords', 'geoFeatures', 'seoScore', 'geoScore', 'competitivenessScore']),
             variants_pack: {
                 variants: (this.state.variantDrafts || []).map((v) => pick(v, ['id', 'sku', 'barcode', 'costUsdInput', 'active', 'imageReferenceToken', 'imageUploadDataUrl'])),
@@ -973,6 +973,19 @@ export class ProductIntelligenceAction extends Component {
                 if (!before || !after) return row;
                 return { ...row, revision: after.revision, values: this.mergeSavedDraft(row.values, before.values, after.values) };
             });
+        }
+        if (current && submitted && saved && Number.isInteger(saved.revision) &&
+            Array.isArray(saved.buttons) && saved.buttons.length === 3 && Array.isArray(current.buttons)) {
+            const panel = { ...saved };
+            for (const key of ['title', 'intro']) panel[key] = this.mergeSavedDraft(current[key], submitted[key], saved[key]);
+            if (current.cover !== submitted.cover) panel.cover = current.cover;
+            panel.buttons = saved.buttons.map((row, index) => {
+                const now = current.buttons[index], before = submitted.buttons[index];
+                const result = this.mergeSavedDraft(now, before, row);
+                if (now?.upload === before?.upload && result && 'upload' in result) delete result.upload;
+                return result;
+            });
+            return panel;
         }
         if (JSON.stringify(current) === JSON.stringify(submitted)) {
             return saved;
@@ -1419,6 +1432,7 @@ export class ProductIntelligenceAction extends Component {
             isPublished: !!product.isPublished,
         };
         this.state.contentForm = {
+            documents: data.documents ? this.snapshotDraft(data.documents) : undefined,
             templateId: data.contentTemplates?.selectionId || false,
             tone: seoData.aiTone || "profesional",
             audience: seoData.aiTargetAudience || "clinicas",
@@ -3215,8 +3229,71 @@ export class ProductIntelligenceAction extends Component {
         }
     }
 
+    emptyDocumentPanel() {
+        return { revision: 0, title: '', intro: '', coverUrl: '', buttons: Array.from({ length: 3 }, () => ({
+            label: '', kind: 'url', url: '', filename: '', size: 0, hasFile: false, fileUrl: '',
+        })) };
+    }
+
+    documentPanel() {
+        return this.state.contentForm.documents || this.emptyDocumentPanel();
+    }
+
+    updateDocumentPanel(key, value) {
+        if (!this.state.contentForm.documents) this.state.contentForm.documents = this.emptyDocumentPanel();
+        this.state.contentForm.documents[key] = value;
+    }
+
+    updateDocumentButton(index, key, value) {
+        if (!this.state.contentForm.documents) this.state.contentForm.documents = this.emptyDocumentPanel();
+        const row = this.state.contentForm.documents.buttons[index];
+        row[key] = value;
+        if (key === 'kind') { row.upload = false; row.filename = ''; row.size = 0; row.hasFile = false; row.fileUrl = ''; row.url = ''; }
+    }
+
+    clearDocumentButton(index) {
+        if (!this.state.contentForm.documents) this.state.contentForm.documents = this.emptyDocumentPanel();
+        this.state.contentForm.documents.buttons[index] = { ...this.emptyDocumentPanel().buttons[index], upload: false };
+    }
+
+    documentCoverPreview() {
+        const panel = this.documentPanel();
+        return panel.cover ? 'data:image/' + (panel.cover.startsWith('/9j') ? 'jpeg' : (panel.cover.startsWith('UklGR') ? 'webp' : 'png')) + ';base64,' + panel.cover : (panel.cover === false ? '' : panel.coverUrl);
+    }
+
+    async selectDocumentFile(ev, slot) {
+        const file = ev.target.files?.[0]; ev.target.value = '';
+        if (!file) return;
+        const cover = slot === 'cover';
+        if (!file.size || file.size > (cover ? 2 : 10) * 1024 * 1024 ||
+            (cover ? !['image/jpeg','image/png','image/webp'].includes(file.type) : !/\.pdf$/i.test(file.name))) {
+            this.notify(cover ? 'Usa una portada JPG, PNG o WebP de hasta 2 MB.' : 'Usa un PDF de hasta 10 MB.', 'warning'); return;
+        }
+        if (!this.state.contentForm.documents) this.state.contentForm.documents = this.emptyDocumentPanel();
+        const panel = this.state.contentForm.documents;
+        const row = cover ? panel : panel.buttons[slot];
+        const original = cover ? panel.cover : row.upload;
+        const request = this.beginRequest('documentFile:' + slot);
+        try {
+            const encoded = await new Promise((resolve, reject) => {
+                const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]);
+                reader.onerror = () => reject(new Error('file read failed')); reader.readAsDataURL(file);
+            });
+            if (!this.isRequestCurrent(request)) return;
+            if (this.state.contentForm.documents !== panel) {
+                this.notify('La ficha cambió mientras se leía el archivo. Selecciónalo otra vez para conservarlo.', 'warning'); return;
+            }
+            if (cover ? panel.cover !== original : (panel.buttons[slot] !== row || row.kind !== 'file' || row.upload !== original)) return;
+            if (cover) panel.cover = encoded;
+            else Object.assign(row, { upload: encoded, filename: file.name, size: file.size, hasFile: true, fileUrl: '' });
+        } catch (error) {
+            if (this.isRequestCurrent(request)) this.notify('No se pudo leer el archivo. Tus borradores se conservan.', 'danger');
+        }
+    }
+
     contentSaveValues(form = this.state.contentForm) {
         return {
+            ...(form.documents ? { documents: this.snapshotDraft(form.documents) } : {}),
             name: form.name, description: form.description, technicalDescription: form.technicalDescription,
             tone: form.tone, audience: form.audience,
             ...(form.templateId !== undefined ? { templateId: Number(form.templateId) || false } : {}),

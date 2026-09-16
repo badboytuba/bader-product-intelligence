@@ -1,0 +1,31 @@
+.bpi-document-editor, .bpi-product-documents {
+    box-sizing: border-box;
+    font-family: var(--bader-font-body, sans-serif);
+    .bpi-documents-eyebrow { display: block; color: #286b70; font-size: .7rem; font-weight: 700; letter-spacing: .12em; margin-bottom: .6rem; }
+}
+.bpi-document-editor {
+    .bpi-document-status { padding: .4rem .7rem; border-radius: 20px; background: #eef8ea; color: #255a34; font-size: .75rem; }
+    &__layout { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 28px; margin-top: 24px; }
+    &__fields { min-width: 0; > label { display: block; font-weight: 600; margin: 12px 0 7px; } }
+    &__footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #d5e5e1; margin-top: 24px; padding-top: 18px; color: #42656b; }
+    .bpi-document-cover-editor { min-width: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; img { width: 100%; height: 240px; object-fit: contain; background: #f3f7f6; border-radius: 16px; padding: 15px; } }
+    .bpi-document-cover-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 220px; width: 100%; border: 1px dashed #aecbc5; border-radius: 16px; background: #f3f7f6; text-align: center; padding: 16px; i { font-size: 42px; color: #007a83; } span { font-size: .75rem; } }
+    .bpi-document-upload { position: relative; cursor: pointer; input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; } &:focus-within { outline: 3px solid #007a83; outline-offset: 3px; } }
+    .bpi-document-row { margin-top: 18px; padding: 16px; border: 1px solid #d5e5e1; border-radius: 14px; background: #fbfdfc; label:not(.bpi-button) { display: block; margin: 8px 0 6px; font-size: .8rem; font-weight: 600; } small { display: block; margin-top: 8px; color: #42656b; } }
+    .bpi-document-row__heading { display: flex; justify-content: space-between; align-items: center; }
+    .bpi-document-row__inputs { display: grid; grid-template-columns: minmax(0, 1fr) 170px; gap: 14px; }
+    .bpi-document-file-name { overflow-wrap: anywhere; margin: 8px 0; }
+    @media (max-width: 767px) { &__layout { grid-template-columns: 1fr; } &__footer { flex-direction: column; align-items: stretch; } .bpi-document-cover-editor { max-width: 260px; margin: auto; } .bpi-document-row__inputs { grid-template-columns: 1fr; gap: 0; } }
+}
+.bpi-product-documents {
+    display: grid; grid-template-columns: minmax(180px, 28%) minmax(0, 1fr); gap: clamp(24px, 4vw, 60px); align-items: center;
+    margin: 40px 0; padding: clamp(24px, 4vw, 52px); border: 1px solid #d6e5df; border-radius: 24px;
+    background: linear-gradient(125deg, #eff6f3, #f7faf9 65%, #edf8e7); color: #003841;
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    &__cover { min-width: 0; text-align: center; img { max-width: 100%; width: auto; height: 260px; object-fit: contain; filter: drop-shadow(0 12px 18px rgba(0,56,65,.12)); } }
+    &__icon { display: grid; place-items: center; margin: auto; width: 140px; height: 160px; background: #003841; border-radius: 18px 36px 36px 18px; box-shadow: 12px 10px 0 #d7e7de; color: #6cd140; font-size: 60px; }
+    &__body { min-width: 0; h2 { font-family: inherit; font-size: clamp(1.6rem, 3vw, 2.6rem); font-weight: 600; line-height: 1.16; margin: 0 0 18px; color: #003841; overflow-wrap: anywhere; } p { line-height: 1.7; max-width: 750px; white-space: pre-line; overflow-wrap: anywhere; } > small { display: block; color: #43636a; margin-top: 20px; } }
+    &__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+    &__button { display: inline-flex; align-items: center; gap: 12px; padding: 14px 20px; background: #6cd140; color: #003841 !important; text-decoration: none !important; border-radius: 9px; font-weight: 600; max-width: 100%; span { overflow-wrap: anywhere; } &:hover { background: #80dc55; box-shadow: 0 5px 12px rgba(0,56,65,.1); } &:focus-visible { outline: 3px solid #007a83; outline-offset: 4px; } }
+    @media (max-width: 767px) { grid-template-columns: 1fr; &__cover img { height: 190px; } &__actions { flex-direction: column; } &__button { justify-content: center; } }
+}

@@ -1,0 +1,1 @@
+<odoo><record id="bpi_document_company_rule" model="ir.rule"><field name="name">Documentos: empresas permitidas</field><field name="model_id" ref="model_bpi_product_document_panel"/><field name="domain_force">['|',('company_id','=',False),('company_id','in',company_ids)]</field></record></odoo>

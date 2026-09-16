@@ -856,6 +856,30 @@
                                     </button>
                                 </div>
 
+                                <section class="bpi-panel bpi-document-editor" aria-labelledby="bpi-documents-heading">
+                                    <div class="bpi-panel__title"><div><span class="bpi-documents-eyebrow">RECURSOS DEL PRODUCTO</span><h3 id="bpi-documents-heading">Catálogos y documentos</h3></div><span class="bpi-document-status">Opcional · Antes de las FAQs</span></div>
+                                    <p class="bpi-muted">Comparte catálogos, fichas o manuales. Solo aparece en la tienda si guardas al menos un botón completo. Los enlaces y PDF se abren en una pestaña nueva.</p>
+                                    <div class="bpi-document-editor__layout">
+                                        <div class="bpi-document-cover-editor">
+                                            <img t-if="documentCoverPreview()" t-att-src="documentCoverPreview()" alt="Vista previa de la portada"/>
+                                            <div t-else="" class="bpi-document-cover-placeholder"><i class="fa fa-book"/><strong>Portada del catálogo</strong><span>Opcional · JPG, PNG o WebP</span></div>
+                                            <label class="bpi-button bpi-button--secondary bpi-document-upload"><i class="fa fa-picture-o"/> Elegir portada<input type="file" accept="image/png,image/jpeg,image/webp" t-on-change="(ev) =&gt; this.selectDocumentFile(ev, 'cover')" aria-label="Subir portada del catálogo"/></label>
+                                            <button t-if="documentCoverPreview()" type="button" class="bpi-button bpi-button--ghost" t-on-click="() =&gt; this.updateDocumentPanel('cover', false)">Quitar portada</button><small>Hasta 2 MB. Sin portada se muestra un icono.</small>
+                                        </div>
+                                        <div class="bpi-document-editor__fields">
+                                            <label for="bpi-documents-title">Título del bloque</label><input id="bpi-documents-title" class="bpi-input" maxlength="120" placeholder="Catálogos y documentación" t-att-value="documentPanel().title" t-on-input="(ev) =&gt; this.updateDocumentPanel('title', ev.target.value)"/>
+                                            <label for="bpi-documents-intro">Texto de presentación</label><textarea id="bpi-documents-intro" class="bpi-textarea" rows="3" maxlength="600" placeholder="Consulta la documentación para conocer todos los detalles del producto." t-att-value="documentPanel().intro" t-on-input="(ev) =&gt; this.updateDocumentPanel('intro', ev.target.value)"/>
+                                            <div t-foreach="documentPanel().buttons" t-as="document" t-key="document_index" class="bpi-document-row">
+                                                <div class="bpi-document-row__heading"><strong>Botón <t t-esc="document_index + 1"/></strong><button type="button" class="bpi-button bpi-button--ghost" t-on-click="() =&gt; this.clearDocumentButton(document_index)" t-att-aria-label="'Vaciar botón ' + (document_index + 1)"><i class="fa fa-trash-o"/> Quitar</button></div>
+                                                <div class="bpi-document-row__inputs"><div><label t-att-for="'bpi-doc-label-' + document_index">Texto del botón</label><input t-att-id="'bpi-doc-label-' + document_index" class="bpi-input" maxlength="70" placeholder="Ver catálogo" t-att-value="document.label" t-on-input="(ev) =&gt; this.updateDocumentButton(document_index, 'label', ev.target.value)"/></div><div><label t-att-for="'bpi-doc-kind-' + document_index">Origen</label><select t-att-id="'bpi-doc-kind-' + document_index" class="bpi-input" t-on-change="(ev) =&gt; this.updateDocumentButton(document_index, 'kind', ev.target.value)"><option value="url" t-att-selected="document.kind === 'url'">Enlace HTTPS</option><option value="file" t-att-selected="document.kind === 'file'">Subir PDF</option></select></div></div>
+                                                <t t-if="document.kind === 'url'"><label t-att-for="'bpi-doc-url-' + document_index">Enlace del documento</label><input t-att-id="'bpi-doc-url-' + document_index" class="bpi-input" type="url" maxlength="2048" placeholder="https://…" t-att-value="document.url" t-on-input="(ev) =&gt; this.updateDocumentButton(document_index, 'url', ev.target.value)"/></t>
+                                                <t t-else=""><label class="bpi-button bpi-button--secondary bpi-document-upload"><i class="fa fa-file-pdf-o"/> Seleccionar PDF<input type="file" accept="application/pdf,.pdf" t-on-change="(ev) =&gt; this.selectDocumentFile(ev, document_index)" t-att-aria-label="'Subir PDF del botón ' + (document_index + 1)"/></label><p class="bpi-document-file-name" t-esc="document.filename || 'Sin archivo seleccionado'"/><a t-if="document.fileUrl" t-att-href="document.fileUrl" target="_blank" rel="noopener noreferrer">Abrir PDF guardado <i class="fa fa-external-link"/></a><small t-elif="document.hasFile">Archivo seleccionado. Guarda la sección para abrirlo.</small><small>PDF estático de hasta 10 MB; máximo 20 MB en total.</small></t>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bpi-document-editor__footer"><span><i class="fa fa-lock"/> Los cambios se conservan como borrador hasta guardar.</span><button type="button" class="bpi-button bpi-button--primary" t-on-click="saveContentOnly" t-att-disabled="state.saveBusy || state.contentBusy"><i class="fa fa-save"/> Guardar sección</button></div>
+                                </section>
+
                                 <div class="bpi-panel">
                                     <div class="bpi-panel__title">
                                         <h3><i class="fa fa-question-circle-o"/> Preguntas Frecuentes (FAQ)</h3>
