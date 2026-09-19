@@ -45,6 +45,12 @@ class DescriptionMediaController(http.Controller):
         record = model._start(product, filename, size, kind)
         return dict(record._payload(), csrfToken=request.csrf_token(), chunkSize=CHUNK_SIZE)
 
+    @http.route('/bader_product_intelligence/description_media/video_poster', type='json', auth='user', methods=['POST'])
+    def video_poster(self, product_tmpl_id, url, **kwargs):
+        model = self._model()
+        product = model.env['bpi.service']._meli_product(product_tmpl_id)
+        return {'media': model._youtube_poster(product, url)}
+
     @http.route('/bader_product_intelligence/description_media/list', type='json', auth='user', methods=['POST'])
     def list_media(self, product_tmpl_id, **kwargs):
         model = self._model()

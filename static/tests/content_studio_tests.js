@@ -273,3 +273,31 @@ QUnit.test("shared strategy refresh updates clean brief but flags concurrent ope
     a.studioDiscardLocal();
     assert.strictEqual(a.state.contentStudio.brief.intent, "Otra edición guardada"); assert.notOk(a.state.contentStudio.briefConflict);
 });
+
+QUnit.test("video sizing keeps saved text and layout independent", assert => {
+    const a = action(), text = a.state.contentForm.technicalDescription;
+    a.addDescriptionBlock("video");
+    const v = a.descriptionLayout().blocks.at(-1);
+    assert.strictEqual(v.videoWidth, 100); assert.strictEqual(v.videoRatio, "auto");
+    a.updateDescriptionBlock(v.id, "videoWidth", 50); a.updateDescriptionBlock(v.id, "videoRatio", "9:16");
+    assert.ok(a.descriptionVideoStyle(v).includes("width:50%")); assert.ok(a.descriptionVideoStyle(v).includes("ratio:9/16"));
+    assert.strictEqual(a.state.contentForm.technicalDescription, text);
+    v.videoRatio = "auto"; v.mediaId = 17; a.state.descriptionMedia = [{id:17,width:1080,height:1920}];
+    assert.ok(a.descriptionVideoStyle(v).includes("1080/1920"));
+});
+
+QUnit.test("a late video cover never replaces a changed URL or chosen cover", async assert => {
+    const a = action(), pending = later(); a.addDescriptionBlock("video");
+    const v = a.descriptionLayout().blocks.at(-1); v.url = "https://youtu.be/abcdefghijk";
+    a.rpc = () => pending.promise;
+    const work = a.fetchDescriptionPoster(v.id); v.url = "https://youtu.be/12345678901"; v.posterMediaId = 81;
+    pending.resolve({media:{id:99,kind:"image",state:"ready"}}); await work;
+    assert.strictEqual(v.posterMediaId,81); assert.notOk(a.state.descriptionMediaBusy);
+});
+
+QUnit.test("explicit video poster fetch applies only private draft reference", async assert => {
+    const a = action(); a.addDescriptionBlock("video");
+    const v = a.descriptionLayout().blocks.at(-1); v.url = "https://youtu.be/abcdefghijk";
+    a.rpc = async (url,params) => { assert.ok(url.endsWith("/video_poster")); assert.strictEqual(params.product_tmpl_id,1); return {media:{id:82,kind:"image",state:"ready"}}; };
+    await a.fetchDescriptionPoster(v.id); assert.strictEqual(v.posterMediaId,82); assert.strictEqual(a.state.descriptionMedia.length,1);
+});

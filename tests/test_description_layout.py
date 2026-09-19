@@ -247,3 +247,58 @@ class TestDescriptionLayout(TransactionCase):
         other = self.env['product.template'].create({'name': 'Other company', 'company_id': company.id})
         with self.assertRaises(MissingError):
             self.media.with_context(allowed_company_ids=[self.env.company.id])._start(other, 'a.png', 10, 'image')
+
+    def test_video_size_and_aspect_are_bounded_and_legacy_defaults_safe(self):
+        node = {'id': 'v', 'type': 'video', 'url': 'https://youtu.be/abcdefghijk'}
+        result = validate_layout(self.layout([node]))['blocks'][1]
+        self.assertEqual((result['videoWidth'], result['videoRatio']), (100, 'auto'))
+        for width in (0, 24, 101, '50', True, 50.5):
+            with self.assertRaises(ValidationError):
+                validate_layout(self.layout([dict(node, videoWidth=width)]))
+        for ratio in ('2; color:red', '16/9', {}, None):
+            with self.assertRaises(ValidationError):
+                validate_layout(self.layout([dict(node, videoRatio=ratio)]))
+        for ratio in ('auto', '16:9', '9:16', '1:1', '4:3'):
+            self.assertEqual(validate_layout(self.layout([dict(node, videoWidth=55, videoRatio=ratio)]))['blocks'][1]['videoWidth'], 55)
+
+    def test_video_poster_is_owned_image_and_prevents_unlink(self):
+        poster = self.image()
+        node = {'id': 'v', 'type': 'video', 'url': 'https://youtu.be/abcdefghijk', 'posterMediaId': poster.id}
+        layout = self.layout([node])
+        self.assertEqual(layout_media_ids(layout), {poster.id})
+        with self.assertRaises(MissingError):
+            self.service.save_content(self.other, {'descriptionLayout': layout})
+        self.service.save_content(self.product, {'descriptionLayout': layout})
+        with self.assertRaises(UserError):
+            poster.unlink()
+        self.service.save_content(self.product, {'descriptionLayout': self.layout()})
+        poster.unlink()
+
+    def test_poster_download_is_explicit_and_leaves_product_unchanged(self):
+        raw = io.BytesIO(); Image.new('RGB', (480, 360), 'blue').save(raw, 'JPEG')
+        before = self.product.bpi_editorial_revision
+        with patch('odoo.addons.bader_product_intelligence.models.studio_fetch.fetch_public_image', return_value=raw.getvalue()) as fetch:
+            payload = self.media._youtube_poster(self.product, 'https://youtu.be/abcdefghijk?si=discard')
+        fetch.assert_called_once_with('https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg')
+        self.assertEqual(payload['kind'], 'image')
+        self.assertEqual(payload['state'], 'ready')
+        self.assertEqual(self.product.bpi_editorial_revision, before)
+        self.assertFalse(self.product.bpi_description_layout)
+        with self.assertRaises(UserError):
+            self.media._youtube_poster(self.product, 'https://www.instagram.com/reel/abcdef/')
+
+    def test_video_projection_is_local_and_safe_for_public_render(self):
+        poster = self.image()
+        self.product.write({'is_published': True, 'website_id': self.website.id})
+        self.service.save_content(self.product, {'descriptionLayout': self.layout([
+            {'id':'v', 'type':'video', 'url':'https://youtu.be/abcdefghijk', 'posterMediaId':poster.id, 'videoWidth':55, 'videoRatio':'9:16'}])})
+        with patch('odoo.addons.bader_product_intelligence.models.studio_fetch.fetch_public_image', side_effect=AssertionError('No page fetch')):
+            node = self.product._bpi_public_description_layout(self.website)['blocks'][1]
+        self.assertEqual(node['videoStyle'], '--bpi-video-width:55%;--bpi-video-ratio:9/16')
+        self.assertIn('/%s/file?r=' % poster.id, node['posterSrc'])
+        self.assertNotIn('ytimg', node['posterSrc'])
+        html = self.env['ir.ui.view']._render_template('bader_product_intelligence.description_layout', {'product':self.product, 'bpi_layout':self.product._bpi_public_description_layout(self.website)})
+        html = str(html)
+        self.assertIn('bpi-layout__play-icon', html)
+        self.assertNotIn('<iframe', html)
+        self.assertNotIn('El vídeo se carga', html)

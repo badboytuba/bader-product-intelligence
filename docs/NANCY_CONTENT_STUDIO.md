@@ -96,3 +96,19 @@ an old database over concurrent operator changes without explicit review.
 1. A conversational source is not automatically product evidence or public media.
 2. One principal-copy reference prevents duplicated text and lost media.
 3. Paid work, draft application and final persistence are separate boundaries.
+
+## Video covers and sizing — 16.0.1.13.1
+
+A video block accepts `posterMediaId` (same-product ready image), `videoWidth`
+(integer25..100; default100) and `videoRatio` (auto,16:9,9:16,1:1,4:3).
+Auto uses saved MP4 dimensions; social ratios use a labeled provider convention
+(YouTube16:9/TikTok9:16), not a claim of measured remote dimensions. Override as
+needed. Mobile expands to available width; video itself is never stretched/cropped.
+YouTube posters use explicit private acquisition through pinned public HTTPS and
+existing image normalization/quota. Other providers/custom covers use image upload
+or the product library. Existing links need an explicit cover action once; no
+external calls happen on product/shop opens. Poster references participate in all
+public gates, retention and deletion checks. Apply/save remain explicit.
+Playback starts only on the visitor's play click. YouTube iframe sends origin-only
+cross-site Referer rather than suppressing identity, following
+[official embedded-player requirements](https://developers.google.com/youtube/terms/required-minimum-functionality).

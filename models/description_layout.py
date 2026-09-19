@@ -132,7 +132,7 @@ def validate_layout(value, media_lookup=None):
             raise ValidationError(_('Los bloques deben tener identificadores únicos; máximo 50 bloques.'))
         ids.add(key)
         accepted = {'main': set(), 'text': {'html'}, 'callout': {'html'},
-                    'image': {'mediaId', 'alt', 'caption'}, 'video': {'mediaId', 'url', 'caption'},
+                    'image': {'mediaId', 'alt', 'caption'}, 'video': {'mediaId', 'url', 'caption', 'posterMediaId', 'videoWidth', 'videoRatio'},
                     'columns': {'children'}, 'container': {'children'}, 'divider': set()}
         if not isinstance(kind, str) or kind not in accepted or set(block) - (common | accepted[kind]):
             raise ValidationError(_('Tipo o propiedades de bloque no permitidos.'))
@@ -145,6 +145,19 @@ def validate_layout(value, media_lookup=None):
             if current not in allowed:
                 raise ValidationError(_('Usa los estilos Bader disponibles.'))
             result[field] = current
+        if kind == 'video':
+            width = block.get('videoWidth', 100)
+            ratio = block.get('videoRatio', 'auto')
+            if type(width) is not int or not 25 <= width <= 100 or ratio not in ('auto', '16:9', '9:16', '1:1', '4:3'):
+                raise ValidationError(_('Usa un ancho de 25 a 100 % y una proporción disponible.'))
+            result.update(videoWidth=width, videoRatio=ratio)
+            poster = block.get('posterMediaId')
+            if poster:
+                if type(poster) is not int or poster <= 0:
+                    raise ValidationError(_('Portada no válida.'))
+                if media_lookup:
+                    media_lookup(poster, 'image')
+                result['posterMediaId'] = poster
         if kind == 'main':
             mains[0] += 1
         if kind in ('text', 'callout'):
@@ -186,6 +199,8 @@ def layout_media_ids(layout):
         for block in blocks:
             if block.get('mediaId'):
                 result.add(block['mediaId'])
+            if block.get('posterMediaId'):
+                result.add(block['posterMediaId'])
             visit(block.get('children', []))
     visit((layout or {}).get('blocks', []))
     return result
@@ -323,6 +338,19 @@ class ProductTemplate(models.Model):
                 block['src'] = '/bader_product_intelligence/description_media/%s/file?r=%s' % (block['mediaId'], self.bpi_editorial_revision or 1)
             if block.get('url'):
                 block.update(social_video(block['url']))
+            if block.get('posterMediaId'):
+                block['posterSrc'] = '/bader_product_intelligence/description_media/%s/file?r=%s' % (block['posterMediaId'], self.bpi_editorial_revision or 1)
+            if block.get('type') == 'video':
+                ratio = block.get('videoRatio', 'auto')
+                if ratio == 'auto':
+                    ratio = '9:16' if block.get('provider') == 'tiktok' else '16:9'
+                    if block.get('mediaId'):
+                        # Local metadata only; never probe or fetch on a public page.
+                        self.env.cr.execute('SELECT width,height FROM bpi_description_media WHERE id=%s AND product_id=%s AND state=%s', (block['mediaId'], self.id, 'ready'))
+                        row = self.env.cr.fetchone()
+                        if row and row[0] > 0 and row[1] > 0:
+                            ratio = '%s:%s' % row
+                block['videoStyle'] = '--bpi-video-width:%s%%;--bpi-video-ratio:%s' % (block.get('videoWidth', 100), ratio.replace(':', '/'))
             if 'children' in block:
                 block['children'] = [project(child) for child in block['children']]
             return block
@@ -656,6 +684,27 @@ class DescriptionMedia(models.Model):
         values.update(state='ready', checksum=digest.hexdigest())
         self._set_values(values)
         return self._payload()
+
+    @api.model
+    def _youtube_poster(self, product, url):
+        self._ensure_manager()
+        product = self.env['bpi.service']._meli_product(product.id)
+        info = social_video(url)
+        if info['provider'] != 'youtube':
+            raise UserError(_('Para esta red, sube una portada o elige una imagen de la biblioteca.'))
+        from .studio_fetch import fetch_public_image, PublicFetchError
+        video_id = parse_qs(urlsplit(info['url']).query)['v'][0]
+        try:
+            # Constructed CDN URL, not arbitrary user-provided image URLs. No API key.
+            raw = fetch_public_image('https://i.ytimg.com/vi/%s/hqdefault.jpg' % video_id)
+        except PublicFetchError:
+            raise UserError(_('No se pudo obtener la portada. Puedes subir una imagen o volver a intentarlo.'))
+        with self.env.cr.savepoint():
+            record = self._start(product, 'Portada YouTube %s.jpg' % video_id, len(raw), 'image')
+            for offset in range(0, len(raw), CHUNK_SIZE):
+                record._chunk(offset, io.BytesIO(raw[offset:offset + CHUNK_SIZE]))
+            record._complete()
+            return record._payload()
 
     def _payload(self):
         self.ensure_one()

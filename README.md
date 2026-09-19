@@ -1,3 +1,11 @@
+## 2026-09-19 — Video covers and responsive sizing
+
+Release `16.0.1.13.1` adds product-owned private video posters, bounded width and
+aspect controls, automatic saved MP4 dimensions, and click-to-play poster cards.
+YouTube covers are obtained only on explicit editor action; public rendering stays
+local. Preserve poster/media ownership, stale drafts, server-side layout validation
+and website/revision gates. Only QAS is authorized. Never rewrite descriptions.
+
 ## 2026-09-18 — Nancy AI Studio and visual long descriptions
 
 Release `16.0.1.13.0` adds explicit private shared content conversations/sources,

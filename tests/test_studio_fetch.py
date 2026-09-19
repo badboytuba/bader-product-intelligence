@@ -139,5 +139,18 @@ class TestStudioPinnedFetch(BaseCase):
         self.assertNotIn('Cookie', kwargs['headers'])
 
 
-if __name__ == '__main__':
-    unittest.main()
+
+    def test_poster_binary_transport_is_explicit_and_mime_restricted(self):
+        raw = b'\xff\xd8\xffbinary-image'
+        for content_type, succeeds in [('image/jpeg', True), ('text/html', False), ('image/svg+xml', False)]:
+            connection = MagicMock(); connection.getresponse.return_value = Response(body=raw, headers={'Content-Type': content_type})
+            with patch.object(fetch.socket, 'getaddrinfo', return_value=dns()), patch.object(fetch, '_PinnedConnection', return_value=connection):
+                if succeeds:
+                    self.assertEqual(fetch.fetch_public_image('https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg'), raw)
+                else:
+                    with self.assertRaises(fetch.PublicFetchError):
+                        fetch.fetch_public_image('https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg')
+        connection = MagicMock(); connection.getresponse.return_value = Response(body=raw, headers={'Content-Type':'image/jpeg'})
+        with patch.object(fetch.socket, 'getaddrinfo', return_value=dns()), patch.object(fetch, '_PinnedConnection', return_value=connection):
+            with self.assertRaises(fetch.PublicFetchError):
+                fetch.fetch_public_page('https://source.example/image.jpg')

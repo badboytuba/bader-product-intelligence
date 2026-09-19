@@ -8,17 +8,24 @@
                 <img t-att-src="node['src']" t-att-alt="node.get('alt', '')" loading="lazy" decoding="async"/>
                 <figcaption t-if="node.get('caption')" t-out="node['caption']"/>
             </figure>
-            <figure t-elif="node['type'] == 'video'">
-                <video t-if="node.get('mediaId')" controls="controls" preload="none" playsinline="playsinline" t-att-aria-label="node.get('caption') or 'Vídeo del producto'">
-                    <source t-att-src="node['src']" type="video/mp4"/>
-                    <a t-att-href="node['src']" target="_blank" rel="noopener noreferrer">Abrir vídeo</a>
-                </video>
-                <div t-else="" class="bpi-layout__social" t-att-data-bpi-video-url="node['url']" t-att-data-bpi-video-embed="node.get('embed', '')">
-                    <button t-if="node.get('embed')" type="button" class="bpi-layout__play"><span aria-hidden="true">▶</span> Reproducir vídeo</button>
-                    <p>El vídeo se carga desde la red social únicamente al reproducirlo.</p>
-                    <a t-att-href="node['url']" target="_blank" rel="noopener noreferrer">Abrir en la red social <span class="sr-only">(pestaña nueva)</span></a>
+            <figure t-elif="node['type'] == 'video'" class="bpi-layout__video-figure" t-att-style="node['videoStyle']">
+                <div class="bpi-layout__video-stage">
+                    <video t-if="node.get('mediaId')" controls="controls" preload="metadata" playsinline="playsinline" t-att-poster="node.get('posterSrc')" t-att-aria-label="node.get('caption') or 'Vídeo del producto'">
+                        <source t-att-src="node['src']" type="video/mp4"/>
+                    </video>
+                    <div t-else="" class="bpi-layout__social" t-att-data-bpi-video-url="node['url']" t-att-data-bpi-video-embed="node.get('embed', '')">
+                        <button t-if="node.get('embed')" type="button" class="bpi-layout__play" aria-label="Reproducir vídeo">
+                            <img t-if="node.get('posterSrc')" t-att-src="node['posterSrc']" alt="" loading="lazy" decoding="async"/>
+                            <span class="bpi-layout__play-icon" aria-hidden="true">▶</span>
+                            <span class="bpi-layout__play-label">Ver vídeo</span>
+                        </button>
+                        <a t-else="" t-att-href="node['url']" class="bpi-layout__play" target="_blank" rel="noopener noreferrer" aria-label="Ver vídeo en la red social (pestaña nueva)">
+                            <img t-if="node.get('posterSrc')" t-att-src="node['posterSrc']" alt="" loading="lazy"/>
+                            <span class="bpi-layout__play-icon" aria-hidden="true">▶</span><span class="bpi-layout__play-label">Ver en la red social</span>
+                        </a>
+                    </div>
                 </div>
-                <figcaption t-if="node.get('caption')" t-out="node['caption']"/>
+                <div class="bpi-layout__video-footer"><figcaption t-if="node.get('caption')" t-out="node['caption']"/><a t-att-href="node.get('url') or node['src']" target="_blank" rel="noopener noreferrer">Abrir vídeo <span aria-hidden="true">↗</span><span class="sr-only">(pestaña nueva)</span></a></div>
             </figure>
             <div t-elif="node['type'] in ('columns', 'container')" t-att-class="'bpi-layout__' + node['type']">
                 <t t-foreach="node['children']" t-as="child"><t t-call="bader_product_intelligence.description_layout_node"><t t-set="node" t-value="child"/></t></t>

@@ -361,6 +361,7 @@ export const contentStudioMethods = {
         const block = { id: uid(), type, preset: "white", align: "left", effect: "none", spacing: "normal" };
         if (["text", "callout"].includes(type)) block.html = "";
         if (["image", "video"].includes(type)) Object.assign(block, { mediaId: false, caption: "", ...(type === "image" ? { alt: "" } : { url: "" }) });
+        if (type === "video") Object.assign(block, { videoWidth: 100, videoRatio: "auto", posterMediaId: false });
         if (type === "columns") block.children = [this.newDescriptionBlock("image"), this.newDescriptionBlock("text")];
         if (type === "container") block.children = [this.newDescriptionBlock("text")];
         return block;
@@ -381,6 +382,28 @@ export const contentStudioMethods = {
     setDescriptionVideoUrl(id, value) {
         this.updateDescriptionBlock(id, "url", value);
         if (value) this.updateDescriptionBlock(id, "mediaId", false);
+        this.updateDescriptionBlock(id, "posterMediaId", false);
+        if (/youtube\.com|youtu\.be/.test(value)) this.fetchDescriptionPoster(id);
+    },
+    async fetchDescriptionPoster(id) {
+        const block = findDescriptionBlock(this.ensureDescriptionLayout().blocks, id)?.block;
+        if (!block?.url || this.state.descriptionMediaBusy) return;
+        const request = this.beginRequest("descriptionPoster"), url = block.url, previous = block.posterMediaId;
+        this.state.descriptionMediaBusy = true; this.state.descriptionMediaError = "";
+        try {
+            const result = await this.rpc(MEDIA + "video_poster", { product_tmpl_id: request.productId, url });
+            if (!this.isRequestCurrent(request)) return;
+            const current = findDescriptionBlock(this.ensureDescriptionLayout().blocks, id)?.block;
+            if (!current || current.url !== url || current.posterMediaId !== previous) return;
+            this.state.descriptionMedia.push(result.media); current.posterMediaId = result.media.id;
+        } catch (_) { if (this.isRequestCurrent(request)) this.state.descriptionMediaError = "No se pudo obtener la portada. Puedes subir una imagen o volver a intentarlo."; }
+        finally { if (this.isRequestCurrent(request)) this.state.descriptionMediaBusy = false; }
+    },
+    descriptionVideoStyle(block) {
+        const media = this.descriptionMediaById(block.mediaId);
+        let ratio = block.videoRatio || "auto";
+        if (ratio === "auto") ratio = media?.width && media?.height ? media.width + "/" + media.height : /tiktok\.com/.test(block.url || "") ? "9/16" : "16/9";
+        return "--bpi-video-width:" + (Number(block.videoWidth) || 100) + "%;--bpi-video-ratio:" + ratio.replace(":", "/");
     },
     updateDescriptionBlock(id, key, value) {
         const found = findDescriptionBlock(this.ensureDescriptionLayout().blocks, id);
@@ -441,17 +464,18 @@ export const contentStudioMethods = {
             if (this.isRequestCurrent(request)) this.state.descriptionMedia = result.media || [];
         } catch (_) { if (this.isRequestCurrent(request)) this.state.descriptionMediaError = "No se pudo cargar la biblioteca privada. Vuelve a intentarlo."; }
     },
-    async uploadDescriptionMedia(ev, blockId) {
+    async uploadDescriptionMedia(ev, blockId, asPoster = false) {
         const file = ev.target.files?.[0]; ev.target.value = "";
         if (!file || this.state.descriptionMediaBusy) return;
         const block = findDescriptionBlock(this.ensureDescriptionLayout().blocks, blockId)?.block;
         if (!block) return;
-        const kind = block.type === "video" ? "video" : "image";
+        const kind = asPoster ? "image" : block.type === "video" ? "video" : "image";
         if (!file.size || file.size > (kind === "video" ? 200 : 10) * 1024 * 1024 ||
             (kind === "video" ? !/\.mp4$/i.test(file.name) : !["image/jpeg", "image/png", "image/webp"].includes(file.type))) {
             this.state.descriptionMediaError = kind === "video" ? "Selecciona un MP4 H.264/AAC de hasta 200 MiB." : "Selecciona una imagen JPG, PNG o WebP de hasta 10 MiB."; return;
         }
-        const signature = [this.state.productId, file.name, file.size, file.lastModified].join(":");
+        const selectionBefore = JSON.stringify([block.url, block.mediaId, block.posterMediaId]);
+        const signature = [this.state.productId, file.name, file.size, file.lastModified, kind].join(":");
         const request = this.beginRequest("descriptionUpload");
         this.state.descriptionMediaBusy = true; this.state.descriptionMediaError = "";
         this.state.descriptionUpload = { filename: file.name, percent: 0 };
@@ -482,7 +506,7 @@ export const contentStudioMethods = {
             const media = data.media || data;
             const target = findDescriptionBlock(this.ensureDescriptionLayout().blocks, blockId)?.block;
             this.state.descriptionMedia = [...(this.state.descriptionMedia || []).filter(row => row.id !== media.id), media];
-            if (target) { target.mediaId = media.id; if (target.type === "video") target.url = ""; }
+            if (target && JSON.stringify([target.url, target.mediaId, target.posterMediaId]) === selectionBefore) { if (asPoster) target.posterMediaId = media.id; else { target.mediaId = media.id; if (target.type === "video") target.url = ""; } }
             this.descriptionUploadSession = null;
         } catch (error) {
             if (this.isRequestCurrent(request)) this.state.descriptionMediaError = this.studioError(error, "No se pudo completar el archivo. Comprueba formato y espacio disponible; selecciona el mismo archivo para continuar la carga, o usa un enlace de vídeo.");

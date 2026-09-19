@@ -121,6 +121,15 @@ class _PinnedConnection(http.client.HTTPConnection):
 
 
 def fetch_public_page(url):
+    return _fetch_public(url)
+
+
+def fetch_public_image(url):
+    """Private editor poster acquisition; same pinned transport and byte limits."""
+    return _fetch_public(url, image=True)['body']
+
+
+def _fetch_public(url, image=False):
     """GET at most six public resources, 2.5 MB identity body, 35 s total."""
     deadline = time.monotonic() + TOTAL_SECONDS
     current = url
@@ -137,7 +146,7 @@ def fetch_public_page(url):
         try:
             connection.request('GET', target, headers={
                 'Host': host_header, 'User-Agent': 'Bader-Nancy-SourceReader/1.0',
-                'Accept': 'text/html,application/xhtml+xml,text/plain',
+                'Accept': 'image/jpeg,image/png,image/webp' if image else 'text/html,application/xhtml+xml,text/plain',
                 'Accept-Language': 'es-AR,es;q=0.9', 'Accept-Encoding': 'identity',
                 'Connection': 'close',
             })
@@ -151,7 +160,7 @@ def fetch_public_page(url):
             if not 200 <= response.status < 300:
                 raise PublicFetchError('El sitio respondió HTTP %s. Puedes pegar la información pertinente como texto.' % response.status)
             content_type = (response.getheader('Content-Type') or '').lower().split(';', 1)[0].strip()
-            if content_type not in ('text/html', 'application/xhtml+xml', 'text/plain'):
+            if content_type not in (('image/jpeg', 'image/png', 'image/webp') if image else ('text/html', 'application/xhtml+xml', 'text/plain')):
                 raise PublicFetchError('El enlace no devuelve una página de texto. Sube el documento directamente.')
             if (response.getheader('Content-Encoding') or 'identity').lower().strip() != 'identity':
                 raise PublicFetchError('La página usa una compresión no admitida. Pega la información pertinente como texto.')
@@ -183,6 +192,8 @@ def fetch_public_page(url):
             body = b''.join(parts)
             if not body.strip():
                 raise PublicFetchError('La página está vacía.')
+            if image:
+                return {'body': body}
             charset = response.headers.get_content_charset() or 'utf-8'
             try:
                 text = body.decode(charset, errors='replace')
