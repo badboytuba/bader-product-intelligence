@@ -1,3 +1,12 @@
+## 2026-09-18 — Nancy AI Studio and visual long descriptions
+
+Release `16.0.1.13.0` adds explicit private shared content conversations/sources,
+reviewed structured proposals applied only to drafts, and versioned visual blocks
+referencing the single principal long-copy field. Read `docs/NANCY_CONTENT_STUDIO.md`.
+Keep source/media privacy, revision guards, scoped requested engine, local storage
+quotas, authorized Nginx delivery and no paid replay. No bulk regeneration, model
+changes elsewhere, publication or production deployment is authorized.
+
 ## 2026-09-16 — Editable semantic map
 
 Release `16.0.1.12.0` connects the product to four independent multi-value axes

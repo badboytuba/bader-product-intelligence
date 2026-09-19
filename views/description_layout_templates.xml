@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="description_layout_node" name="Bader description block">
+        <div t-att-class="'bpi-layout__block bpi-layout__block--%s bpi-layout__preset--%s bpi-layout__align--%s bpi-layout__effect--%s bpi-layout__spacing--%s' % (node['type'], node.get('preset', 'white'), node.get('align', 'left'), node.get('effect', 'none'), node.get('spacing', 'normal'))" t-att-data-block-id="node['id']">
+            <div t-if="node['type'] == 'main'" class="bpi-layout__main" t-field="product.bpi_technical_description"/>
+            <div t-elif="node['type'] in ('text', 'callout')" class="bpi-layout__text" t-out="node['html']"/>
+            <figure t-elif="node['type'] == 'image'">
+                <img t-att-src="node['src']" t-att-alt="node.get('alt', '')" loading="lazy" decoding="async"/>
+                <figcaption t-if="node.get('caption')" t-out="node['caption']"/>
+            </figure>
+            <figure t-elif="node['type'] == 'video'">
+                <video t-if="node.get('mediaId')" controls="controls" preload="none" playsinline="playsinline" t-att-aria-label="node.get('caption') or 'Vídeo del producto'">
+                    <source t-att-src="node['src']" type="video/mp4"/>
+                    <a t-att-href="node['src']" target="_blank" rel="noopener noreferrer">Abrir vídeo</a>
+                </video>
+                <div t-else="" class="bpi-layout__social" t-att-data-bpi-video-url="node['url']" t-att-data-bpi-video-embed="node.get('embed', '')">
+                    <button t-if="node.get('embed')" type="button" class="bpi-layout__play"><span aria-hidden="true">▶</span> Reproducir vídeo</button>
+                    <p>El vídeo se carga desde la red social únicamente al reproducirlo.</p>
+                    <a t-att-href="node['url']" target="_blank" rel="noopener noreferrer">Abrir en la red social <span class="sr-only">(pestaña nueva)</span></a>
+                </div>
+                <figcaption t-if="node.get('caption')" t-out="node['caption']"/>
+            </figure>
+            <div t-elif="node['type'] in ('columns', 'container')" t-att-class="'bpi-layout__' + node['type']">
+                <t t-foreach="node['children']" t-as="child"><t t-call="bader_product_intelligence.description_layout_node"><t t-set="node" t-value="child"/></t></t>
+            </div>
+            <hr t-elif="node['type'] == 'divider'"/>
+        </div>
+    </template>
+    <template id="description_layout" name="Bader long description design">
+        <div class="bpi-description-layout bader-brand" data-bpi-layout="1">
+            <t t-foreach="bpi_layout['blocks']" t-as="node"><t t-call="bader_product_intelligence.description_layout_node"/></t>
+        </div>
+    </template>
+</odoo>

@@ -34,7 +34,9 @@
                         </h2>
                         <p>Especificaciones, compatibilidad y recomendaciones de uso profesional.</p>
                     </div>
-                    <div class="bpi-website-technical-description__content"
+                    <t t-set="bpi_layout" t-value="product._bpi_public_description_layout(website)"/>
+                    <t t-if="bpi_layout" t-call="bader_product_intelligence.description_layout"/>
+                    <div t-else="" class="bpi-website-technical-description__content"
                          t-field="product.bpi_technical_description"/>
                 </section>
 

@@ -669,8 +669,9 @@
                                 <div class="bpi-panel">
                                     <div class="bpi-panel__title">
                                         <h3><i class="fa fa-magic"/> Nancy AI Studio</h3>
-                                        <p>Genera descripciones optimizadas para SEO y GEO</p>
+                                        <p>Conversación, fuentes y una propuesta a tu medida. Tú decides qué guardar.</p>
                                     </div>
+                                    <details class="bpi-studio-template-settings"><summary><i class="fa fa-sliders"/> Modelo editorial y ajustes de la ficha</summary>
                                     <section class="bpi-content-template" aria-label="Modelo editorial de descripción" t-att-aria-busy="state.contentTemplateBusy ? 'true' : 'false'">
                                         <div class="bpi-content-template__controls">
                                             <div class="bpi-content-template__select">
@@ -737,10 +738,11 @@
                                         <ul><li t-foreach="product.editorialImport.differences" t-as="difference" t-key="difference_index"><t t-esc="difference.label"/>: documento <t t-esc="difference.document"/> · Datos y precios <t t-esc="difference.saved"/></li></ul>
                                         <p>Una nueva generación usa los datos Odoo guardados y no garantiza conservar el texto aprobado. Revisa antes de guardar.</p>
                                     </details>
+                                    </details>
                                     <p class="bpi-content-template__saved-note"><i class="fa fa-database"/> Nancy utiliza los datos Odoo guardados, no los cambios pendientes. El resultado es una propuesta: no se guarda ni publica automáticamente.</p>
-                                    <button type="button" class="bpi-button bpi-button--primary bpi-button--full" style="margin-top: 18px;" t-on-click="generateContent" t-att-disabled="state.contentBusy || state.contentTemplateBusy || state.contentTemplateAdminBusy || state.contentTemplateError">
+                                    <button type="button" class="bpi-button bpi-button--primary bpi-button--full" style="margin-top: 18px;" aria-label="Abrir Nancy AI Studio" t-on-click="() => this.openContentStudio()" t-att-disabled="state.contentBusy || state.contentTemplateBusy || state.contentTemplateAdminBusy || state.contentTemplateError">
                                         <i class="fa fa-magic"/>
-                                        <span t-if="!state.contentBusy">Generar Descripciones con Nancy AI</span>
+                                        <span t-if="!state.contentBusy">Abrir Nancy AI Studio · Crear y mejorar descripciones</span>
                                         <span t-else="">Generando...</span>
                                     </button>
                                     <div t-if="state.contentGenerationWarnings?.length" class="bpi-content-template__warnings" role="status">
@@ -819,6 +821,8 @@
                                         </details>
                                         <p class="bpi-muted" data-content-word-target="short" t-esc="contentWordCountLabel()"/>
                                         <div class="bpi-content-divider" role="separator"/>
+                                        <div class="bpi-description-mode" role="tablist" aria-label="Editor de descripción larga"><strong>Descripción larga</strong><div><button type="button" role="tab" t-att-aria-selected="state.descriptionMode !== 'design' ? 'true' : 'false'" t-on-click="() => this.setDescriptionMode('text')"><i class="fa fa-align-left"/> Texto</button><button type="button" role="tab" t-att-aria-selected="state.descriptionMode === 'design' ? 'true' : 'false'" t-on-click="() => this.setDescriptionMode('design')"><i class="fa fa-object-group"/> Diseño Bader</button></div></div>
+                                        <t t-if="state.descriptionMode !== 'design'">
                                         <label><t t-if="currentContentTemplate()?.format === 'general_specs'">Especificaciones Técnicas</t><t t-else="">Descripcion Tecnica</t> <span class="bpi-label-hint">(descripción larga)</span></label>
                                         <div class="bpi-rich-editor-shell">
                                             <div class="bpi-rich-editor-toolbar" role="toolbar" aria-label="Herramientas de formato de la descripcion tecnica">
@@ -887,10 +891,11 @@
                                             <textarea class="bpi-textarea bpi-textarea--mono" rows="12" t-att-value="state.contentForm.technicalDescription" t-on-input="onTechnicalDescriptionSourceInput"/>
                                         </details>
                                         <p class="bpi-muted" data-content-word-target="long" t-esc="technicalDescriptionWordCountLabel()"/>
+                                        </t><t t-else=""><t t-call="bader_product_intelligence.DescriptionDesigner"/></t>
                                     </div>
                                     <button type="button" class="bpi-button bpi-button--secondary bpi-button--full" t-on-click="saveContentOnly" t-att-disabled="state.contentBusy">
                                         <i class="fa fa-floppy-o"/>
-                                        <span>Guardar ficha</span>
+                                        <span>Guardar sección</span>
                                     </button>
                                 </div>
 
@@ -1436,6 +1441,7 @@
                     </div><div t-if="state.detailLeavePrompt" class="bpi-workspace-modal-backdrop"><section class="bpi-workspace-leave-dialog" t-ref="detailLeaveDialog" tabindex="-1" t-on-keydown="onDetailLeaveKeydown" role="alertdialog" aria-modal="true" aria-labelledby="bpi-leave-title" aria-describedby="bpi-leave-message"><span class="bpi-workspace-modal-icon"><i class="fa fa-pencil-square-o"/></span><h2 id="bpi-leave-title" t-esc="state.detailLeavePrompt.title"/><p id="bpi-leave-message" t-esc="state.detailLeavePrompt.message"/><ul><li t-foreach="state.detailLeavePrompt.sections" t-as="section" t-key="section.id" t-esc="section.label"/></ul><div class="bpi-workspace-leave-actions"><button type="button" class="bpi-button bpi-button--primary" data-detail-leave="stay" autofocus="autofocus" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('stay')">Continuar editando</button><button type="button" class="bpi-button bpi-button--secondary" data-detail-leave="discard" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('discard')">Descartar y salir</button><button t-if="state.detailLeavePrompt.canSave" type="button" class="bpi-button bpi-button--secondary" data-detail-leave="save" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('save')">Guardar ficha y salir</button></div></section></div></div>
                 </t>
             </t>
+            <t t-call="bader_product_intelligence.ContentStudio"/>
         </div>
     </t>
     <t t-name="bader_product_intelligence.SemanticContext" owl="1">

@@ -21,10 +21,16 @@ class BPIAIJob(models.Model):
 
     def init(self):
         # A search alone cannot deduplicate concurrent HTTP transactions.
+        # Upgrade the legacy predicate without weakening SEO/classification
+        # deduplication. Studio conversations have their own active-job index.
+        self.env.cr.execute("SELECT indexdef FROM pg_indexes WHERE schemaname=current_schema() AND indexname='bpi_ai_job_unique_active'")
+        old_index = self.env.cr.fetchone()
+        if old_index and "content_studio" not in old_index[0]:
+            self.env.cr.execute("DROP INDEX bpi_ai_job_unique_active")
         self.env.cr.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS bpi_ai_job_unique_active
             ON bpi_ai_job (product_tmpl_id, job_type, target_audience)
-            WHERE state IN ('pending', 'running')
+            WHERE state IN ('pending', 'running') AND job_type <> 'content_studio'
         """)
 
     name = fields.Char(required=True, default=lambda self: _("Trabajo IA"))
@@ -253,6 +259,8 @@ class BPIAIJob(models.Model):
                         result_payload = self._process_seo_job()
                     elif self.job_type == "classification":
                         result_payload = self._process_classification_job()
+                    elif self.job_type == "content_studio":
+                        result_payload = self._process_content_studio_job()
                     else:
                         raise ValueError("Unsupported BPI AI job type")
                     self._finish_job(result_payload)

@@ -2048,7 +2048,7 @@ QUnit.test('actual ML overview drilldown account filter and catalog link compose
     } finally { app.destroy(); target.remove(); }
 });
 
-QUnit.test('actual content generation shows safe configuration errors and preserves editable drafts', async (assert) => {
+QUnit.test('actual Studio launch shows private Nancy errors and preserves editable drafts', async (assert) => {
     const target = document.createElement('div'); document.body.appendChild(target);
     const calls = [], notifications = [];
     const app = new App(ProductIntelligenceAction, {
@@ -2058,7 +2058,7 @@ QUnit.test('actual content generation shows safe configuration errors and preser
             rpc: async (route, params) => {
                 calls.push({ route, params });
                 if (route.endsWith('/data')) return stabilizationPayload();
-                if (route.endsWith('/generate_content')) throw { message: 'Odoo Server Error', data: { name: 'odoo.exceptions.UserError', message: 'Configura OpenAI API Key en Ajustes.', debug: 'Private debug never displayed' } };
+                if (route.endsWith('/content_studio/open')) throw { message: 'Odoo Server Error', data: { name: 'odoo.exceptions.UserError', message: 'Configura OpenAI API Key en Ajustes.', debug: 'Private debug never displayed' } };
                 throw new Error('Unexpected write or provider request');
             },
         } },
@@ -2071,11 +2071,15 @@ QUnit.test('actual content generation shows safe configuration errors and preser
         action.state.contentForm.audience = 'laboratorios';
         target.querySelector('[data-detail-section="content"]').click();
         await workspacePatched();
-        [...target.querySelectorAll('button')].find(button => button.textContent.includes('Generar Descripciones con Nancy AI')).click();
+        [...target.querySelectorAll('button')].find(button => button.textContent.includes('Abrir Nancy AI Studio')).click();
         await workspacePatched();
-        assert.deepEqual(calls.map(call => call.route), ['/bader_product_intelligence/data', '/bader_product_intelligence/generate_content']);
-        assert.deepEqual(calls[1].params, { product_tmpl_id: 1, tone: 'tecnico', audience: 'laboratorios', context: { allowed_company_ids: [3] } });
-        assert.deepEqual(notifications, ['Configura OpenAI API Key en Ajustes.']);
+        assert.deepEqual(calls.map(call => call.route), ['/bader_product_intelligence/data', '/bader_product_intelligence/content_studio/open']);
+        assert.deepEqual(calls[1].params, { product_tmpl_id: 1, session_id: undefined, new_session: false, context: { allowed_company_ids: [3] } });
+        assert.deepEqual(notifications, [], 'private Studio errors stay in the modal');
+        assert.ok(action.state.contentStudio.error.includes('Nancy AI Studio'));
+        assert.notOk(action.state.contentStudio.error.includes('OpenAI'));
+        assert.notOk(target.querySelector('.bpi-studio').textContent.includes('Private debug'));
+        assert.notOk(action.state.contentStudio.loading);
         assert.strictEqual(action.state.contentForm.description, 'Borrador comercial');
         assert.strictEqual(action.state.contentForm.technicalDescription, 'Borrador técnico');
         assert.notOk(action.state.contentBusy);

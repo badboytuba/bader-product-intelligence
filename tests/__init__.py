@@ -13,5 +13,8 @@ from . import test_technical_specification
 
 from . import test_product_documents
 from . import test_taxonomy
+from . import test_description_layout
+from . import test_content_studio
 from . import test_semantic_context
 from . import test_semantic_search
+from . import test_studio_fetch

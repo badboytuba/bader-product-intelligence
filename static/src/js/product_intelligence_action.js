@@ -5,6 +5,8 @@ import { useService } from "@web/core/utils/hooks";
 import { useSetupAction } from "@web/webclient/actions/action_hook";
 import { Component, onWillStart, onWillUnmount, onMounted, onPatched, useState, useRef } from "@odoo/owl";
 
+import { contentStudioMethods, emptyContentStudio, StudioRichEditor } from "./content_studio";
+
 const DASHBOARD_PAGE_SIZE = 40;
 const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -269,6 +271,9 @@ export class ProductIntelligenceAction extends Component {
             seoJobMessage: "",
             seoPreviewPending: false,
             contentBusy: false,
+            contentStudio: emptyContentStudio(),
+            descriptionMode: "text", descriptionSelectedBlock: "", descriptionPreviewSize: "desktop",
+            descriptionMedia: [], descriptionMediaBusy: false, descriptionMediaError: "", descriptionUpload: null,
             contentTemplateContext: null,
             contentTemplateBusy: false,
             contentTemplateAdminBusy: false,
@@ -316,6 +321,7 @@ export class ProductIntelligenceAction extends Component {
         this.contentDescriptionEditorRef = useRef("contentDescriptionEditor");
         this.technicalDescriptionEditorRef = useRef("technicalDescriptionEditor");
         this.detailLeaveDialogRef = useRef("detailLeaveDialog");
+        this.contentStudioRef = useRef("contentStudioDialog");
         this.taxonomyMapRef = useRef("taxonomyMap");
         this.lastContentDescriptionEditorHtml = "";
         this.lastTechnicalDescriptionEditorHtml = "";
@@ -350,6 +356,7 @@ export class ProductIntelligenceAction extends Component {
             this.syncTechnicalDescriptionEditor();
             this.syncDetailLeaveFocus();
             this.syncTaxonomyFocus();
+            this.syncStudioFocus();
         });
 
         onWillUnmount(() => {
@@ -752,7 +759,7 @@ export class ProductIntelligenceAction extends Component {
         return this.snapshotDraft({
             datos: pick(this.state.productForm, ['name', 'sku', 'slug', 'brand', 'categoryId', 'priceUsd', 'previousPriceUsd', 'costUsd', 'featured', 'isPublished', 'technicalSpecifications']),
             categorization: pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory', 'classification']),
-            content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs', 'templateId', 'documents']),
+            content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs', 'templateId', 'documents', 'descriptionLayout']),
             seo: pick(this.state.seoForm, ['seoTitle', 'seoDescription', 'seoKeywords', 'geoTitle', 'geoDescription', 'geoKeywords', 'geoFeatures', 'seoScore', 'geoScore', 'competitivenessScore']),
             variants_pack: {
                 variants: (this.state.variantDrafts || []).map((v) => pick(v, ['id', 'sku', 'barcode', 'costUsdInput', 'active', 'imageReferenceToken', 'imageUploadDataUrl'])),
@@ -773,7 +780,8 @@ export class ProductIntelligenceAction extends Component {
         const now = this.detailDraftSnapshot();
         return DETAIL_TABS.filter((tab) => Object.prototype.hasOwnProperty.call(now, tab.id) &&
             JSON.stringify(now[tab.id]) !== JSON.stringify(this.detailBaseline[tab.id]))
-            .map((tab) => ({ id: tab.id, label: tab.label }));
+            .map((tab) => ({ id: tab.id, label: tab.label }))
+            .concat(this.studioHasLocalChanges() ? [{ id: 'studio', label: 'Nancy AI Studio (notas o previa)' }] : []);
     }
 
     detailHasUnsavedChanges() {
@@ -825,7 +833,7 @@ export class ProductIntelligenceAction extends Component {
                 return;
             }
         } else if (choice !== 'discard' && choice !== 'stay') return;
-        if (choice === 'discard') this.discardDetailChanges();
+        if (choice === 'discard') { this.discardDetailChanges(); this.studioDiscardLocal(); }
         const resolve = this.detailLeaveResolver;
         this.detailLeaveResolver = null;
         this.detailLeavePromise = null;
@@ -885,6 +893,7 @@ export class ProductIntelligenceAction extends Component {
         try {
             const result = await this.saveProductData();
             if (!this.isRequestCurrent(request)) return false;
+            request.editorialAck = result.editorialRevision;
             this.applyDetailUpdate(result, request, { productForm: true, contentForm: ['name'] });
             this.notify('Datos y precios guardados. No se modificaron MercadoLibre ni otras secciones.');
             return true;
@@ -938,6 +947,12 @@ export class ProductIntelligenceAction extends Component {
     }
 
     invalidateProductRequests() {
+        clearTimeout(this.studioPollTimer);
+        this.state.contentStudio = emptyContentStudio();
+        this.state.descriptionMode = "text";
+        this.state.descriptionMedia = []; this.state.descriptionMediaBusy = false;
+        this.state.descriptionMediaError = ""; this.state.descriptionUpload = null;
+        this.descriptionUploadSession = null;
         this.viewGeneration = (this.viewGeneration || 0) + 1;
         this.detailLoadSequence = (this.detailLoadSequence || 0) + 1;
         this.chatRequestSequence = (this.chatRequestSequence || 0) + 1;
@@ -1049,6 +1064,15 @@ export class ProductIntelligenceAction extends Component {
                 this.state[key] = updated;
             }
         }
+        // A reviewed application token is single-use: do not resend after its own successful save.
+        if (updates.contentForm === true && request.drafts?.contentForm?.studioProposalId &&
+            this.state.contentForm.studioProposalId === request.drafts.contentForm.studioProposalId) {
+            delete this.state.contentForm.studioProposalId;
+        }
+        if (Number.isInteger(request.editorialAck) && request.editorialAck === data.editorialRevision &&
+            this.state.contentForm?.editorialRevision === request.drafts?.contentForm?.editorialRevision) {
+            this.state.contentForm.editorialRevision = request.editorialAck;
+        }
         // A save may finish after the operator has selected a different model.
         // Keep that selection's metadata together with its still-pending draft.
         if (data.contentTemplates && this.contentTemplateSelectionId() !== (data.contentTemplates.selectionId || false)) {
@@ -1066,7 +1090,14 @@ export class ProductIntelligenceAction extends Component {
         if (!this.isRequestCurrent(request)) return;
         const refresh = this.beginRequest("detailRefresh");
         const data = await this.rpc("/bader_product_intelligence/data", { product_tmpl_id: request.productId });
-        if (this.isRequestCurrent(refresh)) this.applyDetailUpdate(data, request, updates);
+        if (this.isRequestCurrent(refresh) && this.isRequestCurrent(request)) {
+            if (Number.isInteger(request.editorialAck) && request.editorialAck !== data.editorialRevision) {
+                this.notify("Otro operador modificó la ficha después de tu guardado. Tus borradores se conservan; revisa antes de guardar otra vez.", "warning");
+                return false;
+            }
+            this.applyDetailUpdate(data, request, updates);
+            return true;
+        }
     }
 
     clearDashboardReloadTimer() {
@@ -1461,6 +1492,8 @@ export class ProductIntelligenceAction extends Component {
         };
         this.state.contentForm = {
             documents: data.documents ? this.snapshotDraft(data.documents) : undefined,
+            descriptionLayout: data.descriptionLayout ? this.snapshotDraft(data.descriptionLayout) : undefined,
+            editorialRevision: data.editorialRevision,
             templateId: data.contentTemplates?.selectionId || false,
             tone: seoData.aiTone || "profesional",
             audience: seoData.aiTargetAudience || "clinicas",
@@ -3149,6 +3182,7 @@ export class ProductIntelligenceAction extends Component {
 
     productSaveValues(form = this.state.productForm) {
         return {
+            ...(this.state.contentForm?.editorialRevision !== undefined ? { editorialRevision: this.state.contentForm.editorialRevision } : {}),
             technicalSpecifications: this.snapshotDraft(form.technicalSpecifications || []),
             name: form.name, sku: form.sku, slug: form.slug, brand: form.brand,
             categoryId: form.categoryId || false,
@@ -3158,9 +3192,11 @@ export class ProductIntelligenceAction extends Component {
     }
 
     categorySaveValues(form = this.state.categoryForm, product = this.state.productForm) {
-        if (form.classification) return { classification: this.snapshotDraft(form.classification) };
+        const revision = this.state.contentForm?.editorialRevision;
+        const guard = revision !== undefined ? { editorialRevision: revision } : {};
+        if (form.classification) return { ...guard, classification: this.snapshotDraft(form.classification) };
         return {
-            manualMode: !!form.manualMode, niches: [...(form.niches || [])],
+            ...guard, manualMode: !!form.manualMode, niches: [...(form.niches || [])],
             type: form.type || false, subcategory: form.subcategory || false,
             categoryId: product.categoryId || false,
         };
@@ -3330,6 +3366,9 @@ export class ProductIntelligenceAction extends Component {
     contentSaveValues(form = this.state.contentForm) {
         return {
             ...(form.documents ? { documents: this.snapshotDraft(form.documents) } : {}),
+            ...(form.descriptionLayout ? { descriptionLayout: this.snapshotDraft(form.descriptionLayout) } : {}),
+            ...(form.editorialRevision !== undefined ? { editorialRevision: form.editorialRevision } : {}),
+            ...(form.studioProposalId ? { studioProposalId: form.studioProposalId } : {}),
             name: form.name, description: form.description, technicalDescription: form.technicalDescription,
             tone: form.tone, audience: form.audience,
             ...(form.templateId !== undefined ? { templateId: Number(form.templateId) || false } : {}),
@@ -3339,6 +3378,7 @@ export class ProductIntelligenceAction extends Component {
 
     seoSaveValues(form = this.state.seoForm) {
         return {
+            ...(this.state.contentForm?.editorialRevision !== undefined ? { editorialRevision: this.state.contentForm.editorialRevision } : {}),
             seoTitle: form.seoTitle, seoDescription: form.seoDescription,
             seoKeywords: (form.seoKeywords || "").split(",").map((item) => item.trim()).filter(Boolean),
             geoTitle: form.geoTitle, geoDescription: form.geoDescription,
@@ -3429,9 +3469,10 @@ export class ProductIntelligenceAction extends Component {
         const request = this.beginRequest("seoSave", true);
         this.state.seoBusy = true;
         try {
-            await this.saveSeoData();
+            const acknowledgement = await this.saveSeoData();
+            request.editorialAck = acknowledgement?.editorialRevision;
             if (!this.isRequestCurrent(request)) return;
-            await this.refreshDetail(request, { seoForm: true });
+            if (await this.refreshDetail(request, { seoForm: true }) === false) return false;
             if (!this.isRequestCurrent(request)) return;
             if (request.seoPreviewVersion === (this.seoPreviewVersion || 0)) this.state.seoPreviewPending = false;
             this.notify("SEO guardado.");
@@ -3544,9 +3585,10 @@ export class ProductIntelligenceAction extends Component {
         const request = this.beginRequest("content", true);
         this.state.contentBusy = true;
         try {
-            await this.saveContentData();
+            const acknowledgement = await this.saveContentData();
+            request.editorialAck = acknowledgement?.editorialRevision;
             if (!this.isRequestCurrent(request)) return;
-            await this.refreshDetail(request, { contentForm: true, productForm: ["name"] });
+            if (await this.refreshDetail(request, { contentForm: true, productForm: ["name"] }) === false) return false;
             if (!this.isRequestCurrent(request)) return;
             this.notify("Contenido guardado.");
         } catch (error) {
@@ -3792,9 +3834,10 @@ export class ProductIntelligenceAction extends Component {
         const request = this.beginRequest("category", true);
         this.state.categoryBusy = true;
         try {
-            await this.saveCategoryData();
+            const acknowledgement = await this.saveCategoryData();
+            request.editorialAck = acknowledgement?.editorialRevision;
             if (!this.isRequestCurrent(request)) return;
-            await this.refreshDetail(request, { categoryForm: true, productForm: ["categoryId"] });
+            if (await this.refreshDetail(request, { categoryForm: true, productForm: ["categoryId"] }) === false) return false;
             if (!this.isRequestCurrent(request)) return;
             this.notify("Categorizacion guardada.");
         } catch (error) {
@@ -4370,8 +4413,9 @@ export class ProductIntelligenceAction extends Component {
         return this.mutateCatalogFlag(productId, "featured", checked, event);
     }
 
-    quickAction(tabId) {
-        return this.selectDetailSection(tabId);
+    async quickAction(tabId) {
+        await this.selectDetailSection(tabId);
+        if (tabId === 'content') return this.openContentStudio();
     }
 
     priceMarkerStyle() {
@@ -4457,6 +4501,10 @@ export class ProductIntelligenceAction extends Component {
         }));
     }
 }
+
+Object.assign(ProductIntelligenceAction.prototype, contentStudioMethods);
+
+ProductIntelligenceAction.components = { StudioRichEditor };
 
 ProductIntelligenceAction.template = "bader_product_intelligence.ProductIntelligenceAction";
 

@@ -237,7 +237,7 @@ class BaderProductIntelligenceController(http.Controller):
     def save_seo(self, product_tmpl_id, seo_data=None, **kwargs):
         product = self._product(product_tmpl_id)
         payload = request.env["bpi.service"].save_seo_payload(product, seo_data or {})
-        return {"success": True, "seoData": payload}
+        return {"success": True, "seoData": payload, "editorialRevision": product.bpi_editorial_revision or 1}
 
     @http.route("/bader_product_intelligence/save_video", type="json", auth="user")
     def save_video(self, product_tmpl_id, video_url="", **kwargs):

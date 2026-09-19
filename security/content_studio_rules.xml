@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="bpi_studio_session_company_rule" model="ir.rule">
+        <field name="name">Nancy Studio: empresas permitidas</field>
+        <field name="model_id" ref="model_bpi_content_studio_session"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_studio_source_company_rule" model="ir.rule">
+        <field name="name">Fuentes privadas Nancy: empresas permitidas</field>
+        <field name="model_id" ref="model_bpi_content_studio_source"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_studio_message_company_rule" model="ir.rule">
+        <field name="name">Conversaciones Nancy: empresas permitidas</field>
+        <field name="model_id" ref="model_bpi_content_studio_message"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_studio_proposal_company_rule" model="ir.rule">
+        <field name="name">Propuestas Nancy: empresas permitidas</field>
+        <field name="model_id" ref="model_bpi_content_studio_proposal"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_description_media_company_rule" model="ir.rule">
+        <field name="name">Medios editoriales: empresas permitidas</field>
+        <field name="model_id" ref="model_bpi_description_media"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_studio_job_company_rule" model="ir.rule">
+        <field name="name">Trabajos Nancy Studio: empresas permitidas</field>
+        <field name="model_id" ref="model_bpi_ai_job"/>
+        <field name="domain_force">['|', ('job_type', '!=', 'content_studio'), '|', ('product_tmpl_id.company_id', '=', False), ('product_tmpl_id.company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>

@@ -10,3 +10,8 @@ access_bpi_content_template_manager,bpi.content.template manager,model_bpi_conte
 access_bpi_product_specification_admin,bpi.product.specification admin,model_bpi_product_specification,base.group_system,1,1,1,1
 access_bpi_product_document_panel_admin,bpi.product.document.panel admin,model_bpi_product_document_panel,base.group_system,1,1,1,1
 access_bpi_taxonomy_term_manager,bpi.taxonomy.term manager,model_bpi_taxonomy_term,base.group_system,1,1,1,1
+access_bpi_studio_session_manager,bpi.content.studio.session manager,model_bpi_content_studio_session,base.group_system,1,1,1,1
+access_bpi_studio_source_manager,bpi.content.studio.source manager,model_bpi_content_studio_source,base.group_system,1,1,1,1
+access_bpi_studio_message_manager,bpi.content.studio.message manager,model_bpi_content_studio_message,base.group_system,1,1,1,1
+access_bpi_studio_proposal_manager,bpi.content.studio.proposal manager,model_bpi_content_studio_proposal,base.group_system,1,1,1,1
+access_bpi_description_media_manager,bpi.description.media manager,model_bpi_description_media,base.group_system,1,1,1,1

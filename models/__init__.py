@@ -14,3 +14,5 @@ from . import editorial_import
 from . import product_documents
 from . import taxonomy
 from . import taxonomy_search
+from . import description_layout
+from . import content_studio
