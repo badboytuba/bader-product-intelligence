@@ -195,6 +195,17 @@ QUnit.test("actual mounted modal and designer render, edit, preserve drafts and 
         assert.ok(target.querySelector(".bpi-designer")); assert.strictEqual(target.querySelectorAll(".bpi-design-columns .bpi-design-block").length, 2);
         assert.strictEqual(target.querySelectorAll(".bpi-description-mode [aria-selected=true]").length, 1);
         assert.ok(target.querySelector(".bpi-description-mode [aria-selected=true]").textContent.includes("Diseño"));
+        a.addDescriptionBlock("video"); await patch();
+        const videoBlock = a.descriptionLayout().blocks.at(-1);
+        const width = target.querySelector('[aria-label="Ancho del vídeo"]');
+        width.value = "55"; width.dispatchEvent(new Event("input", { bubbles: true })); await patch();
+        assert.strictEqual(videoBlock.videoWidth, 55, "OWL width handler converts values outside template globals");
+        a.state.descriptionMedia = [{id: 43, kind: "image", state: "ready", filename: "Portada"}]; await patch();
+        const poster = target.querySelector('[aria-label="Portada del vídeo"]');
+        poster.value = "43"; poster.dispatchEvent(new Event("change", { bubbles: true })); await patch();
+        assert.strictEqual(videoBlock.posterMediaId, 43, "OWL cover selector saves a numeric draft ID");
+        poster.value = ""; poster.dispatchEvent(new Event("change", { bubbles: true })); await patch();
+        assert.strictEqual(videoBlock.posterMediaId, false);
         assert.ok(calls.every(call => /\/(data|open|list)$/.test(call.route)), "no generation, fetching sources or persistence");
         assert.ok(calls.every(call => call.params.context.allowed_company_ids[0] === 2), "all RPCs carry company context");
     } finally { app.destroy(); target.remove(); }

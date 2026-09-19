@@ -399,6 +399,8 @@ export const contentStudioMethods = {
         } catch (_) { if (this.isRequestCurrent(request)) this.state.descriptionMediaError = "No se pudo obtener la portada. Puedes subir una imagen o volver a intentarlo."; }
         finally { if (this.isRequestCurrent(request)) this.state.descriptionMediaBusy = false; }
     },
+    setDescriptionVideoWidth(id, value) { this.updateDescriptionBlock(id, "videoWidth", Number(value)); },
+    chooseDescriptionPoster(id, value) { this.updateDescriptionBlock(id, "posterMediaId", Number(value) || false); },
     descriptionVideoStyle(block) {
         const media = this.descriptionMediaById(block.mediaId);
         let ratio = block.videoRatio || "auto";
