@@ -200,8 +200,10 @@ QUnit.test("actual mounted modal and designer render, edit, preserve drafts and 
         const width = target.querySelector('[aria-label="Ancho del vídeo"]');
         width.value = "55"; width.dispatchEvent(new Event("input", { bubbles: true })); await patch();
         assert.strictEqual(videoBlock.videoWidth, 55, "OWL width handler converts values outside template globals");
+        a.chooseDescriptionPoster(videoBlock.id, "43");
         a.state.descriptionMedia = [{id: 43, kind: "image", state: "ready", filename: "Portada"}]; await patch();
         const poster = target.querySelector('[aria-label="Portada del vídeo"]');
+        assert.strictEqual(poster.value, "43", "saved cover remains selected after asynchronous library load");
         poster.value = "43"; poster.dispatchEvent(new Event("change", { bubbles: true })); await patch();
         assert.strictEqual(videoBlock.posterMediaId, 43, "OWL cover selector saves a numeric draft ID");
         poster.value = ""; poster.dispatchEvent(new Event("change", { bubbles: true })); await patch();
