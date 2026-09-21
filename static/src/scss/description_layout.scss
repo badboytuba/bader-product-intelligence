@@ -37,9 +37,9 @@
     .bpi-layout__play-icon { z-index: 1; display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; background: #6bd238; color: #003b45; font-size: 28px; box-shadow: 0 4px 28px #003b4566; }
     .bpi-layout__play-label { position: relative; z-index: 1; border-radius: 24px; padding: 6px 16px; background: #003b45; color: #fff; font-weight: 600; }
     .bpi-layout__play:hover .bpi-layout__play-icon { background: #90e45e; }
-    .bpi-layout__video-footer { display: flex; justify-content: space-between; gap: 12px; padding-top: 12px; font-size: .875rem; }
-    .bpi-layout__video-footer figcaption { padding: 0; }
-    .bpi-layout__video-footer a { color: inherit; white-space: nowrap; margin-left: auto; }
+    .bpi-layout__video-title, .bpi-layout__video-caption { display: block; width: 100%; overflow-wrap: anywhere; white-space: pre-line; font-synthesis: weight style; opacity: 1; }
+    .bpi-layout__video-title { margin: 0 0 16px; line-height: 1.2; padding: 0; }
+    .bpi-layout__video-caption { margin: 12px 0 0; line-height: 1.5; padding: 0; }
     button:focus-visible, a:focus-visible { outline: 3px solid #008b97; outline-offset: -4px; }
     @media (max-width: 575px) { .bpi-layout__video-figure { width: 100%; min-width: 0; } }
     @media (prefers-reduced-motion: no-preference) {

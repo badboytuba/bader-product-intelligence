@@ -46,6 +46,32 @@ def empty_layout():
     return {'version': 1, 'enabled': False, 'blocks': [{'id': 'principal', 'type': 'main'}]}
 
 
+def video_text_style(value, field):
+    """Bounded typography, never user-supplied CSS. Also supplies legacy defaults."""
+    default = {'font': 'display' if field == 'title' else 'body',
+               'size': 28 if field == 'title' else 14, 'bold': False, 'italic': False,
+               'align': 'inherit', 'color': 'auto'}
+    if not isinstance(value, dict) or set(value) - set(default):
+        raise ValidationError(_('Usa los controles de formato del título y la leyenda.'))
+    result = dict(default, **value)
+    if (result['font'] not in ('display', 'body') or type(result['size']) is not int
+            or not 12 <= result['size'] <= 64 or type(result['bold']) is not bool
+            or type(result['italic']) is not bool
+            or result['align'] not in ('inherit', 'left', 'center', 'right')
+            or result['color'] not in ('auto', 'petrol', 'green')):
+        raise ValidationError(_('Elige una fuente Bader, tamaño de 12 a 64 px y estilos disponibles.'))
+    return result
+
+
+def video_text_css(value, field):
+    style = video_text_style(value, field)
+    font = 'var(--bader-font-display)' if style['font'] == 'display' else 'var(--bader-font-body)'
+    color = {'auto': 'inherit', 'petrol': '#003841', 'green': '#2f7d32'}[style['color']]
+    return ('font-family:%s;font-size:%spx;font-weight:%s;font-style:%s;text-align:%s;color:%s'
+            % (font, style['size'], '700' if style['bold'] else '400',
+               'italic' if style['italic'] else 'normal', style['align'], color))
+
+
 def social_video(value):
     """Canonical allowlisted links. No fetch, API, iframe code or tracking URL."""
     if not isinstance(value, str) or len(value) > 2048 or re.search(r'[\x00-\x20\\]', value):
@@ -132,7 +158,7 @@ def validate_layout(value, media_lookup=None):
             raise ValidationError(_('Los bloques deben tener identificadores únicos; máximo 50 bloques.'))
         ids.add(key)
         accepted = {'main': set(), 'text': {'html'}, 'callout': {'html'},
-                    'image': {'mediaId', 'alt', 'caption'}, 'video': {'mediaId', 'url', 'caption', 'posterMediaId', 'videoWidth', 'videoRatio'},
+                    'image': {'mediaId', 'alt', 'caption'}, 'video': {'mediaId', 'url', 'caption', 'posterMediaId', 'videoWidth', 'videoRatio', 'title', 'titleStyle', 'captionStyle'},
                     'columns': {'children'}, 'container': {'children'}, 'divider': set()}
         if not isinstance(kind, str) or kind not in accepted or set(block) - (common | accepted[kind]):
             raise ValidationError(_('Tipo o propiedades de bloque no permitidos.'))
@@ -151,6 +177,14 @@ def validate_layout(value, media_lookup=None):
             if type(width) is not int or not 25 <= width <= 100 or ratio not in ('auto', '16:9', '9:16', '1:1', '4:3'):
                 raise ValidationError(_('Usa un ancho de 25 a 100 % y una proporción disponible.'))
             result.update(videoWidth=width, videoRatio=ratio)
+            if 'title' in block:
+                if not isinstance(block['title'], str) or len(block['title']) > 200:
+                    raise ValidationError(_('El título del vídeo admite hasta 200 caracteres.'))
+                result['title'] = block['title'].strip()
+            for field in ('title', 'caption'):
+                style_key = field + 'Style'
+                if style_key in block:
+                    result[style_key] = video_text_style(block[style_key], field)
             poster = block.get('posterMediaId')
             if poster:
                 if type(poster) is not int or poster <= 0:
@@ -341,6 +375,8 @@ class ProductTemplate(models.Model):
             if block.get('posterMediaId'):
                 block['posterSrc'] = '/bader_product_intelligence/description_media/%s/file?r=%s' % (block['posterMediaId'], self.bpi_editorial_revision or 1)
             if block.get('type') == 'video':
+                for field in ('title', 'caption'):
+                    block[field + 'Css'] = video_text_css(block.get(field + 'Style', {}), field)
                 ratio = block.get('videoRatio', 'auto')
                 if ratio == 'auto':
                     ratio = '9:16' if block.get('provider') == 'tiktok' else '16:9'
@@ -761,4 +797,3 @@ class DescriptionMedia(models.Model):
                 if not self.env.cr.fetchone():
                     os.unlink(entry.path)
         return True
-

@@ -302,3 +302,70 @@ class TestDescriptionLayout(TransactionCase):
         self.assertIn('bpi-layout__play-icon', html)
         self.assertNotIn('<iframe', html)
         self.assertNotIn('El vídeo se carga', html)
+
+    def test_video_typography_legacy_and_independent_styles(self):
+        node = {'id':'v', 'type':'video', 'url':'https://youtu.be/abcdefghijk', 'caption':'Leyenda existente'}
+        before = copy.deepcopy(node)
+        normalized = validate_layout(self.layout([node]))['blocks'][1]
+        self.assertEqual(node, before)
+        self.assertEqual(normalized['caption'], before['caption'])
+        self.assertNotIn('title', normalized)
+        self.assertNotIn('captionStyle', normalized)
+        self.product.website_published = True
+        self.service.save_content(self.product, {'descriptionLayout': self.layout([node])})
+        projected = self.product._bpi_public_description_layout(self.website)['blocks'][1]
+        self.assertIn('font-size:14px', projected['captionCss'])
+        self.assertIn('var(--bader-font-body)', projected['captionCss'])
+        new = dict(node, title='Título del vídeo', titleStyle={'font':'display','size':32,'bold':True,'align':'center'},
+                   captionStyle={'font':'body','size':18,'italic':True,'color':'green'})
+        result = validate_layout(self.layout([new]))['blocks'][1]
+        self.assertEqual(result['titleStyle']['size'], 32)
+        self.assertEqual(result['captionStyle']['size'], 18)
+        self.assertFalse(result['captionStyle']['bold'])
+        self.assertFalse(result['titleStyle']['italic'])
+
+    def test_video_typography_rejects_css_injection_and_bad_types(self):
+        base = {'id':'v', 'type':'video', 'url':'https://youtu.be/abcdefghijk'}
+        for style in (None, [], 'font-size:30px', {'css':'display:none'}, {'font':'url(https://evil.invalid)'},
+                      {'font':[]}, {'size':11}, {'size':65}, {'size':'28'}, {'size':True}, {'size':20.5},
+                      {'bold':'false'}, {'italic':1}, {'align':'center;color:red'}, {'color':'url(x)'}):
+            for field in ('titleStyle', 'captionStyle'):
+                with self.assertRaises(ValidationError):
+                    validate_layout(self.layout([dict(base, **{field:style})]))
+        for title in (False, {}, ['x'], 'x'*201):
+            with self.assertRaises(ValidationError):
+                validate_layout(self.layout([dict(base, title=title)]))
+
+    def test_video_title_caption_render_escaped_no_open_video_footer(self):
+        node = {'id':'v', 'type':'video', 'url':'https://youtu.be/abcdefghijk',
+                'title':'<img src=x onerror=alert(1)>', 'caption':'<script>unsafe</script>',
+                'titleStyle':{'font':'display','size':31,'bold':True,'align':'center'},
+                'captionStyle':{'font':'body','size':18,'italic':True,'color':'green'}}
+        self.product.website_published = True
+        self.service.save_content(self.product, {'descriptionLayout': self.layout([node])})
+        layout = self.product._bpi_public_description_layout(self.website)
+        html = str(self.env['ir.qweb']._render('bader_product_intelligence.description_layout', {'product':self.product,'bpi_layout':layout}))
+        self.assertIn('&lt;img', html); self.assertIn('&lt;script&gt;', html)
+        self.assertNotIn('<img src=x', html); self.assertNotIn('<script>', html)
+        self.assertIn('font-size:31px', html); self.assertIn('font-size:18px', html)
+        self.assertIn('font-style:italic', html); self.assertIn('text-align:center', html)
+        self.assertNotIn('Abrir vídeo', html); self.assertNotIn('bpi-layout__video-footer', html)
+        self.assertIn('aria-label="Reproducir vídeo"', html)
+        self.assertNotIn('<iframe', html)
+        self.assertEqual(self.product.bpi_technical_description, '<p>Texto principal aprobado.</p>')
+
+    def test_empty_video_text_stays_hidden_and_styles_roundtrip_atomically(self):
+        node = {'id':'v', 'type':'video', 'url':'https://www.instagram.com/reel/abcdef/',
+                'title':'   ', 'caption':' ', 'titleStyle':{'size':64}}
+        self.product.website_published = True
+        saved = self.service.save_content(self.product, {'descriptionLayout':self.layout([node]), 'editorialRevision':self.product.bpi_editorial_revision})
+        self.assertEqual(saved['descriptionLayout']['blocks'][1]['titleStyle']['size'],64)
+        html = str(self.env['ir.qweb']._render('bader_product_intelligence.description_layout', {'product':self.product,'bpi_layout':self.product._bpi_public_description_layout(self.website)}))
+        self.assertNotIn('bpi-layout__video-title',html); self.assertNotIn('bpi-layout__video-caption',html)
+        self.assertIn('Ver en la red social',html); self.assertIn('target="_blank"',html)
+        before = copy.deepcopy(self.product.bpi_description_layout)
+        revision = self.product.bpi_editorial_revision
+        with self.assertRaises(ValidationError):
+            self.service.save_content(self.product, {'descriptionLayout':self.layout([dict(node,titleStyle={'size':1000})]), 'editorialRevision':revision})
+        self.assertEqual(self.product.bpi_description_layout,before)
+        self.assertEqual(self.product.bpi_editorial_revision,revision)

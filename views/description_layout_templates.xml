@@ -9,8 +9,9 @@
                 <figcaption t-if="node.get('caption')" t-out="node['caption']"/>
             </figure>
             <figure t-elif="node['type'] == 'video'" class="bpi-layout__video-figure" t-att-style="node['videoStyle']">
+                <h3 t-if="node.get('title')" class="bpi-layout__video-title" t-att-style="node['titleCss']" t-out="node['title']"/>
                 <div class="bpi-layout__video-stage">
-                    <video t-if="node.get('mediaId')" controls="controls" preload="metadata" playsinline="playsinline" t-att-poster="node.get('posterSrc')" t-att-aria-label="node.get('caption') or 'Vídeo del producto'">
+                    <video t-if="node.get('mediaId')" controls="controls" preload="metadata" playsinline="playsinline" t-att-poster="node.get('posterSrc')" t-att-aria-label="node.get('title') or node.get('caption') or 'Vídeo del producto'">
                         <source t-att-src="node['src']" type="video/mp4"/>
                     </video>
                     <div t-else="" class="bpi-layout__social" t-att-data-bpi-video-url="node['url']" t-att-data-bpi-video-embed="node.get('embed', '')">
@@ -25,7 +26,7 @@
                         </a>
                     </div>
                 </div>
-                <div class="bpi-layout__video-footer"><figcaption t-if="node.get('caption')" t-out="node['caption']"/><a t-att-href="node.get('url') or node['src']" target="_blank" rel="noopener noreferrer">Abrir vídeo <span aria-hidden="true">↗</span><span class="sr-only">(pestaña nueva)</span></a></div>
+                <figcaption t-if="node.get('caption')" class="bpi-layout__video-caption" t-att-style="node['captionCss']" t-out="node['caption']"/>
             </figure>
             <div t-elif="node['type'] in ('columns', 'container')" t-att-class="'bpi-layout__' + node['type']">
                 <t t-foreach="node['children']" t-as="child"><t t-call="bader_product_intelligence.description_layout_node"><t t-set="node" t-value="child"/></t></t>

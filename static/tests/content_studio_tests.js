@@ -370,3 +370,64 @@ QUnit.test("saved nested text siblings open by click and keep independent editor
         assert.ok(calls.every(route => /\/(data|list)$/.test(route)), "only local read requests");
     } finally { app.destroy(); target.remove(); }
 });
+
+QUnit.test("video text defaults never dirty legacy layouts and are independent", assert => {
+    const a = action(); a.addDescriptionBlock("video");
+    const v = a.descriptionLayout().blocks.at(-1); v.caption = "Leyenda anterior";
+    const before = copy(a.descriptionLayout());
+    assert.strictEqual(a.descriptionVideoTextStyle(v,"title").font,"display");
+    assert.strictEqual(a.descriptionVideoTextStyle(v,"caption").font,"body");
+    assert.ok(a.descriptionVideoTextCss(v,"caption").includes("font-size:14px"));
+    assert.deepEqual(a.descriptionLayout(),before,"render defaults must not mutate the saved draft");
+    a.setDescriptionVideoTextStyle(v.id,"title","size","31");
+    a.setDescriptionVideoTextStyle(v.id,"caption","italic",true);
+    assert.strictEqual(v.titleStyle.size,31); assert.strictEqual(v.captionStyle.size,14);
+    assert.strictEqual(v.caption,"Leyenda anterior"); assert.notOk(v.titleStyle.italic);
+    a.setDescriptionVideoTextStyle(v.id,"title","size","1000"); assert.strictEqual(v.titleStyle.size,31);
+    const bad = a.descriptionVideoTextCss({titleStyle:{font:"x;url(evil)",size:"100px",align:"center;color:red",color:"url(evil)"}},"title");
+    assert.notOk(bad.includes("evil")); assert.notOk(bad.includes("color:red"));
+});
+
+QUnit.test("mounted video typography controls edit independent draft previews and restore after tab return", async assert => {
+    const target=document.createElement("div"); document.body.appendChild(target);
+    const data=payload(),calls=[];
+    data.descriptionLayout={version:1,enabled:true,blocks:[{id:"principal",type:"main"},
+        {id:"v1",type:"video",url:"https://youtu.be/abcdefghijk",caption:"Leyenda original",title:"Título guardado",
+            titleStyle:{font:"body",size:31,bold:true,italic:false,align:"center",color:"auto"}},
+        {id:"v2",type:"video",url:"https://youtu.be/12345678901",caption:"Otro vídeo"}]};
+    const saved=copy(data.descriptionLayout);
+    const app=new App(ProductIntelligenceAction,{templates,test:true,
+        props:{action:{params:{product_tmpl_id:1},context:{}}},
+        env:{services:{user:{context:{allowed_company_ids:[2]}},notification:{add(){}},action:{doAction(){}},rpc:async route=>{
+            calls.push(route);if(route.endsWith("/data"))return data;if(route.endsWith("/description_media/list"))return {media:[]};throw new Error("Unexpected request: "+route);
+        }}}});
+    try{
+        const a=await app.mount(target);await a.selectDetailSection("content");await patch();
+        const tabs=()=>target.querySelectorAll('.bpi-description-mode [role="tab"]');tabs()[1].click();await patch();await patch();
+        const video=()=>target.querySelector('.bpi-design-block.is-video');
+        const field=name=>video().querySelector(`[data-video-text="${name}"]`);
+        const change=(el,value)=>{el.value=value;el.dispatchEvent(new Event("change",{bubbles:true}));};
+        assert.strictEqual(field("title").querySelector('[data-text-style="font"]').value,"body");
+        assert.strictEqual(field("title").querySelector('[data-text-style="size"]').value,"31");
+        assert.deepEqual(a.descriptionLayout(),saved,"opening and loading media does not add styles or rewrite captions");
+        const title=field("title").querySelector('input[type="text"]');title.value="<b>Título de prueba</b>";title.dispatchEvent(new Event("input",{bubbles:true}));
+        change(field("title").querySelector('[data-text-style="font"]'),"display");
+        change(field("title").querySelector('[data-text-style="size"]'),"40");
+        change(field("caption").querySelector('[data-text-style="size"]'),"18");
+        change(field("caption").querySelector('[data-text-style="align"]'),"right");
+        change(field("caption").querySelector('[data-text-style="color"]'),"green");
+        field("caption").querySelector('button[aria-label^="Cursiva"]').click();await patch();
+        const heading=video().querySelector('.bpi-layout__video-title'),caption=video().querySelector('.bpi-layout__video-caption');
+        assert.strictEqual(heading.textContent,"<b>Título de prueba</b>");assert.notOk(heading.querySelector("b"),"title remains escaped text");
+        assert.strictEqual(heading.style.fontSize,"40px");assert.ok(heading.style.fontFamily.includes("--bader-font-display"));
+        assert.strictEqual(caption.style.fontSize,"18px");assert.strictEqual(caption.style.fontStyle,"italic");assert.strictEqual(caption.style.textAlign,"right");
+        assert.deepEqual(a.descriptionLayout().blocks[2],saved.blocks[2],"other video's text stays unchanged");
+        const size=field("caption").querySelector('[data-text-style="size"]');change(size,"999");assert.strictEqual(size.value,"18");
+        tabs()[0].click();await patch();tabs()[1].click();await patch();await patch();
+        assert.strictEqual(field("title").querySelector('[data-text-style="size"]').value,"40");
+        assert.strictEqual(field("caption").querySelector('[data-text-style="align"]').value,"right");
+        assert.strictEqual(field("caption").querySelector('button[aria-label^="Cursiva"]').getAttribute("aria-pressed"),"true");
+        assert.deepEqual(data.descriptionLayout,saved,"server snapshot is unchanged");
+        assert.ok(calls.every(route=>/\/(data|list)$/.test(route)),"no generation, publication or save RPC");
+    }finally{app.destroy();target.remove();}
+});

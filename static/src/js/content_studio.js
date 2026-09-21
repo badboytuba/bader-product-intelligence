@@ -400,6 +400,40 @@ export const contentStudioMethods = {
         finally { if (this.isRequestCurrent(request)) this.state.descriptionMediaBusy = false; }
     },
     setDescriptionVideoWidth(id, value) { this.updateDescriptionBlock(id, "videoWidth", Number(value)); },
+    descriptionVideoTextStyle(block, field) {
+        return { font: field === "title" ? "display" : "body", size: field === "title" ? 28 : 14,
+            bold: false, italic: false, align: "inherit", color: "auto", ...(block[field + "Style"] || {}) };
+    },
+    setDescriptionVideoTextStyle(id, field, property, value) {
+        if (!["title", "caption"].includes(field)) return;
+        const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
+        if (!block || block.type !== "video") return;
+        const style = this.descriptionVideoTextStyle(block, field);
+        if (property === "size") {
+            value = Number(value);
+            if (!Number.isInteger(value) || value < 12 || value > 64) return;
+        }
+        this.updateDescriptionBlock(id, field + "Style", { ...style, [property]: value });
+    },
+    setDescriptionVideoTextSize(id, field, ev) {
+        const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
+        if (!block) return;
+        const value = Number(ev.target.value);
+        if (!Number.isInteger(value) || value < 12 || value > 64) {
+            ev.target.value = this.descriptionVideoTextStyle(block, field).size;
+            this.notification.add("Usa un tamaño de 12 a 64 px.", { type: "warning" });
+            return;
+        }
+        this.setDescriptionVideoTextStyle(id, field, "size", value);
+    },
+    descriptionVideoTextCss(block, field) {
+        const style = this.descriptionVideoTextStyle(block, field);
+        const font = style.font === "display" ? "var(--bader-font-display)" : "var(--bader-font-body)";
+        const size = Number.isInteger(style.size) && style.size >= 12 && style.size <= 64 ? style.size : 14;
+        const align = ["inherit", "left", "center", "right"].includes(style.align) ? style.align : "inherit";
+        const color = ({ auto: "inherit", petrol: "#003841", green: "#2f7d32" })[style.color] || "inherit";
+        return `font-family:${font};font-size:${size}px;font-weight:${style.bold ? 700 : 400};font-style:${style.italic ? "italic" : "normal"};text-align:${align};color:${color}`;
+    },
     chooseDescriptionPoster(id, value) { this.updateDescriptionBlock(id, "posterMediaId", Number(value) || false); },
     descriptionVideoStyle(block) {
         const media = this.descriptionMediaById(block.mediaId);

@@ -1,3 +1,13 @@
+## 2026-09-21 — Video titles and independent typography
+
+Release `16.0.1.13.3` adds optional video titles and separate title/caption style
+controls (official local Bader fonts, 12–64 px, emphasis, alignment, brand colors).
+Text remains escaped plain text and styles are server-allowlisted, never free CSS.
+Existing captions/layouts are preserved; no default title is written on upgrade.
+The public Abrir vídeo footer is removed, while cover playback/social fallbacks
+remain accessible. Keep draft-only editing, atomic saves and recursive editor keys.
+QAS only. Read `docs/NANCY_CONTENT_STUDIO.md` before extending this contract.
+
 ## 2026-09-21 — Nested visual editor identity hotfix
 
 Release `16.0.1.13.2` gives each recursive `StudioRichEditor` its globally unique

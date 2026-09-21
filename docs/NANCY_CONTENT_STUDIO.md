@@ -122,3 +122,25 @@ can stall the entire render without raising an error. The backend already
 requires IDs to be globally unique. Regression coverage mounts the full action
 and opens the design tab by DOM click, then edits, reorders, duplicates and removes
 nested text blocks before switching tabs. Saved text/layout are never migrated.
+
+## Video title and caption typography — 16.0.1.13.3
+
+Video blocks optionally accept `title` (plain text, 200 characters) and independent
+`titleStyle` / `captionStyle` objects. The existing `caption` stays plain text up to
+500 characters. Supported style keys: `font` (display/body, official Bader Sans or
+Helvetica), integer `size` (12–64 px), boolean `bold`/`italic`, `align`
+(inherit/left/center/right), `color` (auto/petrol/green). Unknown keys, CSS, HTML
+formatting, remote fonts and invalid types are rejected; text is escaped on render.
+Defaults are read-only until explicitly edited: title display28px, caption body14px,
+normal emphasis, inherited alignment/color. Empty text produces no empty markup.
+
+Title sits above the video; caption sits below, aligned to the configured video
+width. Preview and public projection generate CSS only from these bounded values.
+Bold/italic synthesis is scoped to these two text elements, not global Bader fonts.
+The redundant Abrir vídeo footer is gone; the accessible play button and original
+social-link fallback on non-embeddable networks remain. Opening the editor makes
+no provider/font calls and does not rewrite old text, media or layout records.
+
+Rollback to1.13.2 does not understand the three new optional JSON keys. Preserve
+newly authored title/styles outside the old validator before any downgrade; never
+strip them or restore an old database over operator edits without explicit review.
