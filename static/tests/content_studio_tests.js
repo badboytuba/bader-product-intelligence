@@ -314,3 +314,59 @@ QUnit.test("explicit video poster fetch applies only private draft reference", a
     a.rpc = async (url,params) => { assert.ok(url.endsWith("/video_poster")); assert.strictEqual(params.product_tmpl_id,1); return {media:{id:82,kind:"image",state:"ready"}}; };
     await a.fetchDescriptionPoster(v.id); assert.strictEqual(v.posterMediaId,82); assert.strictEqual(a.state.descriptionMedia.length,1);
 });
+
+QUnit.test("saved nested text siblings open by click and keep independent editor identities", async assert => {
+    const target = document.createElement("div"); document.body.appendChild(target);
+    const data = payload(), calls = [];
+    data.descriptionLayout = { version: 1, enabled: true, blocks: [
+        { id: "principal", type: "main" },
+        { id: "group-a", type: "container", children: [
+            { id: "text-a", type: "text", html: "<p>First</p>" },
+            { id: "text-b", type: "text", html: "<p>Second</p>" },
+        ] },
+        { id: "group-b", type: "container", children: [
+            { id: "inner", type: "container", children: [
+                { id: "text-c", type: "text", html: "<p>Third</p>" },
+                { id: "text-d", type: "text", html: "<p>Fourth</p>" },
+            ] },
+            { id: "pair", type: "columns", children: [
+                { id: "image-a", type: "image" },
+                { id: "text-e", type: "text", html: "<p>Fifth</p>" },
+            ] },
+        ] },
+        { id: "callout-a", type: "callout", html: "<p>Sixth</p>" },
+    ] };
+    const saved = copy(data.descriptionLayout);
+    const app = new App(ProductIntelligenceAction, { templates, test: true,
+        props: { action: { params: { product_tmpl_id: 1 }, context: {} } },
+        env: { services: { user: { context: { allowed_company_ids: [2] } }, notification: { add() {} }, action: { doAction() {} },
+            rpc: async route => { calls.push(route); if (route.endsWith("/data")) return data;
+                if (route.endsWith("/description_media/list")) return { media: [] };
+                throw new Error("No generation or persistence allowed: " + route);
+            } } } });
+    try {
+        const a = await app.mount(target); await a.selectDetailSection("content"); await patch();
+        const tab = name => [...target.querySelectorAll('.bpi-description-mode [role="tab"]')].find(el => el.textContent.includes(name));
+        tab("Diseño Bader").click(); await patch(); await patch();
+        assert.ok(target.querySelector(".bpi-designer"), "saved multi-child containers must not leave an unfinished OWL fiber");
+        assert.strictEqual(tab("Diseño Bader").getAttribute("aria-selected"), "true");
+        const editors = () => [...target.querySelectorAll('.bpi-designer .bpi-studio-rich__surface')];
+        assert.deepEqual(editors().map(el => el.textContent), ["First", "Second", "Third", "Fourth", "Fifth", "Sixth"]);
+        assert.deepEqual(a.descriptionLayout(), saved, "opening does not normalize or overwrite saved layout");
+        if (!editors().length) return; // Fail clearly rather than dereferencing a missing editor on regression.
+        editors()[1].innerHTML = "<p>Edited second</p>";
+        editors()[1].dispatchEvent(new Event("input", { bubbles: true })); await patch();
+        assert.strictEqual(a.descriptionLayout().blocks[1].children[0].html, "<p>First</p>");
+        assert.strictEqual(a.descriptionLayout().blocks[1].children[1].html, "<p>Edited second</p>");
+        a.moveDescriptionBlock("text-b", -1); await patch();
+        assert.deepEqual(editors().slice(0, 2).map(el => el.textContent), ["Edited second", "First"]);
+        a.duplicateDescriptionBlock("text-a"); await patch();
+        assert.strictEqual(editors().length, 7, "duplicate gets an independent component key");
+        a.removeDescriptionBlock("text-d"); await patch(); assert.strictEqual(editors().length, 6);
+        const draft = copy(a.descriptionLayout());
+        tab("Texto").click(); await patch(); tab("Diseño Bader").click(); await patch(); await patch();
+        assert.strictEqual(editors().length, 6); assert.deepEqual(a.descriptionLayout(), draft, "switching tabs retains nested edits");
+        assert.deepEqual(data.descriptionLayout, saved, "server snapshot remains unchanged");
+        assert.ok(calls.every(route => /\/(data|list)$/.test(route)), "only local read requests");
+    } finally { app.destroy(); target.remove(); }
+});

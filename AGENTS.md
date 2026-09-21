@@ -1,3 +1,13 @@
+## 2026-09-21 — Nested visual editor identity hotfix
+
+Release `16.0.1.13.2` gives each recursive `StudioRichEditor` its globally unique
+block ID as an explicit OWL component key. Without it, two text children in a
+container can leave rendering pending forever: clicking Diseño Bader changes
+state but never displays the editor, without a console or server exception.
+Keep the explicit key and test real DOM tab clicks, multiple nested siblings,
+independent edits, reorder/duplicate/remove and tab re-entry. No data migration,
+layout cleanup or description regeneration is needed. QAS only.
+
 ## 2026-09-19 — Video covers and responsive sizing
 
 Release `16.0.1.13.1` adds product-owned private video posters, bounded width and

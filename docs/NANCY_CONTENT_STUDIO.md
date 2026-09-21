@@ -112,3 +112,13 @@ public gates, retention and deletion checks. Apply/save remain explicit.
 Playback starts only on the visitor's play click. YouTube iframe sends origin-only
 cross-site Referer rather than suppressing identity, following
 [official embedded-player requirements](https://developers.google.com/youtube/terms/required-minimum-functionality).
+
+## Nested editor identity — 16.0.1.13.2
+
+Every rich editor inside recursive DescriptionBlock has an explicit block-ID
+component key. Odoo 16 OWL does not preserve the enclosing loop identity across
+recursive t-call boundaries; without the explicit key, multiple nested editors
+can stall the entire render without raising an error. The backend already
+requires IDs to be globally unique. Regression coverage mounts the full action
+and opens the design tab by DOM click, then edits, reorders, duplicates and removes
+nested text blocks before switching tabs. Saved text/layout are never migrated.
