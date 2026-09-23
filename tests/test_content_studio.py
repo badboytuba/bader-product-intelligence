@@ -510,3 +510,58 @@ class TestBPIContentStudio(TransactionCase):
             self.assertEqual(request.call_count, 1)
             self.assertNotIn(MODEL, str(error.exception))
             self.assertNotIn('OpenAI', str(error.exception))
+
+    def test_reuse_strategy_is_independent_and_copies_only_reviewed_brief(self):
+        self.add_text('Investigación del producto de origen.')
+        brief = dict(self.session.brief, intent='Ayudar a elegir', shortFocus='Qué es y para quién', longFocus='Explicar hechos revisados')
+        self.service._studio_save_brief(self.product.id, self.session.id, self.session.revision, brief)
+        before = (self.product.bpi_ai_generated_description, self.other.bpi_ai_generated_description)
+        options = self.service._studio_strategy_options(self.other.id, 'BPI-STUDIO/001')['strategies']
+        option = next(row for row in options if row['id'] == self.session.id)
+        self.assertNotIn('sources', option)
+        result = self.service._studio_reuse_strategy(self.other.id, self.session.id, option['revision'], option['brief'], reviewed=True)
+        new = result['session']
+        self.assertNotEqual(new['id'], self.session.id)
+        self.assertEqual(new['productId'], self.other.id)
+        self.assertEqual(new['brief'], brief)
+        self.assertFalse(new['messages'])
+        self.assertFalse(new['sources'])
+        self.assertFalse(new['proposals'])
+        self.assertEqual(before, (self.product.bpi_ai_generated_description, self.other.bpi_ai_generated_description))
+        self.assertFalse(self.env['bpi.content.studio.session'].browse(new['id']).initial_intent)
+
+    def test_reuse_rejects_unreviewed_stale_sku_and_measurements(self):
+        brief = dict(self.session.brief)
+        with self.assertRaises(ValidationError):
+            self.service._studio_reuse_strategy(self.other.id, self.session.id, self.session.revision, brief)
+        with self.assertRaises(UserError):
+            self.service._studio_reuse_strategy(self.other.id, self.session.id, self.session.revision - 1, brief, reviewed=True)
+        for value in ('Largo: 13 cm', 'Peso 75 g', self.product.default_code):
+            with self.assertRaises(ValidationError):
+                self.service._studio_reuse_strategy(self.other.id, self.session.id, self.session.revision, dict(brief, intent=value), reviewed=True)
+        with self.assertRaises(ValidationError):
+            self.service._studio_reuse_strategy(self.other.id, self.session.id, self.session.revision, dict(brief, sources=[]), reviewed=True)
+
+    def test_strategy_library_permissions_and_company_scope(self):
+        with self.assertRaises(AccessError):
+            self.service.with_user(self.non_manager)._studio_strategy_options(self.product.id)
+        with self.assertRaises(AccessError):
+            self.service.with_user(self.non_manager)._studio_reuse_strategy(self.other.id, self.session.id, self.session.revision, self.session.brief, True)
+        company = self.env['res.company'].create({'name': 'Private Studio strategies'})
+        self.service.env.user.write({'company_ids': [(4, company.id)]})
+        hidden_product = self.env['product.template'].create({'name': 'Foreign product', 'company_id': company.id})
+        hidden = self.service.with_context(allowed_company_ids=company.ids)._studio_open(hidden_product.id)['session']
+        available = self.service._studio_strategy_options(self.product.id)['strategies']
+        self.assertNotIn(hidden['id'], [row['id'] for row in available])
+        with self.assertRaises(AccessError):
+            self.service._studio_reuse_strategy(self.product.id, hidden['id'], hidden['revision'], hidden['brief'], True)
+
+    def test_prompt_explains_variant_identifiers_and_operator_review(self):
+        job = self.start()
+        with patch.object(type(self.service), '_studio_post', return_value=self.response()) as provider:
+            self.service._studio_generate(self.session, job.studio_request)
+        instructions = provider.call_args.args[0][0]['content'][0]['text']
+        self.assertIn('product.template', instructions)
+        self.assertIn('product.product', instructions)
+        self.assertIn('Revisar como fuente', instructions)
+        self.assertIn('no heredes sus conflictos', instructions)

@@ -34,6 +34,14 @@ class ContentStudioController(http.Controller):
     def open_studio(self, product_tmpl_id, session_id=False, new_session=False, **kw):
         return self._service()._studio_open(product_tmpl_id, session_id, new_session)
 
+    @http.route('/bader_product_intelligence/content_studio/strategies', type='json', auth='user')
+    def strategies(self, product_tmpl_id, search='', **kw):
+        return self._service()._studio_strategy_options(product_tmpl_id, search)
+
+    @http.route('/bader_product_intelligence/content_studio/reuse_strategy', type='json', auth='user')
+    def reuse_strategy(self, product_tmpl_id, source_session_id, source_revision, brief, reviewed=False, **kw):
+        return self._service()._studio_reuse_strategy(product_tmpl_id, source_session_id, source_revision, brief, reviewed)
+
     @http.route('/bader_product_intelligence/content_studio/activate', type='json', auth='user')
     def activate(self, product_tmpl_id, **kw):
         return self._service()._studio_activate(product_tmpl_id)

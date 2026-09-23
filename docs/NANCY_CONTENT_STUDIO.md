@@ -144,3 +144,34 @@ no provider/font calls and does not rewrite old text, media or layout records.
 Rollback to1.13.2 does not understand the three new optional JSON keys. Preserve
 newly authored title/styles outside the old validator before any downgrade; never
 strip them or restore an old database over operator edits without explicit review.
+
+## Clear chat outcomes and reusable strategies — 16.0.1.13.4
+
+User message paragraphs and timestamps inherit the white foreground on the dark
+Bader bubble. A completed chat-only turn explicitly says that no proposal was
+created; it no longer leaves the preparing notice. Only the operator's requested
+job may open its new non-stale proposal automatically, and only while the preview
+and brief remain untouched. Other/newer proposals use the explicit version
+selector. Detect new IDs rather than array length (history is capped at30).
+
+**Revisar como fuente** copies a user message into the local source draft, without
+calling AI or approving facts. The operator trims unrelated text, adds the source,
+selects pertinent excerpts and explicitly confirms them. A source may be researched
+information supplied by an administrator; it is not falsely described as an
+independent verification. Existing source notes cannot be silently replaced.
+
+**Reutilizar estrategia** explicitly lists up to30 strategies from other accessible
+products, searchable by product/SKU. The operator reviews/edits only objective,
+tone, audiences, intent and short/long focus. Confirming creates an independent
+conversation on the destination product. No initial message, history, proposals,
+files, sources or product facts are copied; the destination category recipe and
+saved dimensions remain authoritative. Source revisions and company/admin access
+are checked; source SKUs and physical measurements in the reusable brief are
+rejected. General prose still requires operator review to remove product-specific
+claims. Unsaved current Studio work must be saved/applied or explicitly discarded.
+
+The generation instructions explain that template IDs and variant IDs occupy
+different Odoo namespaces. They must never be treated as a technical conflict
+simply because their numbers differ. Historical proposal warnings are not evidence
+and must not be inherited without checking current facts. These instructions are
+covered with controlled tests, not a claim of live paid-model validation.

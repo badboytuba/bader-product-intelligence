@@ -81,7 +81,11 @@
   .bpi-studio-message { padding: 15px 17px; margin: 12px 0; border-radius: 13px; border: 1px solid var(--studio-line); overflow-wrap: anywhere;
     header { display: flex; gap: 10px; justify-content: space-between; font-size: 10px; small { font-size: 9px; opacity: .8; } }
     p { font-size: 12px; line-height: 1.8; margin: 9px 0 0; white-space: pre-wrap; }
-    &.is-user { margin-left: 30px; background: var(--studio-ink); color: white; border-color: var(--studio-ink); }
+    &.is-user { margin-left: 30px; background: var(--studio-ink); color: white; border-color: var(--studio-ink);
+      // Native BPI paragraph/date colors override inherited white otherwise.
+      > p, > header small { color: inherit; }
+      > button { margin-top: 12px; color: white; background: transparent; border: 1px solid #a0c4c6; border-radius: 8px; padding: 8px 12px; font-size: 11px; }
+    }
     &.is-nancy { margin-right: 15px; background: white; }
   }
   .bpi-studio__composer { margin-top: 12px; border: 1px solid #8eb6b2; border-radius: 12px; padding: 13px; background: white; box-shadow: 0 4px 18px rgba(0, 55, 62, .04);
@@ -210,4 +214,13 @@
   &__tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 12px; label { display: grid; gap: 5px; font-size: 11px; color: var(--bader-muted); min-width: 90px; flex: 1; } select, input { min-width: 0; width: 100%; padding: 8px; height: 38px; font-size: 12px; } }
   &__emphasis { display: flex; gap: 4px; button { width: 38px; height: 38px; border: 1px solid var(--bader-line); border-radius: 6px; background: white; color: var(--bader-ink); &[aria-pressed=true] { background: var(--bader-ink); color: white; } &:focus-visible { outline: 2px solid var(--bader-green-action); outline-offset: 2px; } } }
   @media (max-width: 575px) { &__field { padding: 12px; } &__tools label { flex: 1 1 90px; } }
+}
+
+.bpi-app.bader-brand .bpi-studio__reuse {
+  margin: 14px 22px; padding: 16px; border: 1px solid #b2cfcc; border-radius: 12px;
+  background: white; overflow: auto; max-height: 65vh; flex-shrink: 0;
+  h3 { font-size: 16px; } p { font-size: 12px; margin: 8px 0; }
+  .bpi-studio__reuse-search { display: flex; gap: 8px; margin: 10px 0; }
+  label { display: block; } textarea, select { width: 100%; }
+  .bpi-studio__reuse-check { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0; font-size: 12px; }
 }

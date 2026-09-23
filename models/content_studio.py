@@ -621,13 +621,56 @@ class StudioService(models.AbstractModel):
         return self._studio_envelope(session)
 
     @api.model
-    def _studio_save_brief(self, product_id, session_id, revision, brief):
-        session = self._studio_session(product_id, session_id)
-        session._lock(revision)
+    def _studio_strategy_options(self, product_id, search=''):
+        product = self._meli_product(product_id)
+        term = text_value(search, 100)
+        domain = [('product_tmpl_id', '!=', product.id),
+                  '|', ('company_id', '=', False), ('company_id', 'in', self.env.companies.ids)]
+        if term:
+            domain += ['|', '|', ('name', 'ilike', term), ('product_tmpl_id.name', 'ilike', term),
+                       ('product_tmpl_id.product_variant_ids.default_code', 'ilike', term)]
+        sessions = self.env['bpi.content.studio.session'].search(domain, limit=30)
+        allowed = set(self.env['bpi.taxonomy.term'].search([
+            ('axis', '=', 'niche'), ('state', '=', 'approved'), ('active', '=', True)]).ids)
+        options = []
+        for session in sessions:
+            session._studio_check()
+            brief = {key: value for key, value in (session.brief or {}).items()
+                     if key in ('objective', 'tone', 'intent', 'shortFocus', 'longFocus', 'nicheIds')}
+            brief['nicheIds'] = [i for i in brief.get('nicheIds', []) if i in allowed]
+            options.append({'id': session.id, 'revision': session.revision, 'name': session.name,
+                            'productName': session.product_tmpl_id.name,
+                            'sku': session.product_tmpl_id.default_code or '', 'brief': brief})
+        return {'strategies': options}
+
+    @api.model
+    def _studio_reuse_strategy(self, product_id, source_session_id, source_revision, brief, reviewed=False):
+        product = self._meli_product(product_id)
+        source = self.env['bpi.content.studio.session'].browse(integer(source_session_id)).exists()
+        if not source:
+            raise MissingError(_('Estrategia no encontrada.'))
+        source._studio_check()
+        source._lock(source_revision)
+        if reviewed is not True:
+            raise ValidationError(_('Revisa las orientaciones antes de reutilizarlas en otro producto.'))
+        clean = self._studio_clean_brief(brief)
+        combined = ' '.join(clean[key] for key in ('tone', 'intent', 'shortFocus', 'longFocus'))
+        source_skus = source.product_tmpl_id.product_variant_ids.mapped('default_code')
+        if any(sku and normalized(sku) in normalized(combined) for sku in source_skus):
+            raise ValidationError(_('Quita el SKU del producto de origen. Reutiliza solo orientaciones generales.'))
+        if re.search(r'\b\d+(?:[.,]\d+)?\s*(?:mm|cm|kg|gr|g)\b', combined, re.I):
+            raise ValidationError(_('Quita medidas y pesos de la estrategia. Se utilizarán los datos guardados del producto de destino.'))
+        session = self.env['bpi.content.studio.session'].create({
+            'product_tmpl_id': product.id, 'name': _('Estrategia — %s') % product.name[:100], 'brief': clean})
+        # No messages, sources, proposals, initial user message or product values
+        # are copied. The category recipe is resolved on the destination product.
+        return self._studio_envelope(session)
+
+    @api.model
+    def _studio_clean_brief(self, brief):
         if not isinstance(brief, dict) or set(brief) - {'objective', 'tone', 'intent', 'shortFocus', 'longFocus', 'nicheIds'}:
             raise ValidationError(_('Las orientaciones del Studio no son válidas.'))
-        clean = dict(session.brief or {})
-        clean.update(brief)
+        clean = dict(brief)
         if clean.get('objective') not in ('consultivo', 'tecnico', 'educativo', 'comercial'):
             raise ValidationError(_('Selecciona un objetivo comercial válido.'))
         for key in ('intent', 'shortFocus', 'longFocus', 'tone'):
@@ -640,6 +683,15 @@ class StudioService(models.AbstractModel):
         if set(terms.ids) != set(ids):
             raise ValidationError(_('Selecciona solo nichos aprobados.'))
         clean['nicheIds'] = ids
+        return clean
+
+    @api.model
+    def _studio_save_brief(self, product_id, session_id, revision, brief):
+        session = self._studio_session(product_id, session_id)
+        session._lock(revision)
+        if not isinstance(brief, dict) or set(brief) - {'objective', 'tone', 'intent', 'shortFocus', 'longFocus', 'nicheIds'}:
+            raise ValidationError(_('Las orientaciones del Studio no son válidas.'))
+        clean = self._studio_clean_brief({**(session.brief or {}), **brief})
         if clean != session.brief:
             session.write({'brief': clean})
             session._bump()
@@ -831,6 +883,10 @@ La intención inicial del brief sigue vigente en toda la conversación. Conversa
 Prosa humana, útil, natural y específica en español argentino; coma decimal y unidades correctas. No repitas el título del producto.
 No incluyas descargos burocráticos ("según los datos guardados", "no tenemos información específica", "no se cuenta con datos confirmados") en HTML o metadatos; dudas SOLO en warnings privados. Omite secciones sin sustento. No rellenes para cumplir mínimos de palabras.
 Corta cerca de compra; larga útil y estructurada. HTML solo h3,p,ul,ol,li,strong,em,br. Sin enlaces, scripts, estilos, multimedia o Markdown.
+Los identificadores son técnicos, no evidencia comercial: productId es product.template; los IDs spec:<variantId>:<campo> usan product.product. Es normal que difieran. Los hechos guardados ya están vinculados por Odoo; nunca declares un conflicto comparando esos números.
+Las propuestas anteriores pueden contener errores: no heredes sus conflictos sin comprobarlos contra la evidencia ACTUAL. Una diferencia con prosa histórica descartada es una nota privada, no un bloqueo por sí sola.
+Ante una petición de generar o mejorar, produce una propuesta útil con los hechos disponibles, aunque debas omitir afirmaciones no respaldadas. No centres la corta en el SKU ni rellenes con identificación repetida: prioriza qué es y los usos confirmados. No prometas retornos o superioridad sin respaldo.
+Si faltan datos proporcionados en el chat, indica al operador el botón «Revisar como fuente», seleccionar fragmentos y «Confirmar datos seleccionados». No exijas obligatoriamente un PDF: los datos investigados y revisados explícitamente por el administrador también son fuentes, no verificación externa independiente.
 Incluye en specificationIds TODOS los IDs spec: guardados pertinentes. El servidor añadirá los valores literales y unidades. No transcribas/recalcules medidas en prosa si no es esencial.
 Metadatos SEO/GEO son propuestas, no ranking real. Keywords naturales sin stuffing. Nunca reveles nombres técnicos de proveedores o motores, siempre Nancy AI.
 Si la última petición solo necesita aclaración, usa reply y deja hasProposal=false, sin borrar una propuesta anterior.'''

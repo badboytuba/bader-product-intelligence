@@ -49,6 +49,8 @@ export function emptyContentStudio() {
         proposalId: false, preview: { descriptionHtml: "", technicalDescriptionHtml: "", seoData: {} },
         selected: { short: true, long: true, seo: true, geo: true }, replaceChanged: false, closeConfirm: false,
         savedBrief: "", briefConflict: false, savedPreview: "", pendingProposals: false,
+        awaitedJobId: false, generationPreview: "", generationProposalId: false,
+        reuseOpen: false, reuseSearch: "", reuseOptions: [], reuseId: "", reuseBrief: null, reuseReviewed: false,
     };
 }
 
@@ -71,9 +73,9 @@ export const contentStudioMethods = {
         const message = this.errorMessage(error, fallback);
         return /(?:openai|gpt[- ]|astra|reasoning[._ ]effort)/i.test(message) ? fallback : message;
     },
-    studioHasLocalChanges() {
+    studioHasLocalChanges({ ignoreReuse = false } = {}) {
         const studio = this.state.contentStudio;
-        return !!studio?.session && (!!studio.input.trim() || !!studio.sourceText.trim() || !!studio.sourceUrl.trim() ||
+        return !!studio?.session && ((!ignoreReuse && !!studio.reuseBrief) || !!studio.input.trim() || !!studio.sourceText.trim() || !!studio.sourceUrl.trim() ||
             JSON.stringify(studio.brief) !== studio.savedBrief ||
             (studio.savedPreview && JSON.stringify(studio.preview) !== studio.savedPreview));
     },
@@ -99,7 +101,7 @@ export const contentStudioMethods = {
         if (previous && previous.id === envelope.session.id && envelope.session.revision < previous.revision) return null;
         if (previous && previous.id !== envelope.session.id) {
             studio.proposalId = false; studio.preview = emptyContentStudio().preview; studio.savedPreview = "";
-            studio.compareId = ""; studio.pendingProposals = false; studio.replaceChanged = false;
+            studio.compareId = ""; studio.pendingProposals = false; studio.replaceChanged = false; studio.awaitedJobId = false;
         }
         studio.session = envelope.session;
         studio.sessions = envelope.sessions || studio.sessions;
@@ -119,7 +121,23 @@ export const contentStudioMethods = {
         const proposals = envelope.session.proposals || [];
         if (proposal && proposals.length) this.studioSelectProposal(proposals[0].id);
         else if (proposals.length && proposals[0].id !== studio.proposalId &&
-            (previous?.proposals || []).length < proposals.length) studio.pendingProposals = true;
+            !(previous?.proposals || []).some(row => row.id === proposals[0].id)) studio.pendingProposals = true;
+        const job = envelope.session.job;
+        if (job && job.id === studio.awaitedJobId && ["done", "failed", "cancelled"].includes(job.state)) {
+            studio.awaitedJobId = false;
+            const generated = proposals.find(row => row.id === job.resultPayload?.proposalId);
+            if (generated) {
+                const untouched = JSON.stringify(studio.preview) === studio.generationPreview && studio.proposalId === studio.generationProposalId &&
+                    JSON.stringify(studio.brief) === studio.savedBrief && !studio.briefConflict;
+                if (untouched && !generated.stale) this.studioSelectProposal(generated.id);
+                studio.notice = untouched && !generated.stale ? "Nueva propuesta lista en la previa. Revísala; la ficha no se ha guardado." : "Nueva propuesta disponible. Conservamos tus ediciones; ábrela cuando termines de revisarlas.";
+            } else if (job.state === "done") {
+                studio.notice = "Nancy respondió en el chat, sin crear una nueva propuesta. La previa anterior no cambió. Si aportaste datos técnicos, usa Revisar como fuente.";
+            } else {
+                studio.error = "Nancy AI no pudo completar esta solicitud. Conservamos la previa y tus borradores. No se repitió automáticamente.";
+                studio.notice = "";
+            }
+        }
         return envelope;
     },
     studioChooseSession(ev) { return this.openContentStudio(false, Number(ev.target.value)); },
@@ -159,6 +177,7 @@ export const contentStudioMethods = {
     studioDiscardLocal() {
         const s = this.state.contentStudio;
         if (!s) return;
+        s.reuseBrief = null; s.reuseReviewed = false;
         s.brief = JSON.parse(s.savedBrief || "{}"); s.briefConflict = false; s.input = ""; s.sourceText = ""; s.sourceUrl = "";
         if (s.savedPreview) s.preview = JSON.parse(s.savedPreview);
         s.notice = "Cambios locales del Studio descartados. La ficha y el historial no se modificaron.";
@@ -230,16 +249,84 @@ export const contentStudioMethods = {
         if (text.length > 12000) { s.error = "Resume tu mensaje a 12.000 caracteres. Puedes adjuntar textos extensos como fuente."; return; }
         if (JSON.stringify(s.brief) !== s.savedBrief && !(await this.studioSaveBrief())) return;
         const before = s.input;
+        s.generationPreview = JSON.stringify(s.preview); s.generationProposalId = s.proposalId;
         this.studioDraftBaseline = this.captureDrafts();
         const result = await this.studioMutation("start", { message: text, request_key: uid(), draft: s.proposalId ? this.studioPreviewPayload() : undefined }, { failure: "Nancy AI no pudo iniciar la propuesta. Revisa las fuentes, la disponibilidad y si otro operador modificó esta conversación; no se ha repetido ninguna generación." });
         if (result) {
             if (s.input === before) s.input = "";
             if (result.job && !s.session.job) s.session.job = result.job;
-            s.notice = "Nancy AI está preparando una propuesta. Puedes seguir escribiendo; nada se guardará en la ficha.";
+            s.awaitedJobId = result.job?.id || s.session.job?.id;
+            s.notice = "Nancy AI está trabajando en tu solicitud. Nada se guardará en la ficha.";
             this.scheduleStudioPoll();
         }
     },
     onStudioMessageKeydown(ev) { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); this.studioSend(); } },
+    studioOutcome() {
+        const s = this.state.contentStudio, job = s.session?.job;
+        if (job?.state === "failed") return "La última solicitud falló. Tus borradores se conservan; no se repitió automáticamente.";
+        if (!job || job.state !== "done") return "";
+        if (job.resultPayload?.sourceId) return "Fuente analizada: revisa sus datos antes de generar.";
+        if (job.resultPayload?.proposalId) {
+            const current = job.resultPayload.proposalId === s.proposalId;
+            return current ? "Estás revisando la propuesta de la última solicitud." : "La última solicitud creó otra propuesta. Usa el selector de versión para revisarla.";
+        }
+        return "Última solicitud: respuesta en el chat, sin nueva propuesta. " + (s.proposalId ? "La previa sigue mostrando una versión anterior." : "Todavía no hay una propuesta para aplicar.");
+    },
+    studioMessageAsSource(message) {
+        const s = this.state.contentStudio;
+        if (message.role !== "user" || s.busy || this.studioJobActive()) return;
+        if (s.sourceText.trim() || s.sourceUrl.trim()) { s.error = "Conserva o borra primero la fuente que estás preparando. No hemos reemplazado tu texto."; return; }
+        s.sourceKind = "text"; s.sourceName = "Información del equipo — " + (message.author || "Operador");
+        s.sourceText = message.content; s.mobileTab = "conversation";
+        s.notice = "Revisa y deja solo los datos de este SKU. Pulsa Añadir fuente y confirma los fragmentos pertinentes. El chat no se aprueba automáticamente.";
+        const panel = this.contentStudioRef?.el?.querySelector(".bpi-studio__sources");
+        if (panel) { panel.open = true; requestAnimationFrame(() => { panel.scrollIntoView({ block: "nearest" }); panel.querySelector("textarea")?.focus(); }); }
+    },
+    async studioOpenReuse() {
+        const s = this.state.contentStudio;
+        if (s.busy || s.loading || this.studioJobActive()) return;
+        s.reuseOpen = !s.reuseOpen;
+        if (s.reuseOpen) await this.studioSearchStrategies();
+    },
+    async studioSearchStrategies() {
+        const s = this.state.contentStudio;
+        if (!s.session || s.busy) return;
+        const request = this.beginRequest("studioStrategies"), id = s.session.id;
+        s.busy = true; s.error = "";
+        try {
+            const data = await this.rpc(STUDIO + "strategies", { product_tmpl_id: request.productId, search: s.reuseSearch });
+            if (this.studioSessionCurrent(request, id)) s.reuseOptions = data.strategies || [];
+        } catch (error) { if (this.studioSessionCurrent(request, id)) s.error = this.studioError(error, "No se pudieron consultar las estrategias."); }
+        finally { if (this.studioSessionCurrent(request, id)) s.busy = false; }
+    },
+    studioChooseReuse(ev) {
+        const s = this.state.contentStudio;
+        if (s.reuseBrief) { s.error = "Descarta la selección anterior antes de elegir otra estrategia. Tus ajustes se conservan."; return; }
+        s.reuseId = ev.target.value;
+        const source = s.reuseOptions.find(row => String(row.id) === s.reuseId);
+        s.reuseBrief = source ? { ...emptyContentStudio().brief, ...clone(source.brief) } : null;
+        s.reuseReviewed = false;
+    },
+    studioResetReuse() { const s = this.state.contentStudio; s.reuseId = ""; s.reuseBrief = null; s.reuseReviewed = false; },
+    async studioReuseStrategy() {
+        const s = this.state.contentStudio;
+        if (!s.reuseBrief || !s.reuseReviewed || s.busy || s.loading || this.studioJobActive()) return;
+        if (this.studioHasLocalChanges({ ignoreReuse: true })) { s.error = "Guarda o descarta tus cambios actuales del Studio antes de crear otra estrategia. La ficha conserva sus borradores."; return; }
+        const source = s.reuseOptions.find(row => String(row.id) === s.reuseId);
+        if (!source) return;
+        const request = this.beginRequest("studioReuse"), id = s.session.id;
+        this.beginRequest("studioPoll");
+        s.busy = true; s.error = "";
+        try {
+            const result = await this.rpc(STUDIO + "reuse_strategy", { product_tmpl_id: request.productId,
+                source_session_id: source.id, source_revision: source.revision, brief: clone(s.reuseBrief), reviewed: true });
+            if (!this.studioSessionCurrent(request, id)) return;
+            this.studioEnvelope(result, { brief: true, proposal: true });
+            this.studioResetReuse(); s.reuseOpen = false;
+            s.notice = "Estrategia independiente creada. No se copiaron fuentes, conversaciones ni descripciones. Revisa los públicos y añade los datos de este producto antes de generar.";
+        } catch (error) { if (this.studioSessionCurrent(request, id)) s.error = this.studioError(error, "No se pudo reutilizar la estrategia. Revisa las orientaciones y vuelve a consultar si cambió el origen."); }
+        finally { if (this.isRequestCurrent(request)) s.busy = false; }
+    },
     async studioAddSource() {
         const s = this.state.contentStudio, kind = s.sourceKind;
         const original = kind === "url" ? s.sourceUrl : s.sourceText;

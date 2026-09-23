@@ -431,3 +431,75 @@ QUnit.test("mounted video typography controls edit independent draft previews an
         assert.ok(calls.every(route=>/\/(data|list)$/.test(route)),"no generation, publication or save RPC");
     }finally{app.destroy();target.remove();}
 });
+
+QUnit.test("own completed job opens new proposal only while preview is untouched", assert => {
+    const a = action(), s = a.state.contentStudio;
+    s.awaitedJobId = 99; s.generationPreview = JSON.stringify(s.preview); s.generationProposalId = s.proposalId;
+    const next = envelope([proposal(11), proposal(10)]);
+    next.session.job = { id: 99, state: "done", resultPayload: { proposalId: 11 } };
+    a.studioEnvelope(next);
+    assert.strictEqual(s.proposalId, 11); assert.notOk(s.pendingProposals);
+    assert.ok(s.notice.includes("Nueva propuesta lista")); assert.notOk(s.awaitedJobId);
+    assert.strictEqual(a.state.contentForm.description, "<p>Guardado</p>", "preview never saves fiche");
+    s.awaitedJobId = 100; s.generationPreview = JSON.stringify(s.preview); s.generationProposalId = 11;
+    s.preview.descriptionHtml = "Manual during generation";
+    const later = envelope([proposal(12), proposal(11), proposal(10)]);
+    later.session.job = { id: 100, state: "done", resultPayload: { proposalId: 12 } };
+    a.studioEnvelope(later);
+    assert.strictEqual(s.preview.descriptionHtml, "Manual during generation");
+    assert.strictEqual(s.proposalId, 11); assert.ok(s.pendingProposals);
+});
+
+QUnit.test("chat-only completion stops preparing notice and never pretends new copy exists", assert => {
+    const a = action(), s = a.state.contentStudio;
+    s.awaitedJobId = 99; s.notice = "Preparando";
+    const next = envelope([proposal(10)]);
+    next.session.job = { id: 99, state: "done", resultPayload: { proposalId: false } };
+    a.studioEnvelope(next);
+    assert.strictEqual(s.proposalId, 10);
+    assert.ok(s.notice.includes("sin crear una nueva propuesta"));
+    assert.ok(a.studioOutcome().includes("sin nueva propuesta"));
+});
+
+QUnit.test("bounded history detects new IDs even when the count stays thirty", assert => {
+    const a = action();
+    const history = Array.from({length:30}, (_,i) => proposal(100-i));
+    a.studioEnvelope(envelope(history), {proposal:true});
+    a.studioEnvelope(envelope([proposal(101), ...history.slice(0,29)]));
+    assert.ok(a.state.contentStudio.pendingProposals);
+    assert.strictEqual(a.state.contentStudio.proposalId, 100, "unsolicited proposals don't replace chosen version");
+});
+
+QUnit.test("chat source shortcut is draft-only and preserves unfinished source notes", assert => {
+    const a = action(), s = a.state.contentStudio;
+    a.rpc = () => {throw Error("Must not call provider or approve source");};
+    a.studioMessageAsSource({role:"user",author:"Operador",content:"Dato investigado"});
+    assert.strictEqual(s.sourceText, "Dato investigado"); assert.strictEqual(s.sourceKind, "text");
+    assert.ok(a.studioHasLocalChanges()); assert.strictEqual(s.session.sources.length, 0);
+    a.studioMessageAsSource({role:"user",content:"Otro dato"});
+    assert.strictEqual(s.sourceText, "Dato investigado"); assert.ok(s.error.includes("No hemos reemplazado"));
+});
+
+QUnit.test("strategy reuse requires review and sends only brief to a new conversation", async assert => {
+    const a = action(), s = a.state.contentStudio, calls=[];
+    const brief = {...s.brief,intent:"Una intención general"};
+    s.reuseOptions=[{id:88,revision:4,brief}];
+    a.studioChooseReuse({target:{value:"88"}});
+    a.rpc=async(route,params)=>{calls.push({route,params});const next=envelope();next.session.id=9;next.session.brief=brief;return next;};
+    await a.studioReuseStrategy(); assert.strictEqual(calls.length,0,"requires explicit confirmation");
+    s.reuseReviewed=true;await a.studioReuseStrategy();
+    assert.strictEqual(calls.length,1);assert.ok(calls[0].route.endsWith('/reuse_strategy'));
+    assert.deepEqual(calls[0].params.brief,brief);assert.notOk(calls[0].params.sources);
+    assert.strictEqual(s.session.id,9);assert.notOk(s.proposalId);assert.notOk(s.reuseBrief);
+    assert.strictEqual(a.state.contentForm.description,"<p>Guardado</p>");
+});
+
+QUnit.test("reuse does not discard current preview drafts or late search responses", async assert => {
+    const a=action(),s=a.state.contentStudio;
+    s.reuseOptions=[{id:88,revision:4,brief:s.brief}];a.studioChooseReuse({target:{value:"88"}});s.reuseReviewed=true;
+    s.preview.descriptionHtml="Unsaved preview";let calls=0;a.rpc=async()=>{calls++;};
+    await a.studioReuseStrategy();assert.strictEqual(calls,0);assert.ok(s.error.includes("cambios actuales"));
+    const waiting=later();a.rpc=()=>waiting.promise;const loading=a.studioSearchStrategies();
+    a.state.productId=2;waiting.resolve({strategies:[{id:999}]});await loading;
+    assert.notOk(a.state.contentStudio.reuseOptions.some(row=>row.id===999));
+});

@@ -1,3 +1,14 @@
+## 2026-09-23 — Studio feedback and reusable editorial strategies
+
+Release `16.0.1.13.4` fixes user-message contrast, separates chat-only completion
+from new proposals, and auto-opens only an explicitly requested current proposal
+when local preview/brief are unchanged. Preserve ID-based bounded-history detection.
+Chat-to-source is a draft shortcut, never implicit evidence approval. Strategy
+reuse creates an independent product-owned conversation from reviewed brief fields
+only, with company/revision guards and no files/history/technical facts copied.
+Read `docs/NANCY_CONTENT_STUDIO.md`. Existing product copy and proposals are not
+migrated. QAS only; deployment evidence is separate from source version.
+
 ## 2026-09-21 — Video titles and independent typography
 
 Release `16.0.1.13.3` adds optional video titles and separate title/caption style
