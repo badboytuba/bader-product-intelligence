@@ -565,3 +565,145 @@ class TestBPIContentStudio(TransactionCase):
         self.assertIn('product.product', instructions)
         self.assertIn('Revisar como fuente', instructions)
         self.assertIn('no heredes sus conflictos', instructions)
+
+    def test_isolated_url_is_staged_for_reading_not_approved_as_text(self):
+        source = self.add_text('https://example.com/ficha')
+        self.assertEqual(source.kind, 'url')
+        self.assertEqual(source.state, 'unreadable')
+        self.assertFalse(source.text)
+        self.assertFalse(source.reviewed_facts)
+        with self.assertRaises(UserError):
+            self.approve(source)
+        with self.assertRaises(UserError):
+            self.start()
+
+    def test_legacy_url_conversion_preserves_original_and_requires_review(self):
+        source = self.add_text()
+        self.approve(source)
+        source.with_context(_bpi_studio_write=_STUDIO_WRITE).write({
+            'text': 'https://example.com/ficha',
+            'reviewed_facts': [{'id': 'old', 'text': 'https://example.com/ficha'}]})
+        self.assertTrue(source._payload()['linkOnly'])
+        self.assertTrue(source._payload()['needsReview'])
+        with self.assertRaises(UserError):
+            self.service._studio_assert_sources(self.session)
+        result = self.service._studio_convert_link(self.product.id, self.session.id, self.session.revision, source.id)
+        replacement = self.env['bpi.content.studio.source'].browse(result['session']['sources'][-1]['id'])
+        self.assertEqual(source.text, 'https://example.com/ficha')
+        self.assertEqual(source.state, 'excluded')
+        self.assertEqual(replacement.kind, 'url')
+        self.assertEqual(replacement.state, 'unreadable')
+        self.assertFalse(replacement.reviewed_facts)
+        with self.assertRaises(MissingError):
+            self.service._studio_convert_link(self.other.id, self.session.id, self.session.revision, source.id)
+
+    def test_reopen_source_never_approves_automatically(self):
+        source = self.add_text('Dato A. Dato B.')
+        self.approve(source)
+        proposal = self.generate()
+        self.service._studio_review_source(self.product.id, self.session.id, self.session.revision, source.id, 'reopen')
+        self.assertEqual(source.state, 'pending')
+        self.assertFalse(source.reviewed_facts)
+        self.assertTrue(proposal._payload()['stale'])
+        self.assertIn('Fuentes', ' '.join(proposal._payload()['staleReasons']))
+        with self.assertRaises(UserError):
+            self.service._studio_prepare_apply(self.product.id, self.session.id, proposal.id)
+        chosen = [source.facts[0]['id']]
+        self.service._studio_review_source(self.product.id, self.session.id, self.session.revision, source.id, 'approve', chosen)
+        self.assertEqual(len(source.reviewed_facts), 1)
+
+    def test_selected_old_proposal_review_uses_selected_preview_not_latest(self):
+        first = self.generate()
+        second = self.generate()
+        original = json.dumps(first.payload, sort_keys=True)
+        draft = {'descriptionHtml': '<p>Mi edición editorial compatible.</p>'}
+        job = self.start(draft=draft, review_proposal_id=first.id)
+        response = self.response()
+        response['discardedClaims'] = ['Se omitió una característica de otro modelo.']
+        with patch.object(type(self.service), '_studio_post', return_value=response) as call:
+            result = job._process_job()
+        self.assertEqual(result['state'], 'done')
+        context = json.loads(call.call_args.args[0][1]['content'][0]['text'])
+        self.assertEqual(context['previousProposalNotEvidence'], first.payload)
+        self.assertEqual(context['editedPreviewNotEvidence'], draft)
+        third = self.env['bpi.content.studio.proposal'].browse(result['resultPayload']['proposalId'])
+        self.assertGreater(third.revision, second.revision)
+        self.assertFalse(third.payload['conflicts'])
+        self.assertTrue(third.payload['discardedClaims'])
+        self.service._studio_prepare_apply(self.product.id, self.session.id, third.id)
+        self.assertEqual(json.dumps(first.payload, sort_keys=True), original)
+        self.assertEqual(self.product.bpi_technical_description, '<p>Descripción original.</p>')
+        foreign = self.service._studio_open(self.other.id)['session']['id']
+        with self.assertRaises(MissingError):
+            self.service._studio_start(self.other.id, foreign, 1, 'Revisa', str(uuid.uuid4()), review_proposal_id=first.id)
+
+    def test_discarded_information_never_erases_blocking_conflicts(self):
+        response = self.response()
+        response.update(conflicts=['Identidad aún incompatible.'], discardedClaims=['Otra afirmación omitida.'])
+        job = self.start()
+        with patch.object(type(self.service), '_studio_post', return_value=response):
+            result = job._process_job()
+        proposal = self.env['bpi.content.studio.proposal'].browse(result['resultPayload']['proposalId'])
+        with self.assertRaises(UserError):
+            self.service._studio_prepare_apply(self.product.id, self.session.id, proposal.id)
+
+    def test_transport_safe_status_diagnostics_without_raw_response_or_retries(self):
+        from ..models.studio_diagnostics import StudioRequestError
+        for status, code, expected in [(401, None, 'authentication'), (403, None, 'permission'),
+                (404, None, 'unavailable'), (429, 'insufficient_quota', 'quota'),
+                (429, 'credit_balance_exhausted', 'quota'), (429, 'rate_limit_exceeded', 'rate_limit'), (400, None, 'configuration'), (503, None, 'service')]:
+            response = MagicMock(status_code=status, headers={'x-request-id': 'req_safe123'})
+            response.__enter__.return_value = response
+            response.json.return_value = {'error': {'code': code, 'message': 'PRIVATE-SECRET-NOT-FOR-LOGS'}}
+            with patch('requests.post', return_value=response) as call, patch.object(type(self.service), '_openai_headers', return_value={}):
+                with self.assertRaises(StudioRequestError) as caught:
+                    self.service._studio_post([], {})
+            self.assertEqual(call.call_count, 1)
+            self.assertEqual(caught.exception.studio_diagnostic['category'], expected)
+            self.assertEqual(caught.exception.studio_diagnostic['httpStatus'], status)
+            self.assertEqual(caught.exception.studio_diagnostic['requestId'], 'req_safe123')
+            self.assertNotIn('PRIVATE-SECRET', str(caught.exception))
+            self.assertNotIn(MODEL, str(caught.exception))
+
+    def test_job_preserves_safe_failure_diagnostic(self):
+        from ..models.studio_diagnostics import StudioRequestError
+        job = self.start()
+        error = StudioRequestError('quota', 'http', 429, 'req_test')
+        with patch.object(type(self.service), '_studio_post', side_effect=error) as call:
+            result = job._process_job()
+        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(call.call_count, 1)
+        self.assertEqual(result['diagnostic']['category'], 'quota')
+        self.assertIn('NANCY_QUOTA', result['errorMessage'])
+        self.assertFalse(self.session.proposal_ids)
+        self.assertFalse(self.product.bpi_content_studio_proposal_id)
+
+    def test_incomplete_refusal_and_invalid_json_remain_distinct(self):
+        from ..models.studio_diagnostics import StudioRequestError
+        for body, category in [({'status': 'incomplete'}, 'incomplete'),
+                ({'output': [{'content': [{'type': 'refusal', 'refusal': 'raw text'}]}]}, 'refusal'),
+                ({'output_text': 'not json'}, 'invalid_response')]:
+            response = MagicMock(status_code=200, headers={'x-request-id': 'req_valid'})
+            response.__enter__.return_value = response
+            response.json.return_value = body
+            with patch('requests.post', return_value=response) as call, patch.object(type(self.service), '_openai_headers', return_value={}):
+                with self.assertRaises(StudioRequestError) as caught:
+                    self.service._studio_post([], {})
+            self.assertEqual(caught.exception.studio_diagnostic['category'], category)
+            self.assertEqual(call.call_count, 1)
+
+    def test_refinement_never_trusts_discarded_claims_or_technical_ids_as_identity(self):
+        response = self.response()
+        response['discardedClaims'] = ['Se descartaron instrucciones de otro instrumento.']
+        response['descriptionHtml'] = '<p>Largo total: 999 cm.</p>'
+        validated = self.service._studio_validate_result(response, self.session._snapshot()['data'])
+        self.assertTrue(validated['conflicts'], 'Omitted notes cannot bypass a contradictory final claim')
+
+    def test_quota_type_is_recognized_without_known_code(self):
+        from ..models.studio_diagnostics import http_failure
+        response = MagicMock(status_code=429, headers={'x-request-id': 'sk-secret-must-not-be-copied'})
+        response.json.return_value = {'error': {'type': 'insufficient_quota', 'code': None, 'message': 'raw private'}}
+        failure = http_failure(response)
+        self.assertEqual(failure.studio_diagnostic['category'], 'quota')
+        self.assertNotIn('requestId', failure.studio_diagnostic)
+        self.assertNotIn('raw private', str(failure))

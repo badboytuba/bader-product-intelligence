@@ -224,3 +224,20 @@
   label { display: block; } textarea, select { width: 100%; }
   .bpi-studio__reuse-check { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0; font-size: 12px; }
 }
+
+// Actionable review, scoped to the Bader workspace (never the public storefront).
+.bpi-app.bader-brand {
+    .bpi-studio__resolution {
+        margin: 16px 24px; padding: 20px; border: 1px solid #b5ced0;
+        border-left: 4px solid #6bd32f; border-radius: 12px; background: #fff;
+        color: #003841; overflow-wrap: anywhere;
+        h4 { font-size: 18px; margin: 0 0 16px; }
+        p, li, small { color: #003841; }
+        ul, ol { padding-left: 22px; margin: 8px 0 16px; }
+        li { margin-bottom: 6px; line-height: 1.5; }
+    }
+    .bpi-studio__resolution-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .bpi-studio-source__url { overflow-wrap: anywhere; }
+    .bpi-studio__source-warning { color: #804900; background: #fff7e9; padding: 10px; border-radius: 6px; }
+    @media (max-width: 600px) { .bpi-studio__resolution { margin: 12px; padding: 14px; } }
+}

@@ -169,7 +169,7 @@ class BPIAIJob(models.Model):
             "finished_at": fields.Datetime.now(), "error_message": False,
         })
 
-    def _record_failure(self, message):
+    def _record_failure(self, message, diagnostic=None):
         """Persist terminal failure without replaying a possibly paid request."""
         no_commit = self.env.context.get("bpi_no_job_commit")
         for attempt in range(1 if no_commit else 3):
@@ -179,12 +179,15 @@ class BPIAIJob(models.Model):
             try:
                 if not self.exists() or self.state == "done":
                     return
-                self.write({
+                values = {
                     "state": "failed", "progress": 100,
                     "message": _("No se pudo completar el trabajo IA"),
                     "error_message": message, "result_payload": {},
                     "finished_at": fields.Datetime.now(),
-                })
+                }
+                if diagnostic and 'studio_diagnostic' in self._fields:
+                    values['studio_diagnostic'] = diagnostic
+                self.write(values)
                 self._commit_for_visibility()
                 return
             except Exception:
@@ -267,7 +270,11 @@ class BPIAIJob(models.Model):
                 self._commit_for_visibility()
             except Exception as error:
                 safe_error = str(error) if isinstance(error, UserError) else _("Error interno al procesar el trabajo IA. No se ha repetido la solicitud; revisa antes de reintentar.")
-                self._record_failure(safe_error)
+                diagnostic = getattr(error, 'studio_diagnostic', None)
+                self._record_failure(safe_error, diagnostic=diagnostic)
+                if diagnostic:
+                    _logger.warning('BPI Nancy job_id=%s category=%s phase=%s http=%s request_id=%s', self.id,
+                                    diagnostic.get('category'), diagnostic.get('phase'), diagnostic.get('httpStatus'), diagnostic.get('requestId'))
                 _logger.warning("BPI AI job failed job_id=%s code=processing_or_finalization_error", self.id)
         finally:
             self._release_processing_lock()

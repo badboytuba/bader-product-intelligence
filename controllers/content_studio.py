@@ -83,13 +83,17 @@ class ContentStudioController(http.Controller):
     def review_source(self, product_tmpl_id, session_id, revision, source_id, action, fact_ids=None, **kw):
         return self._service()._studio_review_source(product_tmpl_id, session_id, revision, source_id, action, fact_ids)
 
+    @http.route('/bader_product_intelligence/content_studio/convert_link', type='json', auth='user')
+    def convert_link(self, product_tmpl_id, session_id, revision, source_id, **kw):
+        return self._service()._studio_convert_link(product_tmpl_id, session_id, revision, source_id)
+
     @http.route('/bader_product_intelligence/content_studio/process_source', type='json', auth='user')
     def process_source(self, product_tmpl_id, session_id, revision, source_id, request_key, **kw):
         return self._service()._studio_start(product_tmpl_id, session_id, revision, '', request_key, source_id=source_id)
 
     @http.route('/bader_product_intelligence/content_studio/start', type='json', auth='user')
-    def start(self, product_tmpl_id, session_id, revision, message='', request_key='', draft=None, **kw):
-        return self._service()._studio_start(product_tmpl_id, session_id, revision, message, request_key, draft=draft)
+    def start(self, product_tmpl_id, session_id, revision, message='', request_key='', draft=None, review_proposal_id=False, **kw):
+        return self._service()._studio_start(product_tmpl_id, session_id, revision, message, request_key, draft=draft, review_proposal_id=review_proposal_id)
 
     @http.route('/bader_product_intelligence/content_studio/status', type='json', auth='user')
     def status(self, product_tmpl_id, session_id, **kw):

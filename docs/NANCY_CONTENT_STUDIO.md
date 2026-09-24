@@ -175,3 +175,38 @@ different Odoo namespaces. They must never be treated as a technical conflict
 simply because their numbers differ. Historical proposal warnings are not evidence
 and must not be inherited without checking current facts. These instructions are
 covered with controlled tests, not a claim of live paid-model validation.
+
+## Actionable review and failure diagnosis — 16.0.1.13.5
+
+The approval panel separates stale context, actual proposal conflicts and source
+review requirements. It exposes source IDs and the exact retained conflict text.
+The draft-overwrite checkbox does not bypass evidence or revision guards.
+
+To recover an older version, review/exclude incompatible source fragments, then
+explicitly choose **Revisar esta previa con Nancy AI**. This creates a new job with
+the selected version ID and edited preview, never silently selects the latest
+version as the base. Its safe copy is a new immutable proposal; original proposals
+stay untouched. Discarded source claims are shown separately from unresolved
+contradictions still present in the generated content. There is no blanket unlock.
+
+Changing versions preserves each edited preview locally in the current workspace.
+Returning restores it. These are unsaved drafts, not shared persisted versions;
+they remain subject to navigation/discard guards and never auto-save to the fiche.
+
+An isolated pasted URL becomes an unread URL source, without network access.
+Legacy URL-only text can be explicitly converted into an unread link while keeping
+the original source excluded. Reading public pages remains an explicit job and
+uses pinned SSRF-safe HTTP, without paid generation. Reviewed sources can be
+reopened to select different fragments; this revokes their approval until the
+operator explicitly confirms again. The application never approves files by itself.
+
+Studio transport errors record a bounded diagnostic category, phase, HTTP status
+and validated request identifier. No body, prompt, key, raw exception or model name
+is logged or shown. Quota/credit exhaustion is distinct from temporary rate limiting;
+incomplete, refused and malformed responses never become proposals. Old failed
+jobs retain their original history; missing past diagnostics cannot be invented.
+No automatic retry or alternate engine is introduced.
+
+Transport references: [official error codes](https://developers.openai.com/api/docs/guides/error-codes)
+and [request debugging](https://developers.openai.com/api/reference/overview).
+Account access alone does not establish available credits or successful generation.

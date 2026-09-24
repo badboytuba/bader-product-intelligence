@@ -109,7 +109,9 @@ QUnit.test("polling preserves preview edits, brief drafts and initial intent", a
     assert.strictEqual(a.state.contentStudio.preview.descriptionHtml, "<p>Edición local</p>");
     assert.strictEqual(a.state.contentStudio.brief.intent, "Foco educativo");
     assert.strictEqual(a.state.contentStudio.input, "Mensaje pendiente"); assert.ok(a.state.contentStudio.pendingProposals);
-    a.studioSelectProposal(11); assert.strictEqual(a.state.contentStudio.proposalId, 10, "unsaved preview isn't discarded by version selection");
+    a.studioSelectProposal(11); assert.strictEqual(a.state.contentStudio.proposalId, 11);
+    assert.strictEqual(a.state.contentStudio.previewDrafts[10].descriptionHtml, "<p>Edición local</p>");
+    a.studioSelectProposal(10); assert.strictEqual(a.state.contentStudio.preview.descriptionHtml, "<p>Edición local</p>", "per-version draft is restored");
 });
 
 QUnit.test("explicit refinement sends UUID and structured edited metadata without paid retries", async assert => {
@@ -502,4 +504,32 @@ QUnit.test("reuse does not discard current preview drafts or late search respons
     const waiting=later();a.rpc=()=>waiting.promise;const loading=a.studioSearchStrategies();
     a.state.productId=2;waiting.resolve({strategies:[{id:999}]});await loading;
     assert.notOk(a.state.contentStudio.reuseOptions.some(row=>row.id===999));
+});
+
+QUnit.test("reviewed URL-only legacy source blocks generation and apply until explicitly resolved", async assert => {
+    const a=action(), s=a.state.contentStudio;let calls=0;a.rpc=async()=>{calls++;return {};};
+    s.session.sources=[{id:6,state:'reviewed',name:'URL antigua',linkOnly:true}];
+    assert.notOk(a.studioCanGenerate());assert.strictEqual(a.studioSourceBlockers()[0].id,6);
+    await a.studioApply();assert.strictEqual(calls,0);
+    s.session.sources[0].state='excluded';assert.ok(a.studioCanGenerate());
+});
+QUnit.test("old edited preview can be compared and restored without discard or unsafe apply", assert => {
+    const a=action(),s=a.state.contentStudio;s.session.proposals.unshift(proposal(11));
+    s.session.proposals[1].stale=true;s.preview.descriptionHtml='<p>Trabajo propio</p>';
+    a.studioSelectProposal(11);assert.strictEqual(s.proposalId,11);assert.ok(a.studioHasLocalChanges());
+    a.studioSelectProposal(10);assert.strictEqual(s.preview.descriptionHtml,'<p>Trabajo propio</p>');
+    assert.ok(a.studioCurrentProposal().stale);a.studioDiscardLocal();assert.deepEqual(s.previewDrafts,{});
+});
+QUnit.test("explicit blocked-version review sends selected origin, preserves chat input and does not apply", async assert => {
+    const a=action(),s=a.state.contentStudio,calls=[];
+    s.input='Mensaje aún no enviado';s.session.proposals[0].stale=true;s.preview.descriptionHtml='<p>Mi versión</p>';
+    a.rpc=async(route,params)=>{calls.push({route,params});return {job:{id:101,state:'pending'}};};
+    await a.studioReviewPreview();clearTimeout(a.studioPollTimer);
+    assert.strictEqual(calls.length,1);assert.ok(calls[0].route.endsWith('/start'));
+    assert.strictEqual(calls[0].params.review_proposal_id,10);assert.strictEqual(calls[0].params.draft.descriptionHtml,'<p>Mi versión</p>');
+    assert.strictEqual(s.input,'Mensaje aún no enviado');assert.strictEqual(a.state.contentForm.description,'<p>Guardado</p>');
+});
+QUnit.test("job failure presents safe category instead of generic success and never engine details", assert => {
+    const a=action();assert.ok(a.studioJobError({errorMessage:'Nancy AI alcanzó el límite [NANCY_QUOTA]'}).includes('NANCY_QUOTA'));
+    assert.notOk(a.studioJobError({errorMessage:'openai gpt-private failed'}).includes('gpt'));
 });

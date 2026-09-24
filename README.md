@@ -1,3 +1,15 @@
+## 2026-09-24 — Actionable Nancy review and transport diagnostics
+
+Release `16.0.1.13.5` shows exact proposal/source/revision blockers, preserves local
+preview edits per version, and offers explicit review of the selected preview as
+a new asynchronous proposal. Never clear old conflicts or rewrite historical copy.
+Discarded unsupported claims are private notes; unresolved contradictions remain
+blocking. URL-only text is staged as an unread link; legacy URLs require explicit
+conversion/read/review or exclusion. Reopening source fragments revokes approval.
+Safe categorized failures preserve HTTP/request identifiers without raw responses,
+credentials or engine identity. No automatic paid retry, save or publication.
+QAS only; read `docs/NANCY_CONTENT_STUDIO.md` and separate runtime evidence.
+
 ## 2026-09-23 — Studio feedback and reusable editorial strategies
 
 Release `16.0.1.13.4` fixes user-message contrast, separates chat-only completion
