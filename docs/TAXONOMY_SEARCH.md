@@ -89,3 +89,30 @@ remain distinct explicit steps. Dictionary management, historical suggestions,
 justifications and proposed synonyms move to collapsible secondary details.
 Removing a chip affects this product only. No new paid pilot/mass generation is
 part of this cosmetic/interaction delivery; validate async responses with mocks.
+
+## Search recovery — 16.0.1.14.2
+
+The enabled website now renders a real search form in the header, outside the
+collapsible navigation. It remains usable before/without JavaScript. The scoped
+Bader palette and inline SVG do not depend on external icon fonts. Suggestions
+show native local image URLs, template SKU when unambiguous, native price, result
+count and a full-results action. Unknown/external image URLs are rejected. Broken
+thumbnails fall back locally; no product/gallery images are modified.
+
+The public widget uses 180 ms debounce, abort plus sequence guards, a ten-second
+request deadline and immediate stale keyboard-target invalidation. Opening pages
+never queries autocomplete or an AI provider. Query/approved filters are retained
+when entering the shop or product. Mobile gets the same always-visible field.
+
+Normalized stored fields are already ASCII lowercase. Escaped `=like` keeps the
+same normalized text coverage without PostgreSQL repeating locale case folding
+over large historical descriptions. A direct name/SKU tier precedes category-only
+matches, still before pagination and behind exact SKU/name. No full-catalog client
+load, shared price cache, external engine or new database extension. Public
+visibility, native pricing and the common BPI/server matching service remain in
+place. Custom head and homepage carousels are not rewritten by this upgrade.
+
+Backend regressions cover description-only accent matching, direct-name ranking
+versus category matches across pages, and SKU/native image/price contracts.
+Browser regression harness: `tests/browser_search.cjs` (Playwright; explicit clone
+base URL). Deployment evidence remains separate from source version.

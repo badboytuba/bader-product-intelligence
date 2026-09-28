@@ -1,3 +1,13 @@
+## 2026-09-28 — Visible integrated header search
+
+Release `16.0.1.14.2` renders the enabled website search form server-side outside
+collapsed navigation. Preserve native autocomplete image URL, currency/pricelist
+and visibility contracts, filtered shop links, sequence/abort and keyboard guards.
+Use scoped Bader colors and local/SVG icons. Normalized lowercase fields use
+escaped =like; exact SKU/name then direct name/SKU precede category-only matches.
+No AI calls, shared price cache, external engine or historical content migration.
+Do not overwrite custom head or carousel HTML. QAS only; read TAXONOMY_SEARCH.md.
+
 ## 2026-09-28 — Designer text and composition usability
 
 Release `16.0.1.14.1` reuses version-1 columns for explicit media+text actions,

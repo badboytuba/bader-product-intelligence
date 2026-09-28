@@ -1,5 +1,28 @@
 <odoo>
- <template id="bpi_search_marker" inherit_id="website.layout" priority="95"><xpath expr="//div[@id='wrapwrap']" position="inside"><span t-if="website.bpi_taxonomy_search_enabled" data-bpi-header-search="1" hidden="hidden"/></xpath></template>
+ <template id="bpi_search_marker" inherit_id="website.layout" priority="95">
+  <xpath expr="//header[@id='top']" position="inside">
+   <section t-if="website.bpi_taxonomy_search_enabled" class="bpi-header-search" aria-label="Buscador de productos">
+    <div class="container bpi-hs-inner">
+     <span class="bpi-hs-heading">Encuentra tu producto<small>El catálogo Bader, a tu alcance</small></span>
+     <div class="bpi-hs-control">
+      <form action="/shop" method="get" role="search">
+       <input type="search" name="search" maxlength="200" autocomplete="off" placeholder="Busca por nombre, SKU o aplicación…" aria-label="Buscar productos" role="combobox" aria-autocomplete="list" aria-expanded="false"/>
+       <button type="button" class="bpi-hs-clear" aria-label="Borrar búsqueda" hidden="hidden">×</button>
+       <button type="submit" class="bpi-hs-submit" aria-label="Buscar en el catálogo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span>Buscar</span>
+       </button>
+      </form>
+      <div class="bpi-hs-results" hidden="hidden">
+       <div class="bpi-hs-summary"/>
+       <div class="bpi-hs-list" role="listbox" aria-label="Productos encontrados"/>
+       <a class="bpi-hs-all" href="/shop">Ver todos los resultados <span aria-hidden="true">→</span></a>
+      </div>
+      <span class="sr-only bpi-hs-live" aria-live="polite"/>
+     </div>
+    </div>
+   </section>
+  </xpath>
+ </template>
  <template id="bpi_shop_facets" inherit_id="website_sale.products" priority="95"><xpath expr="//div[@id='products_grid']/*[1]" position="before">
   <section t-if="website.bpi_taxonomy_search_enabled and bpi_taxonomy_facets" class="bpi-shop-facets bader-brand col-12">
    <details><summary>Filtrar por clasificación</summary><form method="get" t-att-action="request.httprequest.path" data-bpi-facet-form="1">

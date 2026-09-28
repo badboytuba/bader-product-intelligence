@@ -4,6 +4,7 @@ from odoo import api, fields, models, _
 from odoo.osv import expression
 from odoo.exceptions import ValidationError
 from odoo.tools import html2plaintext
+from odoo.tools.sql import escape_psql
 from .taxonomy import normalize, AXES
 
 
@@ -101,9 +102,9 @@ class SearchProduct(models.Model):
             raise ValidationError(_('La búsqueda debe ser texto.'))
         domains = []
         for word, ids in self._bpi_query_units(query):
-            choices = [expression.AND([[('bpi_search_identity', 'ilike', part)] for part in word.split()])]
+            choices = [expression.AND([[('bpi_search_identity', '=like', '%' + escape_psql(part) + '%')] for part in word.split()])]
             if descriptions and not identity_only:
-                choices.append([('bpi_search_description', 'ilike', word)])
+                choices.append([('bpi_search_description', '=like', '%' + escape_psql(word) + '%')])
             if ids and not identity_only:
                 choices.append([('bpi_taxonomy_term_ids', 'in', ids)])
             domains.append(expression.OR(choices))
@@ -114,8 +115,15 @@ class SearchProduct(models.Model):
         if not normalize(query):
             return self.search(domain, offset=offset, limit=limit, order=order)
         term = normalize(query)
+        # These stored columns and query units already share lowercase/accent
+        # normalization. LIKE avoids repeating expensive locale folding across
+        # large historical descriptions; escape metacharacters for literal input.
+        direct = expression.AND([expression.OR([
+            [('bpi_search_name', '=like', '%' + escape_psql(part) + '%')],
+            [('product_variant_ids.bpi_search_sku', '=like', '%' + escape_psql(part) + '%')],
+        ]) for word, unused in self._bpi_query_units(query) for part in word.split()])
         tiers = [[('product_variant_ids.bpi_search_sku', '=', term)], [('bpi_search_name', '=', term)],
-                 self._bpi_query_domain(query, identity_only=True), []]
+                 direct, self._bpi_query_domain(query, identity_only=True), []]
         result = self.browse(); previous = []
         for tier in tiers:
             current = expression.AND([domain, tier] + ([['!'] + expression.OR(previous)] if previous else []))
@@ -156,6 +164,10 @@ class SearchProduct(models.Model):
             ids = self._bpi_filter_ids(options.get('bpiTermIds'))
             detail['base_domain'].extend([self._bpi_filter_domain(ids), [('is_published','=',True),('active','=',True),('sale_ok','=',True)],
                 ['|', ('company_id', '=', False), ('company_id', '=', website.company_id.id)]])
+            # Native Odoo maps SKU fields but does not fetch them. Include the
+            # template reference (empty for multi-SKU templates), never guess a
+            # variant or replace native price/image/visibility rendering.
+            detail['fetch_fields'] = list(dict.fromkeys(detail['fetch_fields'] + ['default_code']))
             detail['bpiTaxonomy'] = True
         return detail
 

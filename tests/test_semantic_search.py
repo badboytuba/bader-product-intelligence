@@ -36,3 +36,30 @@ class TestSemanticSearch(TransactionCase):
         self.assertEqual(self.Product._bpi_query_units('MAP-DE-1'), [('map-de-1', [])])
         domain = self.Product._bpi_query_domain('MAP-DE-1')
         self.assertEqual(self.Product._bpi_ranked_search(domain, 'MAP-DE-1', limit=1), self.product)
+
+    def test_direct_name_precedes_category_only_match_before_pagination(self):
+        category = self.env['product.public.category'].create({'name': 'Fres needle'})
+        indirect = self.Product.create({'name': 'AAA contraángulo needle', 'public_categ_ids': [(6, 0, [category.id])]})
+        direct = self.Product.create({'name': 'ZZZ Fresero needle'})
+        domain = self.Product._bpi_query_domain('frés needle', descriptions=True)
+        limited = [('id', 'in', (direct | indirect).ids)] + domain
+        self.assertEqual(self.Product._bpi_ranked_search(limited, 'frés needle', limit=1), direct)
+        self.assertEqual(self.Product._bpi_ranked_search(limited, 'frés needle', offset=1, limit=1), indirect)
+
+    def test_normalized_contains_preserves_description_only_and_accents(self):
+        self.other.description_sale = 'Aplicación única: caracterización protésica extraordinaria.'
+        domain = self.Product._bpi_query_domain('  CARACTERIZACIÓN protésica ', descriptions=True)
+        self.assertIn(self.other, self.Product.search(domain))
+        self.assertNotIn(self.product, self.Product.search(domain))
+        self.assertIn('=like', str(domain))
+        self.assertNotIn('ilike', str(domain))
+
+    def test_native_autocomplete_fetches_sku_without_changing_image_price_mapping(self):
+        website = self.env['website'].search([], limit=1)
+        website.bpi_taxonomy_search_enabled = True
+        options = {'displayImage': True, 'displayDescription': False, 'displayDetail': True, 'displayExtraLink': False,
+                   'display_currency': website.company_id.currency_id}
+        detail = self.Product._search_get_detail(website, 'name asc', options)
+        self.assertIn('default_code', detail['fetch_fields'])
+        self.assertEqual(detail['mapping']['image_url']['name'], 'image_url')
+        self.assertIn('detail', detail['mapping'])
