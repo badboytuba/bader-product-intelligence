@@ -67,7 +67,7 @@ class TestDescriptionLayout(TransactionCase):
 
     def test_layout_rejects_arbitrary_css_embed_and_excessive_depth(self):
         for change in ({'style': 'background:url(https://evil.test)'}, {'preset': 'custom'},
-                       {'effect': 'script'}, {'type': 'iframe'}, {'align': 'right'}):
+                       {'effect': 'script'}, {'type': 'iframe'}, {'align': 'arbitrary'}):
             value = self.layout(); value['blocks'][0].update(change)
             with self.assertRaises(ValidationError):
                 validate_layout(value)
@@ -369,3 +369,93 @@ class TestDescriptionLayout(TransactionCase):
             self.service.save_content(self.product, {'descriptionLayout':self.layout([dict(node,titleStyle={'size':1000})]), 'editorialRevision':revision})
         self.assertEqual(self.product.bpi_description_layout,before)
         self.assertEqual(self.product.bpi_editorial_revision,revision)
+
+    def test_mixed_videos_preserve_short_orientation_and_independent_providers(self):
+        value = self.layout([{'id': 'pair', 'type': 'columns', 'columnLayout': 'media', 'columnGap': 'compact', 'columnAlign': 'start', 'children': [
+            {'id': 'wide', 'type': 'video', 'url': 'https://youtu.be/abcdefghijk', 'videoRatio': '16:9'},
+            {'id': 'tall', 'type': 'video', 'url': 'https://www.youtube.com/shorts/12345678901'}]}])
+        saved = validate_layout(value)
+        children = saved['blocks'][1]['children']
+        self.assertEqual(children[1]['videoRatio'], '9:16')
+        self.assertEqual(children[1]['url'], 'https://www.youtube.com/watch?v=12345678901')
+        self.assertEqual(validate_layout(saved), saved)
+        children[1].update(url='https://www.tiktok.com/@bader/video/1234567890123456789', videoRatio='auto')
+        self.product.write({'bpi_description_layout': saved, 'is_published': True})
+        projected = self.product._bpi_public_description_layout(self.website)['blocks'][1]
+        self.assertIn('1.7777777777777777fr', projected['columnsStyle'])
+        self.assertIn('0.5625fr', projected['columnsStyle'])
+        self.assertIn('gap:12px', projected['columnsStyle'])
+        self.assertIn('9/16', projected['children'][1]['videoStyle'])
+        self.assertIn('tiktok.com/player/v1/', projected['children'][1]['embed'])
+
+    def test_image_controls_roundtrip_without_modifying_original_media_or_text(self):
+        media = self.image()
+        saved_text = self.product.bpi_technical_description
+        layout = self.layout([{'id': 'image', 'type': 'image', 'mediaId': media.id, 'imageWidth': 65,
+            'imageMaxWidth': 440, 'imageAlign': 'right', 'imageRatio': '1:1', 'imageFit': 'cover',
+            'title': 'Detalle', 'titleStyle': {'font': 'display', 'size': 32}, 'caption': 'Vista lateral'}])
+        self.service.save_content(self.product, {'descriptionLayout': layout})
+        self.product.write({'is_published': True})
+        node = self.product._bpi_public_description_layout(self.website)['blocks'][1]
+        for fragment in ('width:65%', 'max:440px', 'ratio:1/1', 'fit:cover', 'left:auto', 'right:0'):
+            self.assertIn(fragment, node['imageStyle'])
+        self.assertIn('32px', node['titleCss'])
+        self.assertEqual(self.product.bpi_technical_description, saved_text)
+        self.assertEqual((media.width, media.height), (12, 12))
+        self.assertEqual(media.state, 'ready')
+
+    def test_image_controls_reject_free_css_and_invalid_numbers(self):
+        for property, value in [('imageWidth', 0), ('imageWidth', True), ('imageWidth', 100.5),
+                ('imageMaxWidth', 2401), ('imageMaxWidth', -1), ('imageAlign', 'float'),
+                ('imageRatio', 'url(https://evil.test)'), ('imageFit', 'fill'),
+                ('titleStyle', {'size': 999}), ('captionStyle', {'font': 'external'})]:
+            with self.subTest(property=property, value=value), self.assertRaises(ValidationError):
+                validate_layout(self.layout([dict({'id': 'photo', 'type': 'image', 'mediaId': 1}, **{property: value})]))
+
+    def test_column_options_allow_only_safe_presets(self):
+        for key, value in [('columnLayout', 'url(evil)'), ('columnGap', 24), ('columnAlign', 'stretch')]:
+            with self.subTest(key=key), self.assertRaises(ValidationError):
+                validate_layout(self.layout([dict({'id': 'cols', 'type': 'columns', 'children': [
+                    {'id': 'text', 'type': 'text', 'html': '<p>Text</p>'}]}, **{key: value})]))
+        value = validate_layout(self.layout([{'id': 'cols', 'type': 'columns', 'columnLayout': 'wide-right',
+            'align': 'right', 'children': [{'id': 'text', 'type': 'text'}]}]))
+        self.assertEqual(value['blocks'][1]['columnLayout'], 'wide-right')
+
+    def test_legacy_image_columns_keep_omitted_settings(self):
+        value = validate_layout(self.layout([{'id': 'cols', 'type': 'columns', 'children': [
+            {'id': 'image', 'type': 'image', 'mediaId': 1, 'caption': 'Legacy'}, {'id': 'text', 'type': 'text'}]}]))
+        self.assertNotIn('columnLayout', value['blocks'][1])
+        image = value['blocks'][1]['children'][0]
+        for key in ('imageWidth', 'imageRatio', 'imageFit', 'imageMaxWidth', 'title', 'titleStyle'):
+            self.assertNotIn(key, image)
+        self.assertEqual(image['caption'], 'Legacy')
+        self.assertEqual(validate_layout(value), value)
+
+    def test_mixed_media_ownership_validation_remains_atomic(self):
+        media = self.image(self.other)
+        layout = self.layout([{'id': 'cols', 'type': 'columns', 'columnLayout': 'wide-left', 'children': [
+            {'id': 'image', 'type': 'image', 'mediaId': media.id, 'imageWidth': 50}, {'id': 'text', 'type': 'text'}]}])
+        before = self.product.bpi_technical_description
+        with self.assertRaises(MissingError):
+            self.service.save_content(self.product, {'technicalDescription': '<p>Wrong</p>', 'descriptionLayout': layout})
+        self.assertEqual(self.product.bpi_technical_description, before)
+
+    def test_two_public_video_players_render_no_external_iframes(self):
+        self.product.write({'is_published': True, 'bpi_description_layout': self.layout([
+            {'id': 'cols', 'type': 'columns', 'columnLayout': 'media', 'children': [
+                {'id': 'a', 'type': 'video', 'url': 'https://youtu.be/abcdefghijk', 'title': '<script>unsafe</script>'},
+                {'id': 'b', 'type': 'video', 'url': 'https://www.instagram.com/reel/abcdef/', 'videoRatio': '9:16'}]}])})
+        projected = self.product._bpi_public_description_layout(self.website)
+        html = str(self.env['ir.qweb']._render('bader_product_intelligence.description_layout', {'product': self.product, 'bpi_layout': projected}))
+        self.assertNotIn('<iframe', html)
+        self.assertNotIn('<script>unsafe', html)
+        self.assertIn('bpi-layout__columns--media', html)
+        self.assertIn('target="_blank"', html)
+        self.assertIn('data-bpi-video-embed="https://www.youtube-nocookie.com/embed/abcdefghijk"', html)
+        self.assertIn('Texto principal aprobado.', html)
+
+    def test_media_composition_enforces_total_blocks_limit(self):
+        blocks = [{'id': 'd%s' % i, 'type': 'divider'} for i in range(49)]
+        validate_layout(self.layout(blocks))
+        with self.assertRaises(ValidationError):
+            validate_layout(self.layout(blocks + [{'id': 'excess', 'type': 'divider'}]))

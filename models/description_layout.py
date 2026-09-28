@@ -72,6 +72,27 @@ def video_text_css(value, field):
                'italic' if style['italic'] else 'normal', style['align'], color))
 
 
+def image_style(block):
+    """Only validated design tokens become CSS; no authored CSS is accepted."""
+    align = block.get('imageAlign', 'center')
+    return ('--bpi-image-width:%s%%;--bpi-image-max:%s;--bpi-image-ratio:%s;'
+            '--bpi-image-fit:%s;--bpi-image-left:%s;--bpi-image-right:%s' % (
+                block.get('imageWidth', 100),
+                '%spx' % block['imageMaxWidth'] if block.get('imageMaxWidth') else '100%',
+                block.get('imageRatio', 'auto').replace(':', '/'), block.get('imageFit', 'contain'),
+                '0' if align == 'left' else 'auto', '0' if align == 'right' else 'auto'))
+
+
+def columns_style(block, ratios=None):
+    layout = block.get('columnLayout', 'equal')
+    left, right = {'equal': (1, 1), 'wide-left': (2, 1), 'wide-right': (1, 2)}.get(layout, (1, 1))
+    if layout == 'media' and ratios and len(ratios) == 2:
+        left, right = ratios
+    gap = {'compact': 12, 'normal': 24, 'spacious': 40}[block.get('columnGap', 'normal')]
+    return '--bpi-column-left:%sfr;--bpi-column-right:%sfr;--bpi-column-gap:%spx;--bpi-column-align:%s' % (
+        left, right, gap, block.get('columnAlign', 'center'))
+
+
 def social_video(value):
     """Canonical allowlisted links. No fetch, API, iframe code or tracking URL."""
     if not isinstance(value, str) or len(value) > 2048 or re.search(r'[\x00-\x20\\]', value):
@@ -158,33 +179,48 @@ def validate_layout(value, media_lookup=None):
             raise ValidationError(_('Los bloques deben tener identificadores únicos; máximo 50 bloques.'))
         ids.add(key)
         accepted = {'main': set(), 'text': {'html'}, 'callout': {'html'},
-                    'image': {'mediaId', 'alt', 'caption'}, 'video': {'mediaId', 'url', 'caption', 'posterMediaId', 'videoWidth', 'videoRatio', 'title', 'titleStyle', 'captionStyle'},
-                    'columns': {'children'}, 'container': {'children'}, 'divider': set()}
+                    'image': {'mediaId', 'alt', 'caption', 'title', 'titleStyle', 'captionStyle', 'imageWidth', 'imageMaxWidth', 'imageAlign', 'imageRatio', 'imageFit'},
+                    'video': {'mediaId', 'url', 'caption', 'posterMediaId', 'videoWidth', 'videoRatio', 'title', 'titleStyle', 'captionStyle'},
+                    'columns': {'children', 'columnLayout', 'columnGap', 'columnAlign'}, 'container': {'children'}, 'divider': set()}
         if not isinstance(kind, str) or kind not in accepted or set(block) - (common | accepted[kind]):
             raise ValidationError(_('Tipo o propiedades de bloque no permitidos.'))
         result = {'id': key, 'type': kind}
         for field, allowed, default in (
             ('preset', ('white', 'mist', 'petrol', 'lime'), 'white'),
-            ('align', ('left', 'center'), 'left'), ('effect', ('none', 'lift'), 'none'),
+            ('align', ('left', 'center', 'right'), 'left'), ('effect', ('none', 'lift'), 'none'),
             ('spacing', ('compact', 'normal', 'spacious'), 'normal')):
             current = block.get(field, default)
             if current not in allowed:
                 raise ValidationError(_('Usa los estilos Bader disponibles.'))
             result[field] = current
+        if kind == 'image':
+            for field, low, high, default in (('imageWidth', 10, 100, 100), ('imageMaxWidth', 0, 2400, 0)):
+                val = block.get(field, default)
+                if type(val) is not int or not low <= val <= high:
+                    raise ValidationError(_('Usa un ancho de imagen de 10 a 100 % y un límite de 0 a 2400 px.'))
+                if field in block:
+                    result[field] = val
+            for field, allowed in (('imageAlign', ('left', 'center', 'right')),
+                    ('imageRatio', ('auto', '16:9', '9:16', '1:1', '4:3', '3:2')),
+                    ('imageFit', ('contain', 'cover'))):
+                if field in block:
+                    if block[field] not in allowed:
+                        raise ValidationError(_('Elige una proporción, posición y ajuste de imagen disponibles.'))
+                    result[field] = block[field]
+        if kind in ('image', 'video'):
+            if 'title' in block:
+                if not isinstance(block['title'], str) or len(block['title']) > 200:
+                    raise ValidationError(_('El título admite hasta 200 caracteres.'))
+                result['title'] = block['title'].strip()
+            for field in ('title', 'caption'):
+                if field + 'Style' in block:
+                    result[field + 'Style'] = video_text_style(block[field + 'Style'], field)
         if kind == 'video':
             width = block.get('videoWidth', 100)
             ratio = block.get('videoRatio', 'auto')
             if type(width) is not int or not 25 <= width <= 100 or ratio not in ('auto', '16:9', '9:16', '1:1', '4:3'):
                 raise ValidationError(_('Usa un ancho de 25 a 100 % y una proporción disponible.'))
             result.update(videoWidth=width, videoRatio=ratio)
-            if 'title' in block:
-                if not isinstance(block['title'], str) or len(block['title']) > 200:
-                    raise ValidationError(_('El título del vídeo admite hasta 200 caracteres.'))
-                result['title'] = block['title'].strip()
-            for field in ('title', 'caption'):
-                style_key = field + 'Style'
-                if style_key in block:
-                    result[style_key] = video_text_style(block[style_key], field)
             poster = block.get('posterMediaId')
             if poster:
                 if type(poster) is not int or poster <= 0:
@@ -201,6 +237,13 @@ def validate_layout(value, media_lookup=None):
             if not isinstance(children, list) or not 1 <= len(children) <= (2 if kind == 'columns' else 20):
                 raise ValidationError(_('La composición debe contener bloques; las columnas admiten dos.'))
             result['children'] = [visit(child, depth + 1) for child in children]
+            if kind == 'columns':
+                for field, allowed in (('columnLayout', ('equal', 'wide-left', 'wide-right', 'media')),
+                        ('columnGap', ('compact', 'normal', 'spacious')), ('columnAlign', ('start', 'center', 'end'))):
+                    if field in block:
+                        if block[field] not in allowed:
+                            raise ValidationError(_('Usa una composición de columnas disponible.'))
+                        result[field] = block[field]
         if kind in ('image', 'video'):
             media_id, url = block.get('mediaId'), block.get('url')
             if bool(media_id) == bool(url) or (kind == 'image' and url):
@@ -213,6 +256,10 @@ def validate_layout(value, media_lookup=None):
                 result['mediaId'] = media_id
             else:
                 result['url'] = social_video(url)['url']
+                # Canonical YouTube URLs no longer retain /shorts/: persist the
+                # explicit intent at save time, not a guessed remote dimension.
+                if result.get('videoRatio') == 'auto' and urlsplit(url).path.startswith(('/shorts/', '/reel/')):
+                    result['videoRatio'] = '9:16'
             for field, limit in (('caption', 500), ('alt', 500)):
                 if field == 'alt' and kind != 'image':
                     continue
@@ -364,6 +411,12 @@ class ProductTemplate(models.Model):
         layout = self.bpi_description_layout
         if not layout or not layout.get('enabled') or not self._bpi_plain_text(self.bpi_technical_description).strip() or not self._bpi_visible_documents(website):
             return False
+        media_ids = layout_media_ids(layout)
+        dimensions = {}
+        if media_ids:
+            self.env.cr.execute('SELECT id,width,height FROM bpi_description_media WHERE id IN %s AND product_id=%s AND state=%s',
+                                (tuple(media_ids), self.id, 'ready'))
+            dimensions = {row[0]: row[1:] for row in self.env.cr.fetchall()}
         def project(block):
             block = dict(block)
             if 'html' in block:
@@ -374,21 +427,27 @@ class ProductTemplate(models.Model):
                 block.update(social_video(block['url']))
             if block.get('posterMediaId'):
                 block['posterSrc'] = '/bader_product_intelligence/description_media/%s/file?r=%s' % (block['posterMediaId'], self.bpi_editorial_revision or 1)
-            if block.get('type') == 'video':
+            if block.get('type') in ('image', 'video'):
                 for field in ('title', 'caption'):
                     block[field + 'Css'] = video_text_css(block.get(field + 'Style', {}), field)
+            if block.get('type') == 'image':
+                block['imageStyle'] = image_style(block)
+            if block.get('type') == 'video':
                 ratio = block.get('videoRatio', 'auto')
                 if ratio == 'auto':
-                    ratio = '9:16' if block.get('provider') == 'tiktok' else '16:9'
+                    ratio = '9:16' if block.get('provider') == 'tiktok' or '/reel/' in block.get('url', '') else '16:9'
                     if block.get('mediaId'):
-                        # Local metadata only; never probe or fetch on a public page.
-                        self.env.cr.execute('SELECT width,height FROM bpi_description_media WHERE id=%s AND product_id=%s AND state=%s', (block['mediaId'], self.id, 'ready'))
-                        row = self.env.cr.fetchone()
+                        # Batched local metadata; never probe/fetch on a public page.
+                        row = dimensions.get(block['mediaId'])
                         if row and row[0] > 0 and row[1] > 0:
                             ratio = '%s:%s' % row
                 block['videoStyle'] = '--bpi-video-width:%s%%;--bpi-video-ratio:%s' % (block.get('videoWidth', 100), ratio.replace(':', '/'))
+                width, height = ratio.split(':')
+                block['videoAspect'] = float(width) / float(height)
             if 'children' in block:
                 block['children'] = [project(child) for child in block['children']]
+                if block['type'] == 'columns':
+                    block['columnsStyle'] = columns_style(block, [child.get('videoAspect', 1) for child in block['children']])
             return block
         return {'version': 1, 'enabled': True, 'blocks': [project(block) for block in layout['blocks']]}
 

@@ -273,6 +273,7 @@ export class ProductIntelligenceAction extends Component {
             contentBusy: false,
             contentStudio: emptyContentStudio(),
             descriptionMode: "text", descriptionSelectedBlock: "", descriptionPreviewSize: "desktop",
+            descriptionCanvasView: "edit", descriptionPostersPending: {},
             descriptionMedia: [], descriptionMediaBusy: false, descriptionMediaError: "", descriptionUpload: null,
             contentTemplateContext: null,
             contentTemplateBusy: false,
@@ -949,7 +950,7 @@ export class ProductIntelligenceAction extends Component {
     invalidateProductRequests() {
         clearTimeout(this.studioPollTimer);
         this.state.contentStudio = emptyContentStudio();
-        this.state.descriptionMode = "text";
+        this.state.descriptionMode = "text"; this.state.descriptionCanvasView = "edit"; this.state.descriptionPostersPending = {};
         this.state.descriptionMedia = []; this.state.descriptionMediaBusy = false;
         this.state.descriptionMediaError = ""; this.state.descriptionUpload = null;
         this.descriptionUploadSession = null;

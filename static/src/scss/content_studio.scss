@@ -241,3 +241,31 @@
     .bpi-studio__source-warning { color: #804900; background: #fff7e9; padding: 10px; border-radius: 6px; }
     @media (max-width: 600px) { .bpi-studio__resolution { margin: 12px; padding: 14px; } }
 }
+
+/* Composition controls are intentionally separate from the clean public preview. */
+.bpi-app.bader-brand {
+  .bpi-designer__compositions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 20px; background: #f2f7f5;
+    > button { text-align: left; border: 1px solid #bad4cf; border-radius: 12px; background: white; padding: 18px; color: #003841; min-width: 0; display: grid; gap: 6px; transition: border-color .15s;
+      &:hover, &:focus-visible { border-color: #348d38; outline: 2px solid #6bd238; outline-offset: 2px; }
+      strong { font-size: 14px; } small { font-size: 11px; line-height: 1.5; color: #386770; }
+    }
+  }
+  .bpi-composition-icon { display: flex; align-items: center; gap: 10px; min-height: 32px; color: #2f7d32; font-size: 25px; }
+  .bpi-design-block__image-settings, .bpi-design-block__column-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0; padding: 18px; background: #f2f7f5; border-radius: 10px; border: 1px solid #d2e3de;
+    > label { min-width: 0; display: grid; gap: 7px; font-size: 11px; color: #003841; }
+    input[type=range] { width: 100%; accent-color: #287f36; }
+    small, p { color: #386770; font-size: 11px; line-height: 1.6; margin: 0; }
+    > p { grid-column: 1 / -1; }
+  }
+  .bpi-design-block.align-right > .bpi-design-block__body { text-align: right; }
+  .bpi-designer__final-preview { border: 1px solid #c7ddda; border-radius: 12px; background: white; padding: 8px; }
+  .bpi-designer__canvas.is-mobile {
+    .bpi-layout__columns { grid-template-columns: 1fr; }
+    .bpi-layout__video-figure { width: 100%; }
+    .bpi-design-block__image-settings, .bpi-design-block__column-settings { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 767px) {
+    .bpi-designer__compositions { grid-template-columns: 1fr; padding: 12px; }
+    .bpi-design-block__image-settings, .bpi-design-block__column-settings { grid-template-columns: 1fr; padding: 12px; }
+  }
+}

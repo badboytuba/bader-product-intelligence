@@ -210,6 +210,14 @@ QUnit.test("actual mounted modal and designer render, edit, preserve drafts and 
         assert.strictEqual(videoBlock.posterMediaId, 43, "OWL cover selector saves a numeric draft ID");
         poster.value = ""; poster.dispatchEvent(new Event("change", { bubbles: true })); await patch();
         assert.strictEqual(videoBlock.posterMediaId, false);
+        target.querySelector('[data-composition="video-story"]').click(); await patch();
+        assert.deepEqual(a.descriptionLayout().blocks.at(-1).children.map(b => b.videoRatio), ["16:9", "9:16"]);
+        a.state.descriptionCanvasView = "preview"; await patch();
+        assert.strictEqual(target.querySelectorAll(".bpi-designer__canvas .bpi-layout__video-stage").length, 3);
+        assert.strictEqual(target.querySelectorAll(".bpi-designer__canvas .bpi-layout__columns").length, 2);
+        assert.notOk(target.querySelector(".bpi-designer__canvas input"), "clean final preview, no controls");
+        a.state.descriptionCanvasView = "edit"; await patch();
+        assert.ok(target.querySelector('[aria-label="Ancho de la imagen"]'));
         assert.ok(calls.every(call => /\/(data|open|list)$/.test(call.route)), "no generation, fetching sources or persistence");
         assert.ok(calls.every(call => call.params.context.allowed_company_ids[0] === 2), "all RPCs carry company context");
     } finally { app.destroy(); target.remove(); }
@@ -532,4 +540,81 @@ QUnit.test("explicit blocked-version review sends selected origin, preserves cha
 QUnit.test("job failure presents safe category instead of generic success and never engine details", assert => {
     const a=action();assert.ok(a.studioJobError({errorMessage:'Nancy AI alcanzó el límite [NANCY_QUOTA]'}).includes('NANCY_QUOTA'));
     assert.notOk(a.studioJobError({errorMessage:'openai gpt-private failed'}).includes('gpt'));
+});
+
+QUnit.test("composition presets keep one main text and independent horizontal portrait media", assert => {
+    const a = action(), text = a.state.contentForm.technicalDescription;
+    a.addDescriptionComposition("video-story");
+    const row = a.descriptionLayout().blocks[1];
+    assert.strictEqual(row.columnLayout, "media");
+    assert.deepEqual(row.children.map(b => b.videoRatio), ["16:9", "9:16"]);
+    assert.ok(a.descriptionColumnsStyle(row).includes("0.5625fr"));
+    assert.notOk(row.children[0].id === row.children[1].id);
+    a.moveDescriptionBlock(row.children[1].id, -1);
+    assert.strictEqual(row.children[0].videoRatio, "9:16");
+    a.duplicateDescriptionBlock(row.id);
+    assert.notOk(a.descriptionLayout().blocks[2].children[0].id === row.children[0].id);
+    a.addDescriptionComposition("image-story");
+    assert.deepEqual(a.descriptionLayout().blocks.at(-1).children.map(b => b.type), ["image", "text"]);
+    assert.strictEqual(a.state.contentForm.technicalDescription, text);
+    assert.strictEqual(a.descriptionLayout().blocks.filter(b => b.type === "main").length, 1);
+});
+
+QUnit.test("two simultaneous video posters complete independently with per-block loading", async assert => {
+    const a = action(), one = later(), two = later(); a.addDescriptionComposition("video-pair");
+    const [left, right] = a.descriptionLayout().blocks[1].children;
+    left.url = "https://youtu.be/abcdefghijk"; right.url = "https://youtu.be/12345678901";
+    a.rpc = (_route, params) => params.url === left.url ? one.promise : two.promise;
+    const first = a.fetchDescriptionPoster(left.id), second = a.fetchDescriptionPoster(right.id);
+    assert.ok(a.descriptionPosterBusy(left.id)); assert.ok(a.descriptionPosterBusy(right.id));
+    two.resolve({media:{id:102,kind:"image",state:"ready"}}); await second;
+    assert.strictEqual(right.posterMediaId,102); assert.ok(a.descriptionPosterBusy(left.id));
+    assert.notOk(a.descriptionPosterBusy(right.id));
+    one.resolve({media:{id:101,kind:"image",state:"ready"}}); await first;
+    assert.strictEqual(left.posterMediaId,101); assert.strictEqual(a.state.descriptionMedia.length,2);
+});
+
+QUnit.test("removed or previous-product poster responses cannot repopulate layout", async assert => {
+    for (const change of ["remove", "product"]) {
+        const a = action(), pending = later(); a.addDescriptionBlock("video");
+        const video = a.descriptionLayout().blocks[1]; video.url = "https://youtu.be/abcdefghijk";
+        a.rpc = () => pending.promise; const work = a.fetchDescriptionPoster(video.id);
+        if (change === "remove") a.removeDescriptionBlock(video.id);
+        else { a.invalidateProductRequests(); a.state.productId = 2; a.applyDetailPayload(payload(2)); }
+        pending.resolve({media:{id:77,kind:"image",state:"ready"}}); await work;
+        assert.strictEqual(a.state.descriptionMedia.length, 0, change);
+        assert.strictEqual(a.descriptionLayout().blocks.length,1,change);
+    }
+});
+
+QUnit.test("image sizing typography and alignment edit drafts without providers or text copies", assert => {
+    const a = action(), before = a.state.contentForm.technicalDescription;
+    a.addDescriptionComposition("image-story"); const row=a.descriptionLayout().blocks[1], image=row.children[0];
+    for (const [key,value] of [["imageWidth",60],["imageMaxWidth",420]]) a.setDescriptionImageNumber(image.id,key,{target:{value:String(value)}});
+    a.setDescriptionImageNumber(image.id,"imageWidth",{target:{value:"999"}});
+    a.updateDescriptionBlock(image.id,"imageAlign","right"); a.updateDescriptionBlock(image.id,"imageRatio","1:1"); a.updateDescriptionBlock(image.id,"imageFit","cover");
+    assert.strictEqual(image.imageWidth,60); assert.strictEqual(image.imageMaxWidth,420);
+    assert.ok(a.descriptionImageStyle(image).includes("right:0")); assert.ok(a.descriptionImageStyle(image).includes("ratio:1/1"));
+    a.setDescriptionVideoTextStyle(image.id,"title","size",32);
+    assert.strictEqual(image.titleStyle.size,32);
+    assert.ok(a.descriptionVideoTextCss(image,"title").includes("32px"));
+    assert.strictEqual(a.state.contentForm.technicalDescription,before);
+});
+
+QUnit.test("automatic social orientation survives Short links but explicit ratio wins", assert => {
+    const a = action(); a.fetchDescriptionPoster=()=>{};
+    a.addDescriptionBlock("video"); const block=a.descriptionLayout().blocks[1];
+    a.setDescriptionVideoUrl(block.id,"https://www.youtube.com/shorts/abcdefghijk");
+    assert.strictEqual(block.videoRatio,"9:16");
+    block.videoRatio="16:9"; a.setDescriptionVideoUrl(block.id,"https://www.youtube.com/shorts/12345678901");
+    assert.strictEqual(block.videoRatio,"16:9");
+    block.videoRatio="auto"; block.url="https://www.instagram.com/reel/abcdef/";
+    assert.strictEqual(a.descriptionVideoRatio(block),"9/16");
+});
+
+QUnit.test("composition preset respects the fifty-block limit without a partial insert", assert => {
+    const a=action(); for(let i=0;i<16;i++) a.addDescriptionComposition("video-pair");
+    const before=copy(a.descriptionLayout()); a.addDescriptionComposition("image-story");
+    assert.deepEqual(a.descriptionLayout(),before);
+    assert.strictEqual(before.blocks.length,17);
 });

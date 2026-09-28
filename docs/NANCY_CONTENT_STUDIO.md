@@ -210,3 +210,43 @@ No automatic retry or alternate engine is introduced.
 Transport references: [official error codes](https://developers.openai.com/api/docs/guides/error-codes)
 and [request debugging](https://developers.openai.com/api/reference/overview).
 Account access alone does not establish available credits or successful generation.
+
+
+## Responsive compositions — 16.0.1.14.0 (QAS)
+
+In **Descripción larga → Diseño Bader**, choose:
+- **Dos vídeos**: two horizontal 16:9 frames.
+- **Vídeo + vertical**: 16:9 + 9:16; proportional columns give matching frame
+  heights at full width on desktop. Titles/captions may extend overall height.
+- **Imagen + texto**: independently editable image and companion rich text.
+
+Each video retains its own URL/upload, cover, size, ratio, title and caption.
+Use arrows to exchange order; duplicate/remove a whole composition or edit its
+children. Columns allow equal, wider-left, wider-right and proportional-media
+presets, three spacings, and top/center/bottom alignment. They stack on phones.
+The editing controls retain spacious equal columns; **Vista previa** displays
+actual proportions. Desktop/mobile toggles do not alter saved content.
+
+Images allow width 10–100% of their column, optional 0–2400 px maximum (0 means
+no extra cap), left/center/right position, natural/16:9/9:16/1:1/4:3/3:2 aspect,
+and contain (complete image) or cover (crop). These are presentation settings,
+not edits to the original file. Title and caption have independent official
+Bader font, size, emphasis, color and alignment controls. Main long text remains
+a single reference, not a duplicate in the layout. Save explicitly as before.
+
+Public YouTube/Shorts and TikTok players initialize only on click. Instagram
+and Facebook cards open their original network in a new tab: those networks
+are not promised inline playback. Covers for non-YouTube links are operator
+uploads. No oEmbed/service credentials, external fetch on page open, arbitrary
+CSS/iframe or new hosting service are introduced. TikTok keeps its documented
+player URL contract: https://developers.tiktok.com/docs/en/embed-player.
+
+Old images/columns keep omitted options and old defaults. No bulk re-save or
+migration. Short-video auto orientation is captured before URL normalization;
+explicit selected ratios win. Per-block independent poster jobs guard against
+changed URL, chosen cover, removed block, company/product changes and old
+responses. Public media dimensions are batched locally rather than N+1 lookups.
+Rollback after any new layouts were saved must retain an export of those JSON
+layouts: older validators do not understand the new optional properties. Never
+restore an old database over later operator work without an explicit recovery
+window and reviewed data reconciliation.

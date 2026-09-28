@@ -1,3 +1,16 @@
+## 2026-09-28 — Responsive media compositions
+
+Release `16.0.1.14.0` extends existing version-1 layout blocks without migrating
+saved content. Presets add two independent videos (16:9 + 16:9 or 16:9 + 9:16)
+and image/text compositions. Column proportions, gap and alignment and image
+width/max-width/position/aspect/fit are server-allowlisted. Keep clean final
+preview distinct from the spacious editing controls. Both players remain
+click-to-load, never autoplay on page open. Instagram/Facebook use a source-link
+cover fallback; do not advertise unsupported embedding. Shorts orientation is
+persisted before canonicalization; cover requests have per-block stale guards.
+Maintain one principal text reference, private owned media, atomic revision saves,
+explicit nested rich-editor keys, and no AI calls for layout edits. QAS only.
+
 ## 2026-09-24 — Actionable Nancy review and transport diagnostics
 
 Release `16.0.1.13.5` shows exact proposal/source/revision blockers, preserves local

@@ -471,7 +471,7 @@ export const contentStudioMethods = {
     ensureDescriptionLayout() { if (!this.state.contentForm.descriptionLayout) this.state.contentForm.descriptionLayout = defaultDescriptionLayout(); return this.state.contentForm.descriptionLayout; },
     setDescriptionMode(mode) { this.state.descriptionMode = mode; if (mode === "design") this.loadDescriptionMedia(); },
     toggleDescriptionDesign(ev) { this.ensureDescriptionLayout().enabled = !!ev.target.checked; },
-    descriptionBlockLabel(type) { return ({ main: "Texto principal", text: "Texto complementario", image: "Imagen", video: "Vídeo", columns: "Imagen y texto", container: "Contenedor", callout: "Destacado", divider: "Separador" })[type] || type; },
+    descriptionBlockLabel(type) { return ({ main: "Texto principal", text: "Texto complementario", image: "Imagen", video: "Vídeo", columns: "Dos columnas", container: "Contenedor", callout: "Destacado", divider: "Separador" })[type] || type; },
     newDescriptionBlock(type) {
         const block = { id: uid(), type, preset: "white", align: "left", effect: "none", spacing: "normal" };
         if (["text", "callout"].includes(type)) block.html = "";
@@ -480,6 +480,25 @@ export const contentStudioMethods = {
         if (type === "columns") block.children = [this.newDescriptionBlock("image"), this.newDescriptionBlock("text")];
         if (type === "container") block.children = [this.newDescriptionBlock("text")];
         return block;
+    },
+    addDescriptionComposition(preset) {
+        if (!["video-pair", "video-story", "image-story"].includes(preset)) return;
+        const layout = this.ensureDescriptionLayout();
+        const count = blocks => blocks.reduce((n, item) => n + 1 + count(item.children || []), 0);
+        if (layout.blocks.length >= 30 || count(layout.blocks) + 3 > 50) {
+            this.notify("El diseño admite hasta 50 bloques. Elimina uno antes de añadir otra composición.", "warning");
+            return;
+        }
+        const block = this.newDescriptionBlock("columns");
+        if (preset !== "image-story") {
+            block.children = [this.newDescriptionBlock("video"), this.newDescriptionBlock("video")];
+            block.children[0].videoRatio = "16:9";
+            block.children[1].videoRatio = preset === "video-story" ? "9:16" : "16:9";
+            block.columnLayout = "media";
+        } else block.columnLayout = "equal";
+        Object.assign(block, { columnAlign: "start", columnGap: "normal" });
+        layout.blocks.push(block); layout.enabled = true;
+        this.state.descriptionCanvasView = "edit"; this.state.descriptionSelectedBlock = block.id;
     },
     addDescriptionBlock(type, parentId = false) {
         const layout = this.ensureDescriptionLayout();
@@ -498,13 +517,18 @@ export const contentStudioMethods = {
         this.updateDescriptionBlock(id, "url", value);
         if (value) this.updateDescriptionBlock(id, "mediaId", false);
         this.updateDescriptionBlock(id, "posterMediaId", false);
+        const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
+        if (block && ["auto", undefined].includes(block.videoRatio) && /\/(shorts|reel)\//.test(value)) block.videoRatio = "9:16";
         if (/youtube\.com|youtu\.be/.test(value)) this.fetchDescriptionPoster(id);
     },
+    descriptionIsYouTube(block) { return /youtube\.com|youtu\.be/.test(block.url || ""); },
+    descriptionPosterBusy(id) { return !!this.state.descriptionPostersPending?.[id]; },
     async fetchDescriptionPoster(id) {
         const block = findDescriptionBlock(this.ensureDescriptionLayout().blocks, id)?.block;
-        if (!block?.url || this.state.descriptionMediaBusy) return;
-        const request = this.beginRequest("descriptionPoster"), url = block.url, previous = block.posterMediaId;
-        this.state.descriptionMediaBusy = true; this.state.descriptionMediaError = "";
+        if (!block?.url) return;
+        const request = this.beginRequest("descriptionPoster:" + id), url = block.url, previous = block.posterMediaId;
+        this.state.descriptionPostersPending = this.state.descriptionPostersPending || {};
+        this.state.descriptionPostersPending[id] = true; this.state.descriptionMediaError = "";
         try {
             const result = await this.rpc(MEDIA + "video_poster", { product_tmpl_id: request.productId, url });
             if (!this.isRequestCurrent(request)) return;
@@ -512,7 +536,7 @@ export const contentStudioMethods = {
             if (!current || current.url !== url || current.posterMediaId !== previous) return;
             this.state.descriptionMedia.push(result.media); current.posterMediaId = result.media.id;
         } catch (_) { if (this.isRequestCurrent(request)) this.state.descriptionMediaError = "No se pudo obtener la portada. Puedes subir una imagen o volver a intentarlo."; }
-        finally { if (this.isRequestCurrent(request)) this.state.descriptionMediaBusy = false; }
+        finally { if (this.isRequestCurrent(request)) this.state.descriptionPostersPending[id] = false; }
     },
     setDescriptionVideoWidth(id, value) { this.updateDescriptionBlock(id, "videoWidth", Number(value)); },
     descriptionVideoTextStyle(block, field) {
@@ -522,7 +546,7 @@ export const contentStudioMethods = {
     setDescriptionVideoTextStyle(id, field, property, value) {
         if (!["title", "caption"].includes(field)) return;
         const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
-        if (!block || block.type !== "video") return;
+        if (!block || !["video", "image"].includes(block.type)) return;
         const style = this.descriptionVideoTextStyle(block, field);
         if (property === "size") {
             value = Number(value);
@@ -550,11 +574,33 @@ export const contentStudioMethods = {
         return `font-family:${font};font-size:${size}px;font-weight:${style.bold ? 700 : 400};font-style:${style.italic ? "italic" : "normal"};text-align:${align};color:${color}`;
     },
     chooseDescriptionPoster(id, value) { this.updateDescriptionBlock(id, "posterMediaId", Number(value) || false); },
-    descriptionVideoStyle(block) {
+    descriptionVideoRatio(block) {
         const media = this.descriptionMediaById(block.mediaId);
-        let ratio = block.videoRatio || "auto";
-        if (ratio === "auto") ratio = media?.width && media?.height ? media.width + "/" + media.height : /tiktok\.com/.test(block.url || "") ? "9/16" : "16/9";
-        return "--bpi-video-width:" + (Number(block.videoWidth) || 100) + "%;--bpi-video-ratio:" + ratio.replace(":", "/");
+        const ratio = block.videoRatio || "auto";
+        if (ratio !== "auto") return ratio.replace(":", "/");
+        return media?.width && media?.height ? media.width + "/" + media.height : /tiktok\.com|\/(shorts|reel)\//.test(block.url || "") ? "9/16" : "16/9";
+    },
+    descriptionVideoStyle(block) {
+        return "--bpi-video-width:" + (Number(block.videoWidth) || 100) + "%;--bpi-video-ratio:" + this.descriptionVideoRatio(block);
+    },
+    setDescriptionImageNumber(id, field, ev) {
+        const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
+        if (!block || !["imageWidth", "imageMaxWidth"].includes(field)) return;
+        const value = Number(ev.target.value), max = field === "imageWidth" ? 100 : 2400, min = field === "imageWidth" ? 10 : 0;
+        if (!Number.isInteger(value) || value < min || value > max) { ev.target.value = block[field] ?? (min ? 100 : 0); return; }
+        this.updateDescriptionBlock(id, field, value);
+    },
+    descriptionImageStyle(block) {
+        const align = block.imageAlign || "center";
+        return `--bpi-image-width:${block.imageWidth ?? 100}%;--bpi-image-max:${block.imageMaxWidth ? block.imageMaxWidth + "px" : "100%"};--bpi-image-ratio:${(block.imageRatio || "auto").replace(":", "/")};--bpi-image-fit:${block.imageFit || "contain"};--bpi-image-left:${align === "left" ? "0" : "auto"};--bpi-image-right:${align === "right" ? "0" : "auto"}`;
+    },
+    descriptionColumnsStyle(block) {
+        let sizes = ({ "equal": [1, 1], "wide-left": [2, 1], "wide-right": [1, 2] })[block.columnLayout] || [1, 1];
+        if (block.columnLayout === "media" && block.children?.length === 2) sizes = block.children.map(child => {
+            const parts = child.type === "video" ? this.descriptionVideoRatio(child).split("/").map(Number) : [1, 1];
+            return parts[0] / parts[1];
+        });
+        return `--bpi-column-left:${sizes[0]}fr;--bpi-column-right:${sizes[1]}fr;--bpi-column-gap:${({compact:12,normal:24,spacious:40})[block.columnGap] || 24}px;--bpi-column-align:${block.columnAlign || "center"}`;
     },
     updateDescriptionBlock(id, key, value) {
         const found = findDescriptionBlock(this.ensureDescriptionLayout().blocks, id);
