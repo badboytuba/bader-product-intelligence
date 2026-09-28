@@ -105,8 +105,10 @@ never queries autocomplete or an AI provider. Query/approved filters are retaine
 when entering the shop or product. Mobile gets the same always-visible field.
 
 Normalized stored fields are already ASCII lowercase. Escaped `=like` keeps the
-same normalized text coverage without PostgreSQL repeating locale case folding
-over large historical descriptions. A direct name/SKU tier precedes category-only
+same normalized text coverage; normalized fields explicitly use `unaccent=False`
+to avoid PostgreSQL repeating accent removal and locale case folding
+over large historical descriptions. The displayed language name is also matched directly (AR and ES titles may differ).
+A direct displayed-name/SKU tier precedes category-only
 matches, still before pagination and behind exact SKU/name. No full-catalog client
 load, shared price cache, external engine or new database extension. Public
 visibility, native pricing and the common BPI/server matching service remain in

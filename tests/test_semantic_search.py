@@ -52,7 +52,7 @@ class TestSemanticSearch(TransactionCase):
         self.assertIn(self.other, self.Product.search(domain))
         self.assertNotIn(self.product, self.Product.search(domain))
         self.assertIn('=like', str(domain))
-        self.assertNotIn('ilike', str(domain))
+        self.assertFalse(self.Product._fields['bpi_search_description'].unaccent)
 
     def test_native_autocomplete_fetches_sku_without_changing_image_price_mapping(self):
         website = self.env['website'].search([], limit=1)
@@ -63,3 +63,20 @@ class TestSemanticSearch(TransactionCase):
         self.assertIn('default_code', detail['fetch_fields'])
         self.assertEqual(detail['mapping']['image_url']['name'], 'image_url')
         self.assertIn('detail', detail['mapping'])
+
+    def test_displayed_name_translation_precedes_es_fallback_identity(self):
+        self.env['res.lang']._activate_lang('es_AR')
+        self.env['res.lang']._activate_lang('es_ES')
+        wrong_title = self.Product.create({'name': 'AAA fresas mango needle'})
+        wrong_title.with_context(lang='es_ES').name = 'AAA fresas mango needle'
+        wrong_title.with_context(lang='es_AR').name = 'AAA Contraángulo needle'
+        right_title = self.Product.create({'name': 'ZZZ Other needle'})
+        right_title.with_context(lang='es_ES').name = 'ZZZ Other needle'
+        right_title.with_context(lang='es_AR').name = 'ZZZ Fresero needle'
+        model = self.Product.with_context(lang='es_AR')
+        domain = [('id', 'in', (wrong_title | right_title).ids)] + model._bpi_query_domain('fres', descriptions=True)
+        self.assertEqual(model._bpi_ranked_search(domain, 'fres', limit=1), right_title)
+        self.assertEqual(model._bpi_ranked_search(domain, 'fres', offset=1, limit=1), wrong_title)
+        self.assertIn(right_title, model.search(domain))
+        compiled = model._where_calc([('bpi_search_description', '=like', '%fres%')]).get_sql()[1]
+        self.assertNotIn('unaccent', compiled)

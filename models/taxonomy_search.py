@@ -15,7 +15,7 @@ class SearchWebsite(models.Model):
 
 class SearchVariant(models.Model):
     _inherit = 'product.product'
-    bpi_search_sku = fields.Char(compute='_compute_bpi_search_sku', store=True, index=True)
+    bpi_search_sku = fields.Char(compute='_compute_bpi_search_sku', store=True, index=True, unaccent=False)
 
     @api.depends('default_code')
     def _compute_bpi_search_sku(self):
@@ -25,9 +25,9 @@ class SearchVariant(models.Model):
 
 class SearchProduct(models.Model):
     _inherit = 'product.template'
-    bpi_search_name = fields.Char(compute='_compute_bpi_search_identity', store=True, index=True)
-    bpi_search_identity = fields.Text(compute='_compute_bpi_search_identity', store=True)
-    bpi_search_description = fields.Text(compute='_compute_bpi_search_description', store=True)
+    bpi_search_name = fields.Char(compute='_compute_bpi_search_identity', store=True, index=True, unaccent=False)
+    bpi_search_identity = fields.Text(compute='_compute_bpi_search_identity', store=True, unaccent=False)
+    bpi_search_description = fields.Text(compute='_compute_bpi_search_description', store=True, unaccent=False)
 
     @api.depends('name', 'bpi_brand_name', 'public_categ_ids.name', 'product_variant_ids.default_code')
     def _compute_bpi_search_identity(self):
@@ -102,7 +102,8 @@ class SearchProduct(models.Model):
             raise ValidationError(_('La búsqueda debe ser texto.'))
         domains = []
         for word, ids in self._bpi_query_units(query):
-            choices = [expression.AND([[('bpi_search_identity', '=like', '%' + escape_psql(part) + '%')] for part in word.split()])]
+            choices = [expression.AND([[('bpi_search_identity', '=like', '%' + escape_psql(part) + '%')] for part in word.split()]),
+                       expression.AND([[('name', 'ilike', part)] for part in word.split()])]
             if descriptions and not identity_only:
                 choices.append([('bpi_search_description', '=like', '%' + escape_psql(word) + '%')])
             if ids and not identity_only:
@@ -118,11 +119,13 @@ class SearchProduct(models.Model):
         # These stored columns and query units already share lowercase/accent
         # normalization. LIKE avoids repeating expensive locale folding across
         # large historical descriptions; escape metacharacters for literal input.
+        # Rank the translated name actually displayed, not the es_ES fallback
+        # index: AR and ES product titles can legitimately differ.
         direct = expression.AND([expression.OR([
-            [('bpi_search_name', '=like', '%' + escape_psql(part) + '%')],
+            [('name', 'ilike', part)],
             [('product_variant_ids.bpi_search_sku', '=like', '%' + escape_psql(part) + '%')],
         ]) for word, unused in self._bpi_query_units(query) for part in word.split()])
-        tiers = [[('product_variant_ids.bpi_search_sku', '=', term)], [('bpi_search_name', '=', term)],
+        tiers = [[('product_variant_ids.bpi_search_sku', '=', term)], [('name', '=ilike', escape_psql(term))],
                  direct, self._bpi_query_domain(query, identity_only=True), []]
         result = self.browse(); previous = []
         for tier in tiers:

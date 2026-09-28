@@ -149,7 +149,7 @@ export const BpiTaxonomySearch = publicWidget.Widget.extend({
     },
     render(count) {
         this.list.replaceChildren(); this.active = -1;
-        this.summary.textContent = this.rows.length ? `${count} productos · Mostrando ${this.rows.length}` : 'Sin resultados. Prueba otro nombre, SKU o aplicación.';
+        this.summary.textContent = this.rows.length ? `${count} ${count === 1 ? 'producto' : 'productos'} · Mostrando ${this.rows.length}` : 'Sin resultados. Prueba otro nombre, SKU o aplicación.';
         this.live.textContent = this.summary.textContent;
         this.rows.forEach((row, index) => {
             const a = document.createElement('a'); a.href = row.url; a.className = 'bpi-hs-row';
