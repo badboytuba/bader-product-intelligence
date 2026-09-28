@@ -459,3 +459,38 @@ class TestDescriptionLayout(TransactionCase):
         validate_layout(self.layout(blocks))
         with self.assertRaises(ValidationError):
             validate_layout(self.layout(blocks + [{'id': 'excess', 'type': 'divider'}]))
+
+    def test_auxiliary_rich_styles_and_links_survive_save_and_public_projection(self):
+        html = '<h2 style="font-family: Bader Sans; font-size: 32px; text-align: center">Detalle</h2><p style="color: #003841; background-color: #fff2a8; margin-left: 40px"><u>Texto</u> <a href="https://example.com/manual" target="evil" rel="opener">Manual</a></p>'
+        clean = auxiliary_html(html)
+        for expected in ("Bader Sans", "32px", "text-align: center", "background-color", "margin-left", 'rel="noopener noreferrer"', 'target="_blank"', '<u>Texto</u>'):
+            self.assertIn(expected, clean)
+        self.assertNotIn('opener"', clean)
+        layout = self.layout([{'id': 'rich', 'type': 'text', 'html': html}])
+        self.service.save_content(self.product, {'descriptionLayout': layout, 'editorialRevision': self.product.bpi_editorial_revision})
+        self.product.write({'website_published': True})
+        saved = self.product.bpi_description_layout
+        public = self.product._bpi_public_description_layout(self.website)
+        self.assertIn('32px', str(public))
+        self.assertIn('noopener noreferrer', str(public))
+        self.assertEqual(self.product.bpi_description_layout, saved)
+
+    def test_auxiliary_styles_reject_css_and_active_link_attacks(self):
+        payload = '<p id="evil" style="position:fixed; background:url(https://evil.test); color:expression(x); font-family:evil; font-size:9999px; text-align:center; --x:url(evil)">Safe</p><svg><script>bad()</script></svg>'
+        clean = auxiliary_html(payload)
+        self.assertIn('text-align: center', clean)
+        for bad in ('position', 'url(', 'expression', '9999', 'evil', 'bad()', '<svg'):
+            self.assertNotIn(bad, clean)
+        for url in ('javascript:alert(1)', 'data:text/html,foo', '//evil.test', 'https://user:secret@host.test', 'https://x.test/\\evil', 'https://[invalid'):
+            self.assertNotIn('href=', auxiliary_html('<a href="%s" onclick="bad()" target="x">Click</a>' % url))
+
+    def test_auxiliary_formatting_is_idempotent_bounded_and_legacy_text_literal(self):
+        html = '<p><span style="font-family:Helvetica Neue LT Pro;font-size:31px;font-weight:700;font-style:italic;text-decoration:underline">A &amp; B</span></p><ol><li>Uno</li><li>Dos</li></ol>'
+        clean = auxiliary_html(html)
+        self.assertEqual(auxiliary_html(clean), clean)
+        self.assertIn('31px', clean)
+        with self.assertRaises(ValidationError):
+            auxiliary_html('á' * 10001)
+        media = self.image()
+        layout = validate_layout(self.layout([{'id':'img', 'type':'image', 'mediaId':media.id, 'caption':'<b>Literal</b>'}]))
+        self.assertEqual(layout['blocks'][1]['caption'], '<b>Literal</b>')

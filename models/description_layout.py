@@ -134,15 +134,43 @@ def social_video(value):
     raise ValidationError(_('Enlace de vídeo no admitido. Usa la dirección pública de la publicación.'))
 
 
+def auxiliary_style(value):
+    """Allow presentation only; never CSS URLs, positioning or arbitrary rules."""
+    fonts = {s.lower(): s for s in ('Bader Sans', 'Helvetica Neue LT Pro', 'Arial',
+        'Verdana', 'Tahoma', 'Trebuchet MS', 'Georgia', 'Times New Roman', 'Courier New')}
+    choices = {'font-size': {str(n) + 'px' for n in (10, *range(12, 65))},
+        'text-align': {'left', 'center', 'right', 'justify'},
+        'margin-left': {'40px', '80px', '120px', '160px', '200px'},
+        'font-weight': {'bold', '700'}, 'font-style': {'italic'},
+        'text-decoration': {'underline', 'line-through', 'underline line-through', 'line-through underline'}}
+    result = {}
+    for declaration in (value or '').split(';'):
+        key, sep, val = declaration.partition(':')
+        key, val = key.strip().lower(), val.strip()
+        if not sep:
+            continue
+        if key == 'font-family':
+            font = fonts.get(val.split(',')[0].strip().strip('\"\'').lower())
+            if font:
+                result[key] = "'%s'" % font
+        elif key in choices and val.lower() in choices[key]:
+            result[key] = val.lower()
+        elif key in ('color', 'background-color') and re.fullmatch(
+                r'#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?|rgba?\(\s*\d{1,3}(?:\.\d+)?\s*,\s*\d{1,3}(?:\.\d+)?\s*,\s*\d{1,3}(?:\.\d+)?(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)', val):
+            result[key] = val
+    return '; '.join('%s: %s' % pair for pair in result.items())
+
+
 def auxiliary_html(value):
-    """Tiny text-only dialect. Discard active nodes instead of promoting children."""
+    """Text-only rich dialect, sanitized equally on save and public rendering."""
     if not isinstance(value, str) or len(value.encode('utf-8')) > 20000:
         raise ValidationError(_('El texto del bloque no es válido o supera 20 KB.'))
     try:
         root = lxml_html.fragment_fromstring(value or '<p/>', create_parent='div')
     except (ValueError, TypeError):
         raise ValidationError(_('El texto del bloque no es válido.'))
-    allowed = {'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'h3', 'h4', 'blockquote'}
+    allowed = {'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'sub', 'sup',
+        'span', 'div', 'ul', 'ol', 'li', 'h2', 'h3', 'h4', 'h5', 'blockquote', 'a'}
     for node in list(root.iterdescendants()):
         if not isinstance(node.tag, str):
             node.drop_tree()
@@ -151,7 +179,23 @@ def auxiliary_html(value):
         elif node.tag.lower() not in allowed:
             node.drop_tag()
         else:
+            style = auxiliary_style(node.get('style'))
+            href = node.get('href', '')
             node.attrib.clear()
+            if style:
+                node.set('style', style)
+            if node.tag.lower() == 'a':
+                try:
+                    parsed = urlsplit(href)
+                    safe = (parsed.scheme in ('http', 'https') and parsed.hostname
+                        and not parsed.username and not parsed.password
+                        and not re.search(r'[\x00-\x20\\]', href))
+                except ValueError:
+                    safe = False
+                if safe:
+                    node.set('href', href)
+                    node.set('target', '_blank')
+                    node.set('rel', 'noopener noreferrer')
     return str(Markup.escape(root.text or '')) + ''.join(lxml_html.tostring(child, encoding='unicode') for child in root)
 
 

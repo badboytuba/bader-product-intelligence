@@ -1,3 +1,14 @@
+## 2026-09-28 — Designer text and composition usability
+
+Release `16.0.1.14.1` reuses version-1 columns for explicit media+text actions,
+including moving a literal caption into one rich text block without re-uploading
+media. Repeated actions on an existing media/text pair only choose sides. Keep
+media identity, title, main-copy reference and saved content unchanged until save.
+Designer text/callouts expose a full toolbar; Nancy proposals keep their compact
+one. Preserve per-editor selection and explicit nested component keys. Auxiliary
+HTML accepts bounded presentation and HTTP(S) links only, sanitized on both save
+and public rendering. No automatic migration, fetch, AI call or publication.
+
 ## 2026-09-28 — Responsive media compositions
 
 Release `16.0.1.14.0` extends existing version-1 layout blocks without migrating

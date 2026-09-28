@@ -269,3 +269,22 @@
     .bpi-design-block__image-settings, .bpi-design-block__column-settings { grid-template-columns: 1fr; padding: 12px; }
   }
 }
+
+/* Rich content and side-copy actions reuse the existing composition model. */
+.bpi-app.bader-brand {
+  .bpi-designer__compositions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bpi-designer__guide { margin: 0; padding: 0 20px 20px; background: #f2f7f5; color: #386770; font-size: 12px; line-height: 1.7; }
+  .bpi-designer__side-text { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px; margin-top: 20px; background: #f2f7f5; border: 1px solid #bad4cf; border-radius: 10px; color: #003841;
+    > div:first-child { flex: 1 1 220px; } small { display: block; line-height: 1.5; margin-top: 5px; }
+    > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
+  }
+  .bpi-studio-rich__tools { flex-wrap: wrap;
+    select { max-width: 165px; min-width: 0; height: 32px; padding: 3px 6px; border: 1px solid #bad4cf; border-radius: 5px; background: white; color: #003841; font-size: 12px; }
+    button { flex: 0 0 32px; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #287f36; outline-offset: 1px; }
+    small { flex: 1 1 180px; text-align: right; }
+  }
+  .bpi-studio-rich__color { position: relative; display: grid; place-items: center; width: 32px; height: 32px; margin: 0; input { position: absolute; inset: 0; width: 32px; height: 32px; opacity: .01; cursor: pointer; } &:focus-within { outline: 2px solid #287f36; } }
+  @media (max-width: 1100px) { .bpi-designer__compositions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 767px) { .bpi-designer__compositions { grid-template-columns: 1fr; } .bpi-designer__guide { padding: 0 12px 12px; } }
+}

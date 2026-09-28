@@ -24,9 +24,25 @@ export class StudioRichEditor extends Component {
     }
     sync() {
         const el = this.editor.el;
-        if (el && document.activeElement !== el && el.innerHTML !== this.props.value) el.innerHTML = this.props.value || "";
+        // Do not replace DOM/selection while a toolbar control has focus either.
+        if (el && !el.parentElement.contains(document.activeElement) && el.innerHTML !== this.props.value) {
+            el.innerHTML = this.props.sanitize(this.props.value || ""); this.selection = null;
+        }
     }
-    change() { this.props.onChange(this.editor.el?.innerHTML || ""); }
+    remember() {
+        const selection = window.getSelection();
+        if (selection?.rangeCount && this.editor.el?.contains(selection.getRangeAt(0).commonAncestorContainer))
+            this.selection = selection.getRangeAt(0).cloneRange();
+    }
+    restore() {
+        const el = this.editor.el, selection = window.getSelection();
+        if (!el || !selection) return;
+        el.focus(); selection.removeAllRanges();
+        if (this.selection && el.contains(this.selection.commonAncestorContainer)) selection.addRange(this.selection);
+        else { const range = document.createRange(); range.selectNodeContents(el); range.collapse(false); selection.addRange(range); }
+    }
+    toolbarDown(ev) { this.remember(); if (ev.target.closest('button')) ev.preventDefault(); }
+    change() { this.remember(); this.props.onChange(this.props.sanitize(this.editor.el?.innerHTML || "")); }
     blur() { this.change(); }
     paste(ev) {
         ev.preventDefault();
@@ -36,10 +52,28 @@ export class StudioRichEditor extends Component {
         const safe = this.props.sanitize(rich || container.innerHTML.replace(/\n/g, "<br>"));
         this.editor.el?.focus(); document.execCommand("insertHTML", false, safe); this.change();
     }
-    command(command) { this.editor.el?.focus(); document.execCommand(command, false); this.change(); }
+    command(command, value = null) { this.restore(); document.execCommand(command, false, value); this.change(); }
+    selectCommand(command, ev) {
+        const value = ev.target.value; ev.target.value = "";
+        if (!value) return;
+        if (command === "fontSize") {
+            this.restore(); document.execCommand("fontSize", false, "7");
+            this.editor.el.querySelectorAll('font[size="7"]').forEach(node => { node.removeAttribute("size"); node.style.fontSize = value; });
+            this.change();
+        } else this.command(command, value);
+    }
+    link() {
+        const value = window.prompt("URL del enlace (https://…)", "https://");
+        if (!value) return;
+        try {
+            const url = new URL(value);
+            if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw Error();
+            this.command("createLink", url.href);
+        } catch (_) { window.alert("Usa un enlace HTTP o HTTPS válido, sin credenciales."); }
+    }
 }
 StudioRichEditor.template = "bader_product_intelligence.StudioRichEditor";
-StudioRichEditor.props = { value: { type: String, optional: true }, onChange: Function, sanitize: Function, label: String };
+StudioRichEditor.props = { value: { type: String, optional: true }, onChange: Function, sanitize: Function, label: String, full: { type: Boolean, optional: true } };
 
 export function emptyContentStudio() {
     return { open: false, busy: false, loading: false, error: "", notice: "", session: null,
@@ -482,7 +516,7 @@ export const contentStudioMethods = {
         return block;
     },
     addDescriptionComposition(preset) {
-        if (!["video-pair", "video-story", "image-story"].includes(preset)) return;
+        if (!["video-pair", "video-story", "image-story", "video-text"].includes(preset)) return;
         const layout = this.ensureDescriptionLayout();
         const count = blocks => blocks.reduce((n, item) => n + 1 + count(item.children || []), 0);
         if (layout.blocks.length >= 30 || count(layout.blocks) + 3 > 50) {
@@ -490,7 +524,10 @@ export const contentStudioMethods = {
             return;
         }
         const block = this.newDescriptionBlock("columns");
-        if (preset !== "image-story") {
+        if (preset === "video-text") {
+            block.children = [this.newDescriptionBlock("video"), this.newDescriptionBlock("text")];
+            block.columnLayout = "equal";
+        } else if (preset !== "image-story") {
             block.children = [this.newDescriptionBlock("video"), this.newDescriptionBlock("video")];
             block.children[0].videoRatio = "16:9";
             block.children[1].videoRatio = preset === "video-story" ? "9:16" : "16:9";
@@ -500,18 +537,78 @@ export const contentStudioMethods = {
         layout.blocks.push(block); layout.enabled = true;
         this.state.descriptionCanvasView = "edit"; this.state.descriptionSelectedBlock = block.id;
     },
+    descriptionTreeSize(blocks) { return blocks.reduce((n, b) => n + 1 + this.descriptionTreeSize(b.children || []), 0); },
+    descriptionSideTextRow(id) {
+        const row = this.descriptionParentBlock(this.descriptionLayout().blocks, id);
+        return row?.type === "columns" && row.children.length === 2 && row.children.some(b => b.id !== id && ["text", "callout"].includes(b.type)) ? row : null;
+    },
+    addDescriptionSideText(id, side) {
+        if (!["left", "right"].includes(side)) return;
+        const layout = this.ensureDescriptionLayout(), found = findDescriptionBlock(layout.blocks, id);
+        if (!found || !["image", "video"].includes(found.block.type)) return;
+        const existing = this.descriptionSideTextRow(id);
+        if (existing) {
+            if (existing.children[side === "left" ? 1 : 0].id !== id) this.swapDescriptionColumns(existing.id);
+            return;
+        }
+        let depth = 0, parent = this.descriptionParentBlock(layout.blocks, id);
+        for (let p = parent; p; p = this.descriptionParentBlock(layout.blocks, p.id)) depth++;
+        const reuse = parent?.type === "columns" && parent.children.length === 1;
+        if ((!reuse && depth >= 4) || this.descriptionTreeSize(layout.blocks) + (reuse ? 1 : 2) > 50) {
+            this.notify("No cabe otra composición: máximo 50 bloques y 5 niveles. Mueve el bloque a un nivel superior o quita uno.", "warning"); return;
+        }
+        const text = this.newDescriptionBlock("text"), media = found.block;
+        // The legacy caption is literal text, not trusted HTML. Move, never copy.
+        const caption = document.createElement("div"); caption.innerHTML = this.plainTextToHtml(media.caption || "");
+        if (media.captionStyle) {
+            const style = this.descriptionVideoTextCss(media, "caption")
+                .replace("var(--bader-font-display)", "'Bader Sans'").replace("var(--bader-font-body)", "'Helvetica Neue LT Pro'");
+            caption.querySelectorAll("p").forEach(p => p.setAttribute("style", style));
+        }
+        text.html = this.sanitizeDescriptionHtml(caption.innerHTML);
+        const row = reuse ? parent : this.newDescriptionBlock("columns");
+        row.children = side === "left" ? [text, media] : [media, text];
+        Object.assign(row, { columnLayout: "equal", columnGap: "normal", columnAlign: "center" });
+        media.caption = "";
+        if (!reuse) found.siblings.splice(found.index, 1, row);
+        layout.enabled = true; this.state.descriptionCanvasView = "edit";
+        this.notify("Texto lateral creado. La leyenda se trasladó al editor sin duplicarla. Revisa la vista previa y guarda la sección.", "success");
+    },
+    swapDescriptionColumns(id) {
+        const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
+        if (block?.type !== "columns" || block.children?.length !== 2) return;
+        block.children.reverse();
+        block.columnLayout = ({"wide-left":"wide-right", "wide-right":"wide-left"})[block.columnLayout] || block.columnLayout || "equal";
+    },
     addDescriptionBlock(type, parentId = false) {
         const layout = this.ensureDescriptionLayout();
         const list = parentId ? findDescriptionBlock(layout.blocks, parentId)?.block.children : layout.blocks;
         if (!list || list.length >= 30) return;
         if (parentId && list.length >= 20) return;
-        const block = this.newDescriptionBlock(type); list.push(block); layout.enabled = true;
+        const block = this.newDescriptionBlock(type);
+        if (this.descriptionTreeSize(layout.blocks) + this.descriptionTreeSize([block]) > 50) {
+            this.notify("El diseño admite hasta 50 bloques.", "warning"); return;
+        }
+        let depth = 0;
+        for (let p = parentId && findDescriptionBlock(layout.blocks, parentId)?.block; p; p = this.descriptionParentBlock(layout.blocks, p.id)) depth++;
+        if (depth + (block.children ? 1 : 0) > 4) { this.notify("Mueve el bloque a un nivel superior antes de añadir contenido.", "warning"); return; }
+        list.push(block); layout.enabled = true;
         this.state.descriptionSelectedBlock = block.id;
     },
     chooseDescriptionMedia(id, value) {
         this.updateDescriptionBlock(id, "mediaId", Number(value) || false);
         const block = findDescriptionBlock(this.ensureDescriptionLayout().blocks, id)?.block;
         if (block?.type === "video" && value) block.url = "";
+    },
+    editDescriptionVideoUrl(id, value) {
+        const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
+        if (!block || block.type !== "video" || block.url === value) return;
+        // Preserve typing through asynchronous media-list/poster renders. Fetch
+        // only on explicit change/blur, never on each input event.
+        block.url = value; block.posterMediaId = false;
+        if (value) block.mediaId = false;
+        this.beginRequest("descriptionPoster:" + id);
+        if (this.state.descriptionPostersPending) this.state.descriptionPostersPending[id] = false;
     },
     setDescriptionVideoUrl(id, value) {
         this.updateDescriptionBlock(id, "url", value);
@@ -618,6 +715,9 @@ export const contentStudioMethods = {
         if (!found || this.descriptionContainsMain(found.block) || found.siblings.length >= 30) return;
         const parent = this.descriptionParentBlock(this.ensureDescriptionLayout().blocks, id);
         if (parent && found.siblings.length >= (parent.type === "columns" ? 2 : 20)) return;
+        if (this.descriptionTreeSize(this.descriptionLayout().blocks) + this.descriptionTreeSize([found.block]) > 50) {
+            this.notify("El diseño admite hasta 50 bloques.", "warning"); return;
+        }
         const duplicate = clone(found.block);
         const renew = block => { block.id = uid(); (block.children || []).forEach(renew); }; renew(duplicate);
         found.siblings.splice(found.index + 1, 0, duplicate);

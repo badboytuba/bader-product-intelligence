@@ -250,3 +250,19 @@ Rollback after any new layouts were saved must retain an export of those JSON
 layouts: older validators do not understand the new optional properties. Never
 restore an old database over later operator work without an explicit recovery
 window and reviewed data reconciliation.
+
+
+## Diseño Bader · texto lateral y formato (16.0.1.14.1)
+
+- **Imagen + texto** ya ofrecía dos columnas; **Vídeo + texto** añade el mismo atajo para vídeo.
+- En una imagen/vídeo existente, **Texto a la izquierda / derecha** mueve la leyenda literal a un bloque de texto con formato. No duplica el texto ni sube otro archivo. Título, tamaño, portada y referencia multimedia se conservan. Si ya hay un texto al lado, cambia el lado, sin crear otra composición.
+- **Intercambiar lados** invierte ambos bloques y conserva sus proporciones relativas. En móvil se apilan en ese orden.
+- Texto complementario y destacados: párrafos/títulos, fuentes Bader, tamaño, énfasis, color/resaltado, listas, alineación, sangría, enlaces, quitar formato y deshacer/rehacer. Selecciona el fragmento antes de dar formato. El texto principal sigue editándose en **Texto**, sin copias independientes.
+- Las leyendas breves y títulos multimedia conservan sus controles sencillos; para una explicación completa o un título con formato mixto, usa el bloque de texto lateral.
+- **Vista previa** muestra la composición, no los controles. Todo permanece en borrador hasta **Guardar sección / Guardar ficha**.
+
+No se aceptan scripts, CSS libre ni embeds pegados en el editor. Los enlaces HTTP(S) se abren en otra pestaña con aislamiento; no se consultan al editar o renderizar. El sanitizador permite únicamente estilos tipográficos acotados y elimina atributos activos. No hay migración de diseños guardados.
+
+Nota técnica: se mantiene el mecanismo `contenteditable`/`execCommand` existente para conservar el historial de deshacer. Es una API obsoleta, por lo que la certificación se realiza en Chrome y no implica compatibilidad universal con otros navegadores ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Document/execCommand)).
+
+Corrección adicional: un enlace de vídeo en escritura ya no se borra cuando termina una carga asíncrona de la biblioteca. Escribir conserva el borrador y cancela portadas antiguas; no consulta una portada en cada pulsación.

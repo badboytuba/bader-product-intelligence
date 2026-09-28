@@ -17,7 +17,7 @@
     .bpi-layout__preset--mist { background: #f3f8f5; color: var(--bpi-layout-petrol); }
     .bpi-layout__preset--petrol { background: var(--bpi-layout-petrol); color: #fff; }
     .bpi-layout__preset--lime { background: #e8f8de; color: var(--bpi-layout-petrol); }
-    .bpi-layout__preset--petrol { > .bpi-layout__text, > .bpi-layout__main { h3, h4, p, li { color: #fff; } } }
+    .bpi-layout__preset--petrol { > .bpi-layout__text, > .bpi-layout__main { h2, h3, h4, h5, p, li { color: #fff; } } }
     .bpi-layout__align--center { text-align: center; }
     .bpi-layout__align--right { text-align: right; }
     .bpi-layout__columns { display: grid; grid-template-columns: minmax(0, var(--bpi-column-left, 1fr)) minmax(0, var(--bpi-column-right, 1fr)); gap: var(--bpi-column-gap, 24px); align-items: var(--bpi-column-align, center); }
@@ -26,6 +26,7 @@
     .bpi-layout__container { display: grid; gap: 20px; }
     .bpi-layout__block--callout { border-left: 4px solid var(--bpi-layout-lime); }
     .bpi-layout__text > :last-child { margin-bottom: 0; }
+    .bpi-layout__text a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
     .bpi-layout__main { max-width: 100%; }
     figure { margin: 0; }
     img, video { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 10px; }

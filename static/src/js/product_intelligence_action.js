@@ -15,6 +15,8 @@ const SAFE_ODOO_ERROR_NAMES = new Set([
     "odoo.exceptions.UserError", "odoo.exceptions.ValidationError", "odoo.exceptions.AccessError",
 ]);
 const DESCRIPTION_FONT_FAMILIES = [
+    { value: "Bader Sans", label: "Bader Sans" },
+    { value: "Helvetica Neue LT Pro", label: "Helvetica · Bader" },
     { value: "Arial", label: "Arial" },
     { value: "Verdana", label: "Verdana" },
     { value: "Tahoma", label: "Tahoma" },
@@ -59,6 +61,7 @@ const DESCRIPTION_ALLOWED_FONT_SIZES = new Set([
     ...DESCRIPTION_FONT_SIZES.map((item) => item.value),
     "10px",
     "48px",
+    ...Array.from({length: 53}, (_, i) => `${i + 12}px`),
 ]);
 const DESCRIPTION_ALLOWED_ALIGNMENTS = new Set(["left", "center", "right", "justify"]);
 const DESCRIPTION_ALLOWED_INDENTS = new Set(["40px", "80px", "120px", "160px", "200px"]);

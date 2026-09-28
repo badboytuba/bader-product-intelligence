@@ -618,3 +618,56 @@ QUnit.test("composition preset respects the fifty-block limit without a partial 
     assert.deepEqual(a.descriptionLayout(),before);
     assert.strictEqual(before.blocks.length,17);
 });
+
+QUnit.test("side text moves a literal caption once, preserves media/title/styles and swaps without nesting", assert => {
+    const a=action(); a.rpc=()=>{throw Error('No requests');}; a.addDescriptionBlock('image');
+    const image=a.descriptionLayout().blocks[1];Object.assign(image,{mediaId:71,title:'Título original',caption:'Texto <b>literal</b>',captionStyle:{font:'display',size:31,bold:true}});
+    a.addDescriptionSideText(image.id,'right');const row=a.descriptionLayout().blocks[1],text=row.children[1];
+    assert.deepEqual(row.children.map(b=>b.type),['image','text']);assert.strictEqual(image.mediaId,71);assert.strictEqual(image.title,'Título original');
+    assert.strictEqual(image.caption,'');assert.ok(text.html.includes('&lt;b&gt;literal&lt;/b&gt;'));assert.ok(text.html.includes('31px'));assert.ok(text.html.includes('Bader Sans'));
+    const html=text.html;row.columnLayout='wide-left';a.addDescriptionSideText(image.id,'left');
+    assert.strictEqual(row.children[0].id,text.id);assert.strictEqual(row.children[1].id,image.id);assert.strictEqual(row.columnLayout,'wide-right');assert.strictEqual(text.html,html);
+    a.addDescriptionSideText(image.id,'left');assert.strictEqual(a.descriptionTreeSize(a.descriptionLayout().blocks),4);
+    a.swapDescriptionColumns(row.id);assert.strictEqual(row.children[0].id,image.id);assert.strictEqual(row.columnLayout,'wide-left');
+});
+
+QUnit.test("video text preset and nested limits preserve draft on rejected growth", assert => {
+    const a=action();a.addDescriptionComposition('video-text');assert.deepEqual(a.descriptionLayout().blocks[1].children.map(b=>b.type),['video','text']);
+    const deep={id:'deep',type:'image',caption:'Do not lose',mediaId:4};let nested=deep;
+    for(let i=0;i<4;i++) nested={id:'wrap'+i,type:'container',children:[nested]};
+    a.descriptionLayout().blocks.push(nested);const before=copy(a.descriptionLayout());a.addDescriptionSideText('deep','right');assert.deepEqual(a.descriptionLayout(),before);
+    const b=action();for(let i=0;i<16;i++)b.addDescriptionComposition('video-pair');
+    b.addDescriptionBlock('text');assert.strictEqual(b.descriptionTreeSize(b.descriptionLayout().blocks),50);
+    const full=copy(b.descriptionLayout());b.addDescriptionBlock('text');b.duplicateDescriptionBlock(b.descriptionLayout().blocks[1].id);b.addDescriptionSideText(b.descriptionLayout().blocks[1].children[0].id,'right');
+    assert.deepEqual(b.descriptionLayout(),full);
+});
+
+QUnit.test("mounted rich design toolbar keeps selection, formats independently and survives tab return", async assert => {
+    const target=document.createElement('div');document.body.appendChild(target);const data=payload(),calls=[];
+    data.descriptionLayout={version:1,enabled:true,blocks:[{id:'principal',type:'main'},{id:'group',type:'container',children:[{id:'one',type:'text',html:'<p>Uno especial</p>'},{id:'two',type:'text',html:'<p>Dos intacto</p>'}]}]};
+    const app=new App(ProductIntelligenceAction,{templates,test:true,props:{action:{params:{product_tmpl_id:1},context:{}}},env:{services:{user:{context:{allowed_company_ids:[2]}},notification:{add(){}},action:{doAction(){}},rpc:async route=>{calls.push(route);if(route.endsWith('/data'))return data;if(route.endsWith('/description_media/list'))return{media:[]};throw Error(route);}}}});
+    try{
+        const a=await app.mount(target);await a.selectDetailSection('content');a.setDescriptionMode('design');await patch();await patch();
+        const editors=()=>target.querySelectorAll('.bpi-designer .bpi-studio-rich');const editor=editors()[0],surface=editor.querySelector('[contenteditable]');
+        assert.ok(editor.querySelector('select[aria-label="Fuente del texto"]'));assert.ok(editor.querySelector('button[aria-label="Insertar enlace"]'));
+        surface.focus();const r=document.createRange();r.selectNodeContents(surface.querySelector('p'));const sel=window.getSelection();sel.removeAllRanges();sel.addRange(r);surface.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        const font=editor.querySelector('[aria-label="Fuente del texto"]');font.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));font.focus();await patch();font.value='Bader Sans';font.dispatchEvent(new Event('change',{bubbles:true}));await patch();
+        assert.ok(a.descriptionLayout().blocks[1].children[0].html.includes('Bader Sans'));
+        const size=editor.querySelector('[aria-label="Tamaño del texto"]');size.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));size.focus();size.value='24px';size.dispatchEvent(new Event('change',{bubbles:true}));await patch();
+        assert.ok(a.descriptionLayout().blocks[1].children[0].html.includes('24px'));assert.strictEqual(a.descriptionLayout().blocks[1].children[1].html,'<p>Dos intacto</p>');
+        const saved=copy(a.descriptionLayout());a.setDescriptionMode('text');await patch();a.setDescriptionMode('design');await patch();await patch();
+        assert.deepEqual(a.descriptionLayout(),saved);assert.ok(editors()[0].querySelector('[contenteditable]').innerHTML.includes('Bader Sans'));assert.ok(calls.every(route=>/\/(data|list)$/.test(route)));
+    }finally{app.destroy();target.remove();}
+});
+
+QUnit.test("typing a video URL survives unrelated async renders without fetching a poster", async assert => {
+    const target=document.createElement('div');document.body.appendChild(target);const calls=[],data=payload();
+    const app=new App(ProductIntelligenceAction,{templates,test:true,props:{action:{params:{product_tmpl_id:1},context:{}}},env:{services:{user:{context:{allowed_company_ids:[2]}},notification:{add(){}},action:{doAction(){}},rpc:async route=>{calls.push(route);if(route.endsWith('/data'))return data;if(route.endsWith('/description_media/list'))return{media:[]};throw Error(route);}}}});
+    try{
+        const a=await app.mount(target);await a.selectDetailSection('content');a.setDescriptionMode('design');a.addDescriptionBlock('video');await patch();await patch();
+        const input=target.querySelector('.bpi-design-block.is-video input[type=url]');input.focus();input.value='https://youtu.be/abcdefghijk';input.dispatchEvent(new Event('input',{bubbles:true}));
+        a.state.descriptionMedia=[{id:5,kind:'image',state:'ready',filename:'loaded asynchronously'}];await patch();
+        assert.strictEqual(input.value,'https://youtu.be/abcdefghijk');assert.strictEqual(a.descriptionLayout().blocks[1].url,input.value);
+        assert.ok(calls.every(route=>/\/(data|list)$/.test(route)), 'no request per keystroke');
+    }finally{app.destroy();target.remove();}
+});
