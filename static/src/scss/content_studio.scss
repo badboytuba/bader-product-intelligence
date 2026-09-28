@@ -285,6 +285,7 @@
     small { flex: 1 1 180px; text-align: right; }
   }
   .bpi-studio-rich__color { position: relative; display: grid; place-items: center; width: 32px; height: 32px; margin: 0; input { position: absolute; inset: 0; width: 32px; height: 32px; opacity: .01; cursor: pointer; } &:focus-within { outline: 2px solid #287f36; } }
+  .bpi-studio-rich__surface a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
   @media (max-width: 1100px) { .bpi-designer__compositions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 767px) { .bpi-designer__compositions { grid-template-columns: 1fr; } .bpi-designer__guide { padding: 0 12px 12px; } }
 }
