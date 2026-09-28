@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from odoo.tests.common import TransactionCase, tagged
 
 
@@ -80,3 +81,13 @@ class TestSemanticSearch(TransactionCase):
         self.assertIn(right_title, model.search(domain))
         compiled = model._where_calc([('bpi_search_description', '=like', '%fres%')]).get_sql()[1]
         self.assertNotIn('unaccent', compiled)
+
+    def test_no_match_skips_all_ranking_scans(self):
+        website = self.env['website'].search([], limit=1)
+        website.bpi_taxonomy_search_enabled = True
+        options = {'displayImage': False, 'displayDescription': False, 'displayDetail': False, 'displayExtraLink': False}
+        detail = self.Product._search_get_detail(website, 'name', options)
+        with patch.object(type(self.Product), '_bpi_ranked_search', side_effect=AssertionError('Empty search must not rank')):
+            rows, count = self.Product._search_fetch(detail, 'unfindable-zz93827-needle', 8, 'name')
+        self.assertFalse(rows)
+        self.assertEqual(count, 0)

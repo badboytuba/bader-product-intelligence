@@ -109,8 +109,8 @@ same normalized text coverage; normalized fields explicitly use `unaccent=False`
 to avoid PostgreSQL repeating accent removal and locale case folding
 over large historical descriptions. The displayed language name is also matched directly (AR and ES titles may differ).
 A direct displayed-name/SKU tier precedes category-only
-matches, still before pagination and behind exact SKU/name. No full-catalog client
-load, shared price cache, external engine or new database extension. Public
+matches, still before pagination and behind exact SKU/name. Zero-match autocomplete returns after the required count without rescanning
+all ranking tiers. No full-catalog client load, shared price cache, external engine or new database extension. Public
 visibility, native pricing and the common BPI/server matching service remain in
 place. Custom head and homepage carousels are not rewritten by this upgrade.
 

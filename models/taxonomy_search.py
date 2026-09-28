@@ -179,8 +179,13 @@ class SearchProduct(models.Model):
         if not search_detail.get('bpiTaxonomy'):
             return super()._search_fetch(search_detail, search, limit, order)
         domain = expression.AND(search_detail['base_domain'] + [self._bpi_query_domain(search or '', descriptions=True)])
+        # Count is part of the native contract anyway. An empty search should
+        # not scan historical descriptions again for every relevance tier.
+        count = self.search_count(domain)
+        if not count:
+            return self.browse(), 0
         results = self._bpi_ranked_search(domain, search or '', limit=limit, order=search_detail.get('order', order))
-        return results, self.search_count(domain)
+        return results, count
 
 
 class SearchService(models.AbstractModel):
