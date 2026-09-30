@@ -23,7 +23,7 @@ try{
  result.checks.push('native_hover_menu_reachable_above_search_and_closes_autocomplete');
  for(const width of [1440,1024,768,360]){
   await p.setViewportSize({width,height:1080});await p.locator('#wrapwrap').evaluate(e=>e.scrollTop=0);await p.waitForTimeout(600);
-  await p.waitForFunction(()=>{const img=document.querySelector('.carousel-indicators li img');return img?.complete&&img.naturalWidth>0&&img.getBoundingClientRect().width>0;});
+  await p.waitForFunction(()=>{const img=document.querySelector('.carousel-indicators li img');if(!img)return false;const r=img.getBoundingClientRect(),card=img.closest('li').getBoundingClientRect();return img.complete&&img.naturalWidth>0&&r.width>0&&r.height>0&&r.left>=card.left&&r.right<=card.right;});
   const measure=await p.evaluate(()=>{const c=document.querySelector('.o_wsale_product_images'),r=document.querySelector('.carousel-indicators'),h=document.querySelector('.bpi-website-technical-description__header h2'),m=document.querySelector('.bpi-layout__main');return {width:innerWidth,overflow:document.querySelector('#wrapwrap').scrollWidth-innerWidth,follow:c.classList.contains('bpi-gallery-follow'),position:getComputedStyle(c).position,headingLeft:h.getBoundingClientRect().left,mainLeft:m.getBoundingClientRect().left,direction:getComputedStyle(r).flexDirection};});
   assert(measure.overflow<=1,JSON.stringify(measure));assert.equal(measure.follow,width>=992);assert(Math.abs(measure.headingLeft-measure.mainLeft)<=1,'heading aligned with description');
   assert.equal(measure.direction,width>=1200?'column':'row');
