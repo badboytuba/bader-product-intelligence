@@ -494,3 +494,134 @@ class TestDescriptionLayout(TransactionCase):
         media = self.image()
         layout = validate_layout(self.layout([{'id':'img', 'type':'image', 'mediaId':media.id, 'caption':'<b>Literal</b>'}]))
         self.assertEqual(layout['blocks'][1]['caption'], '<b>Literal</b>')
+
+    def variant_product(self):
+        attribute = self.env['product.attribute'].create({'name': 'Edition'})
+        values = self.env['product.attribute.value'].create([
+            {'name': name, 'attribute_id': attribute.id} for name in ('High', 'Starter')])
+        return self.env['product.template'].create({'name': 'Variant design', 'sale_ok': True,
+            'is_published': True, 'bpi_technical_description': '<p>Common copy</p>',
+            'attribute_line_ids': [(0, 0, {'attribute_id': attribute.id, 'value_ids': [(6, 0, values.ids)]})]})
+
+    def test_variant_layout_validation_fails_closed(self):
+        for ids in ([], [True], ['1'], [0], [-1], [1, 1], list(range(1, 102))):
+            with self.subTest(ids=ids), self.assertRaises(ValidationError):
+                validate_layout(self.layout([{'id': 'scoped', 'type': 'text', 'html': 'A', 'variantIds': ids}]))
+        for block in (
+            {'id': 'principal', 'type': 'main', 'variantIds': [1]},
+            {'id': 'parent', 'type': 'container', 'variantIds': [1], 'children': [{'id': 'principal', 'type': 'main'}]},
+            {'id': 'parent', 'type': 'container', 'children': [{'id': 'principal', 'type': 'main'}, {'id': 'child', 'type': 'text', 'html': 'B', 'variantIds': [1]}]},
+        ):
+            with self.subTest(block=block), self.assertRaises(ValidationError):
+                validate_layout({'version': 1, 'enabled': True, 'blocks': [block]})
+
+    def test_variant_layout_ownership_and_atomic_save(self):
+        product = self.variant_product()
+        variants = product.product_variant_ids.sorted('id')
+        layout = self.layout([{'id': 'scoped', 'type': 'text', 'html': 'High only', 'variantIds': [variants[0].id]}])
+        self.service.save_content(product, {'descriptionLayout': layout, 'editorialRevision': product.bpi_editorial_revision})
+        revision, saved = product.bpi_editorial_revision, copy.deepcopy(product.bpi_description_layout)
+        layout['blocks'][1]['variantIds'] = [self.other.product_variant_id.id]
+        with self.assertRaises(ValidationError), self.env.cr.savepoint():
+            self.service.save_all(product, product_values={'name': 'Must not persist'},
+                content_values={'descriptionLayout': layout, 'editorialRevision': revision})
+        self.assertEqual(product.name, 'Variant design')
+        self.assertEqual(product.bpi_description_layout, saved)
+        self.assertEqual(product.bpi_editorial_revision, revision)
+        with self.assertRaises(ValidationError):
+            self.env['product.template'].create({'name': 'Foreign reference', 'bpi_description_layout': layout})
+
+    def test_variant_projection_has_only_selected_edition_and_common_copy(self):
+        product = self.variant_product()
+        high, starter = product.product_variant_ids.sorted('id')
+        product.bpi_description_layout = self.layout([
+            {'id': 'high', 'type': 'text', 'html': '<p>High hose</p>', 'variantIds': [high.id]},
+            {'id': 'starter', 'type': 'text', 'html': '<p>Starter hose</p>', 'variantIds': [starter.id]},
+            {'id': 'both', 'type': 'text', 'html': '<p>Both</p>', 'variantIds': [starter.id, high.id]},
+        ])
+        before = copy.deepcopy(product.bpi_description_layout)
+        for variant_id, expected in ((False, ['principal']), (high.id, ['principal', 'high', 'both']),
+                (starter.id, ['principal', 'starter', 'both']), (self.other.product_variant_id.id, ['principal']),
+                (str(high.id), ['principal']), (True, ['principal'])):
+            with self.subTest(variant=variant_id), patch('requests.request', side_effect=AssertionError('No network')):
+                projection = product._bpi_public_description_layout(self.website, variant_id=variant_id)
+                self.assertEqual([b['id'] for b in projection['blocks']], expected)
+        self.assertEqual(product.bpi_description_layout, before)
+        high.active = False
+        self.assertEqual([b['id'] for b in product._bpi_public_description_layout(self.website, high.id)['blocks']], ['principal'])
+        # Archiving never silently turns a restricted block into universal copy.
+        product.bpi_description_layout = before
+        product.is_published = False
+        self.assertFalse(product._bpi_public_description_layout(self.website, starter.id))
+
+    def test_image_text_title_is_projected_once_in_either_column_order(self):
+        media = self.image()
+        self.product.is_published = True
+        for reverse in (False, True):
+            children = [{'id': 'photo', 'type': 'image', 'mediaId': media.id, 'title': 'Grupo hídrico',
+                         'titleStyle': {'size': 36, 'color': 'green'}},
+                        {'id': 'copy', 'type': 'text', 'html': '<p>Detalle</p>'}]
+            if reverse:
+                children.reverse()
+            self.product.bpi_description_layout = self.layout([{'id': 'row', 'type': 'columns', 'children': children}])
+            saved, revision = copy.deepcopy(self.product.bpi_description_layout), self.product.bpi_editorial_revision
+            projection = self.product._bpi_public_description_layout(self.website)
+            projected = {b['type']: b for b in projection['blocks'][1]['children']}
+            self.assertTrue(projected['image']['hideTitle'])
+            self.assertEqual(projected['text']['linkedTitle'], 'Grupo hídrico')
+            self.assertIn('36px', projected['text']['linkedTitleCss'])
+            rendered = str(self.env['ir.ui.view']._render_template('bader_product_intelligence.description_layout',
+                {'product': self.product, 'website': self.website, 'bpi_layout': projection}))
+            from lxml import html
+            root = html.fromstring(rendered)
+            self.assertEqual(len(root.xpath('//div[@data-block-id="copy"]/h3')), 1)
+            self.assertEqual(len(root.xpath('//div[@data-block-id="photo"]//h3')), 0)
+            self.assertEqual(self.product.bpi_description_layout, saved)
+            self.assertEqual(self.product.bpi_editorial_revision, revision)
+
+    def test_video_pair_has_shared_rows_without_inventing_second_title(self):
+        self.product.is_published = True
+        self.product.bpi_description_layout = self.layout([{'id': 'pair', 'type': 'columns', 'columnLayout': 'media', 'children': [
+            {'id': 'horizontal', 'type': 'video', 'url': 'https://youtu.be/abcdefghijk', 'videoRatio': '16:9', 'title': 'Long title'},
+            {'id': 'vertical', 'type': 'video', 'url': 'https://youtu.be/12345678901', 'videoRatio': '9:16'},
+        ]}])
+        layout = self.product._bpi_public_description_layout(self.website)
+        self.assertTrue(layout['blocks'][1]['videoPair'])
+        self.assertFalse(layout['blocks'][1]['children'][1].get('title'))
+        rendered = str(self.env['ir.ui.view']._render_template('bader_product_intelligence.description_layout',
+            {'product': self.product, 'website': self.website, 'bpi_layout': layout}))
+        self.assertIn('bpi-layout__columns--video-pair', rendered)
+
+    def test_native_variant_response_preserves_price_and_selected_layout(self):
+        from types import SimpleNamespace
+        from ..controllers.description_variant import DescriptionVariantController
+        product = self.variant_product()
+        high, starter = product.product_variant_ids.sorted('id')
+        product.bpi_description_layout = self.layout([
+            {'id': 'high', 'type': 'text', 'html': 'High specific', 'variantIds': [high.id]},
+            {'id': 'starter', 'type': 'text', 'html': 'Starter specific', 'variantIds': [starter.id]}])
+        base = {'product_template_id': product.id, 'product_id': high.id, 'is_combination_possible': True,
+                'price': 123.45, 'list_price': 149.0, 'carousel': '<div>native</div>'}
+        with patch('odoo.addons.bader_product_intelligence.controllers.description_variant.request',
+                   SimpleNamespace(env=self.env, website=self.website)), patch(
+                'odoo.addons.website_sale.controllers.variant.WebsiteSaleVariantController.get_combination_info_website',
+                return_value=dict(base)):
+            result = DescriptionVariantController.get_combination_info_website.__wrapped__(
+                DescriptionVariantController(), product.id, starter.id, [], 1, bpi_description_token='42')
+        self.assertEqual({key: result[key] for key in base}, base)
+        self.assertIn('High specific', result['bpi_description']['html'])
+        self.assertNotIn('Starter specific', result['bpi_description']['html'])
+        self.assertEqual(result['bpi_description']['variantId'], high.id)
+        self.assertEqual(result['bpi_description']['token'], '42')
+
+    def test_variant_projection_respects_company_and_website(self):
+        product = self.variant_product()
+        variant = product.product_variant_ids[0]
+        product.bpi_description_layout = self.layout([{'id': 'only', 'type': 'text', 'html': 'Scoped', 'variantIds': [variant.id]}])
+        other_company = self.env['res.company'].create({'name': 'Different website company'})
+        product.company_id = other_company
+        self.assertFalse(product._bpi_public_description_layout(self.website, variant.id))
+        product.company_id = False
+        other_website = self.env['website'].create({'name': 'Other website', 'company_id': self.website.company_id.id})
+        product.website_id = other_website
+        self.assertFalse(product._bpi_public_description_layout(self.website, variant.id))

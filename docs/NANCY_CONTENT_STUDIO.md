@@ -266,3 +266,45 @@ No se aceptan scripts, CSS libre ni embeds pegados en el editor. Los enlaces HTT
 Nota técnica: se mantiene el mecanismo `contenteditable`/`execCommand` existente para conservar el historial de deshacer. Es una API obsoleta, por lo que la certificación se realiza en Chrome y no implica compatibilidad universal con otros navegadores ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Document/execCommand)).
 
 Corrección adicional: un enlace de vídeo en escritura ya no se borra cuando termina una carga asíncrona de la biblioteca. Escribir conserva el borrador y cancela portadas antiguas; no consulta una portada en cada pulsación.
+
+## Variant compositions and aligned titles — 16.0.1.15.0 (QAS)
+
+Two-video rows share title, frame and caption grid tracks on modern browsers.
+A title on only one side, wrapped lines or different type sizes no longer offset
+the playable frames. Mobile stacks each complete video without a phantom title.
+In an image/text pair (either order), the image's existing title and typography
+are presented and edited in the text column. They remain one value: no content
+migration, duplicated heading, media replacement or HTML rewrite is performed.
+Standalone images and video titles retain their usual placement.
+
+Every top-level supplementary block/composition offers **Mostrar en → Todas las
+variantes / Variantes específicas** when the product has variants. Select one or
+more existing Odoo editions, then save the section. Empty specific selections
+fail closed and cannot be saved. Nested blocks inherit their row's scope; the
+principal text and containers holding it are always common. Wrapping a scoped
+image with side text transfers the scope to its whole composition.
+
+**Vista previa de la variante** previews the chosen edition or just common
+content; it changes neither stock/price/variant data nor saved content. New
+variants do not inherit a restricted composition automatically. Archived/missing
+variants do not expose their blocks; missing references must be reviewed on save.
+No edition assignment is inferred from prose or an image (e.g. TREKC M2 hoses).
+
+The optional version-1 JSON `variantIds` contains unique, positive
+`product.product` IDs (max100), only on root blocks without a main reference.
+Direct ORM writes validate ownership as well as administrative permissions.
+Without the new key, behavior stays common. Existing saved layouts are untouched.
+
+The public server projects only common + selected-edition blocks via the native
+`/sale/get_combination_info_website` result (`bpi_description` extension). It uses
+the native selected variant ID, not `#attr` attribute-value IDs; native prices,
+images and permissions remain intact. A bounded request-token echo rejects obsolete
+responses before native DOM updates, including during the native throttle. Initial HTML/no-JS shows
+common content, so a deep hash link cannot flash another edition's technical
+content. Invalid combinations show only common content. Scoped blocks are hidden
+and their playback stopped while selection changes. Players remain click-to-load.
+No extra pricing service, AI, external fetch or automatic publication is added.
+
+Downgrading to1.14.2 cannot validate newly saved `variantIds`. Export new layouts
+and review an explicit rollback rather than stripping conditions (which would
+incorrectly make edition-specific claims universal).

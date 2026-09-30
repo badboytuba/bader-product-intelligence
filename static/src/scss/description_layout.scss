@@ -23,6 +23,27 @@
     .bpi-layout__columns { display: grid; grid-template-columns: minmax(0, var(--bpi-column-left, 1fr)) minmax(0, var(--bpi-column-right, 1fr)); gap: var(--bpi-column-gap, 24px); align-items: var(--bpi-column-align, center); }
     .bpi-layout__columns > :only-child { grid-column: 1 / -1; }
     .bpi-layout__columns--media > .bpi-layout__block--video { padding: 0; }
+    // Share the actual title/stage/caption rows, not the overall card heights.
+    // A missing or wrapped title cannot displace either playable frame.
+    @supports (grid-template-rows: subgrid) {
+        .bpi-layout__columns--video-pair {
+            grid-template-rows: auto auto auto;
+            row-gap: 0;
+            align-items: stretch;
+            > .bpi-layout__block--video {
+                display: grid; grid-template-rows: subgrid; grid-row: 1 / span 3; row-gap: 0;
+                &:first-child { grid-column: 1; }
+                &:last-child { grid-column: 2; }
+                > .bpi-media-preview, > .bpi-layout__video-figure,
+                > .bpi-media-preview > .bpi-layout__video-figure {
+                    display: grid; grid-template-rows: subgrid; grid-row: 1 / span 3; row-gap: 0;
+                }
+                .bpi-layout__video-title { grid-row: 1; align-self: start; }
+                .bpi-layout__video-stage { grid-row: 2; align-self: start; }
+                .bpi-layout__video-caption { grid-row: 3; align-self: start; }
+            }
+        }
+    }
     .bpi-layout__container { display: grid; gap: 20px; }
     .bpi-layout__block--callout { border-left: 4px solid var(--bpi-layout-lime); }
     .bpi-layout__text > :last-child { margin-bottom: 0; }
@@ -53,5 +74,13 @@
         .bpi-layout__effect--lift { transition: transform .18s ease, box-shadow .18s ease; }
         .bpi-layout__effect--lift:hover { transform: translateY(-2px); box-shadow: 0 10px 28px #003b4514; }
     }
-    @media (max-width: 767px) { gap: 16px; .bpi-layout__columns { grid-template-columns: 1fr; gap: 16px; } }
+    @media (max-width: 767px) {
+        gap: 16px; .bpi-layout__columns { grid-template-columns: 1fr; gap: 16px; }
+        .bpi-layout__columns--video-pair { display: flex; flex-direction: column; > .bpi-layout__block--video { display: block; width: 100%; > .bpi-media-preview, > .bpi-layout__video-figure, > .bpi-media-preview > .bpi-layout__video-figure { display: block; grid-row: auto; grid-template-rows: none; } } }
+    }
 }
+.bpi-designer__canvas.is-mobile .bpi-layout__columns--video-pair {
+    display: flex; flex-direction: column;
+    > .bpi-layout__block--video { display: block; width: 100%; > .bpi-media-preview, > .bpi-layout__video-figure, > .bpi-media-preview > .bpi-layout__video-figure { display: block; grid-row: auto; grid-template-rows: none; } }
+}
+.bpi-description-host [data-bpi-variant-specific][hidden] { display: none !important; }

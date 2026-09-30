@@ -199,7 +199,7 @@ def auxiliary_html(value):
     return str(Markup.escape(root.text or '')) + ''.join(lxml_html.tostring(child, encoding='unicode') for child in root)
 
 
-def validate_layout(value, media_lookup=None):
+def validate_layout(value, media_lookup=None, variant_lookup=None):
     if value is None or value is False:
         return empty_layout()
     if not isinstance(value, dict) or set(value) - {'version', 'enabled', 'blocks'} or type(value.get('version')) is not int or value.get('version') != 1:
@@ -213,7 +213,7 @@ def validate_layout(value, media_lookup=None):
     if size > 150000:
         raise ValidationError(_('El diseño supera 150 KB.'))
     ids, count, mains = set(), [0], [0]
-    common = {'id', 'type', 'preset', 'align', 'effect', 'spacing'}
+    common = {'id', 'type', 'preset', 'align', 'effect', 'spacing', 'variantIds'}
     def visit(block, depth=0):
         if not isinstance(block, dict) or depth > 4:
             raise ValidationError(_('El diseño contiene demasiados niveles.'))
@@ -229,6 +229,16 @@ def validate_layout(value, media_lookup=None):
         if not isinstance(kind, str) or kind not in accepted or set(block) - (common | accepted[kind]):
             raise ValidationError(_('Tipo o propiedades de bloque no permitidos.'))
         result = {'id': key, 'type': kind}
+        if 'variantIds' in block:
+            variants = block['variantIds']
+            if (depth or kind == 'main' or not isinstance(variants, list)
+                    or not 1 <= len(variants) <= 100
+                    or any(type(v) is not int or v <= 0 for v in variants)
+                    or len(set(variants)) != len(variants)):
+                raise ValidationError(_('Selecciona variantes para la composición completa. El texto principal siempre es común.'))
+            if variant_lookup:
+                variant_lookup(variants)
+            result['variantIds'] = sorted(variants)
         for field, allowed, default in (
             ('preset', ('white', 'mist', 'petrol', 'lime'), 'white'),
             ('align', ('left', 'center', 'right'), 'left'), ('effect', ('none', 'lift'), 'none'),
@@ -281,6 +291,11 @@ def validate_layout(value, media_lookup=None):
             if not isinstance(children, list) or not 1 <= len(children) <= (2 if kind == 'columns' else 20):
                 raise ValidationError(_('La composición debe contener bloques; las columnas admiten dos.'))
             result['children'] = [visit(child, depth + 1) for child in children]
+            if 'variantIds' in result:
+                def has_main(node):
+                    return node['type'] == 'main' or any(has_main(c) for c in node.get('children', []))
+                if has_main(result):
+                    raise ValidationError(_('El texto principal siempre es común a todas las variantes.'))
             if kind == 'columns':
                 for field, allowed in (('columnLayout', ('equal', 'wide-left', 'wide-right', 'media')),
                         ('columnGap', ('compact', 'normal', 'spacious')), ('columnAlign', ('start', 'center', 'end'))):
@@ -425,6 +440,8 @@ class ProductTemplate(models.Model):
                 layout = validate_layout(values['bpi_description_layout'])
                 if layout_media_ids(layout):
                     raise ValidationError(_('Crea el producto antes de adjuntar sus archivos.'))
+                if any('variantIds' in block for block in layout['blocks']):
+                    raise ValidationError(_('Crea el producto y sus variantes antes de configurar el diseño específico.'))
                 values['bpi_description_layout'] = layout
         return super().create(values_list)
 
@@ -439,7 +456,8 @@ class ProductTemplate(models.Model):
             if 'bpi_description_layout' in local:
                 self.env['bpi.service']._ensure_manager()
                 local['bpi_description_layout'] = validate_layout(local['bpi_description_layout'],
-                    lambda media_id, kind: self.env['bpi.description.media']._for_product(product, media_id, kind))
+                    lambda media_id, kind: self.env['bpi.description.media']._for_product(product, media_id, kind),
+                    product._bpi_check_layout_variants)
             local['bpi_editorial_revision'] = revision + 1
             super(ProductTemplate, product).write(local)
         return True
@@ -450,11 +468,29 @@ class ProductTemplate(models.Model):
                       editorialRevision=self.bpi_editorial_revision or 1)
         return result
 
-    def _bpi_public_description_layout(self, website):
+    def _bpi_check_layout_variants(self, variant_ids):
+        self.ensure_one()
+        variants = self.env['product.product'].with_context(active_test=False).search([
+            ('id', 'in', variant_ids), ('product_tmpl_id', '=', self.id)])
+        if set(variants.ids) != set(variant_ids):
+            raise ValidationError(_('Las variantes del diseño deben pertenecer a este producto. Recarga la ficha.'))
+
+    def _bpi_has_variant_layout(self):
+        self.ensure_one()
+        layout = self.bpi_description_layout or {}
+        return bool(layout.get('enabled')) and any('variantIds' in b for b in layout.get('blocks', []))
+
+    def _bpi_public_description_layout(self, website, variant_id=False):
         self.ensure_one()
         layout = self.bpi_description_layout
         if not layout or not layout.get('enabled') or not self._bpi_plain_text(self.bpi_technical_description).strip() or not self._bpi_visible_documents(website):
             return False
+        # Do not interpret hash attribute-value IDs as product.product IDs. The
+        # native combination response supplies the selected, existing variant.
+        variant = self.env['product.product'].search([
+            ('id', '=', variant_id), ('product_tmpl_id', '=', self.id), ('active', '=', True)
+        ], limit=1) if type(variant_id) is int and variant_id > 0 else self.env['product.product']
+        visible_blocks = [b for b in layout['blocks'] if 'variantIds' not in b or variant.id in b['variantIds']]
         media_ids = layout_media_ids(layout)
         dimensions = {}
         if media_ids:
@@ -492,8 +528,17 @@ class ProductTemplate(models.Model):
                 block['children'] = [project(child) for child in block['children']]
                 if block['type'] == 'columns':
                     block['columnsStyle'] = columns_style(block, [child.get('videoAspect', 1) for child in block['children']])
+                    children = block['children']
+                    block['videoPair'] = len(children) == 2 and all(c['type'] == 'video' for c in children)
+                    if len(children) == 2:
+                        image = next((c for c in children if c['type'] == 'image'), None)
+                        text = next((c for c in children if c['type'] in ('text', 'callout')), None)
+                        if image and text and image.get('title'):
+                            # Projection only: one title, unchanged saved content.
+                            text.update(linkedTitle=image['title'], linkedTitleCss=image['titleCss'])
+                            image['hideTitle'] = True
             return block
-        return {'version': 1, 'enabled': True, 'blocks': [project(block) for block in layout['blocks']]}
+        return {'version': 1, 'enabled': True, 'blocks': [project(block) for block in visible_blocks]}
 
 
 class ProductKeywordRevision(models.Model):

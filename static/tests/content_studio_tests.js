@@ -671,3 +671,44 @@ QUnit.test("typing a video URL survives unrelated async renders without fetching
         assert.ok(calls.every(route=>/\/(data|list)$/.test(route)), 'no request per keystroke');
     }finally{app.destroy();target.remove();}
 });
+
+QUnit.test('variant compositions filter preview without changing saved variant data', assert => {
+    const a=action();a.state.detail.variants=[{id:10,active:true,attributeLabel:'High'},{id:11,active:true,attributeLabel:'Starter'}];
+    a.addDescriptionComposition('image-story');const row=a.descriptionLayout().blocks[1];
+    a.setDescriptionScope(row.id,true);assert.deepEqual(row.variantIds,[]);
+    a.state.descriptionPreviewVariantId=10;assert.strictEqual(a.descriptionPreviewBlocks().length,1,'empty selection fails closed');
+    a.toggleDescriptionVariant(row.id,10,true);assert.strictEqual(a.descriptionPreviewBlocks().length,2);
+    a.state.descriptionPreviewVariantId=11;assert.strictEqual(a.descriptionPreviewBlocks().length,1);
+    a.toggleDescriptionVariant(row.id,999,true);assert.deepEqual(row.variantIds,[10],'foreign IDs ignored');
+    a.setDescriptionScope('principal',true);assert.notOk(a.descriptionLayout().blocks[0].variantIds);
+    a.setDescriptionScope(row.children[0].id,true);assert.notOk(row.children[0].variantIds,'scope whole row, not half');
+    a.setDescriptionScope(row.id,false);assert.strictEqual(a.descriptionPreviewBlocks().length,2);
+    assert.strictEqual(a.state.detail.variants[0].attributeLabel,'High');
+});
+QUnit.test('image title follows adjacent text and variant scope survives adding side text', assert => {
+    const a=action();a.addDescriptionBlock('image');const image=a.descriptionLayout().blocks[1];
+    Object.assign(image,{title:'Grupo hídrico',caption:'Detail',mediaId:4,variantIds:[10]});
+    a.addDescriptionSideText(image.id,'right');const row=a.descriptionLayout().blocks[1];
+    assert.deepEqual(row.variantIds,[10]);assert.notOk(image.variantIds);
+    assert.strictEqual(a.descriptionLinkedTitle(row.children[1]).title,'Grupo hídrico');
+    assert.ok(a.descriptionImageTitleBeside(image));
+    a.swapDescriptionColumns(row.id);assert.strictEqual(a.descriptionLinkedTitle(row.children[0]).id,image.id);
+    assert.strictEqual(image.title,'Grupo hídrico');
+});
+QUnit.test('mounted image title controls live in text column and variant preview is draft-only', async assert => {
+    const target=document.createElement('div');document.body.appendChild(target);const data=payload();
+    data.variants=[{id:10,active:true,attributeLabel:'High'},{id:11,active:true,attributeLabel:'Starter'}];
+    data.descriptionLayout={version:1,enabled:true,blocks:[{id:'principal',type:'main'},{id:'row',type:'columns',children:[{id:'pic',type:'image',mediaId:4,title:'Grupo hídrico'},{id:'side',type:'text',html:'<p>Detalle</p>'}]}]};
+    const calls=[],app=new App(ProductIntelligenceAction,{templates,test:true,props:{action:{params:{product_tmpl_id:1},context:{}}},env:{services:{user:{context:{}},notification:{add(){}},action:{doAction(){}},rpc:async route=>{calls.push(route);if(route.endsWith('/data'))return data;if(route.endsWith('/description_media/list'))return{media:[]};throw Error(route);}}}});
+    try {
+        const a=await app.mount(target);await a.selectDetailSection('content');a.setDescriptionMode('design');await patch();await patch();
+        assert.ok(target.querySelector('[data-block-id="side"] [data-video-text="title"] input'), 'title controls not found, articles=' + target.querySelectorAll('article').length);
+        assert.notOk(target.querySelector('[data-block-id="pic"] [data-video-text="title"] input'));
+        const scope=target.querySelector('[data-block-id="row"] [aria-label="Visibilidad de la composición"]');scope.value='specific';scope.dispatchEvent(new Event('change',{bubbles:true}));await patch();
+        const choice=target.querySelector('[data-block-id="row"] .bpi-designer__variant-scope input');choice.click();await patch();
+        assert.deepEqual(a.descriptionLayout().blocks[1].variantIds,[10]);a.state.descriptionCanvasView='preview';a.state.descriptionPreviewVariantId=10;await patch();
+        assert.ok(target.querySelector('.bpi-designer__final-preview [data-block-id="side"] > h3'));
+        a.state.descriptionPreviewVariantId=11;await patch();assert.notOk(target.querySelector('.bpi-designer__final-preview [data-block-id="row"]'));
+        assert.ok(calls.every(route=>/\/(data|list)$/.test(route)),'no save or AI on edit/preview');
+    } finally {app.destroy();target.remove();}
+});

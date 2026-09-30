@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <template id="description_layout_node" name="Bader description block">
-        <div t-att-class="'bpi-layout__block bpi-layout__block--%s bpi-layout__preset--%s bpi-layout__align--%s bpi-layout__effect--%s bpi-layout__spacing--%s' % (node['type'], node.get('preset', 'white'), node.get('align', 'left'), node.get('effect', 'none'), node.get('spacing', 'normal'))" t-att-data-block-id="node['id']">
+        <div t-att-class="'bpi-layout__block bpi-layout__block--%s bpi-layout__preset--%s bpi-layout__align--%s bpi-layout__effect--%s bpi-layout__spacing--%s' % (node['type'], node.get('preset', 'white'), node.get('align', 'left'), node.get('effect', 'none'), node.get('spacing', 'normal'))" t-att-data-block-id="node['id']" t-att-data-bpi-variant-specific="'1' if 'variantIds' in node else None">
+            <h3 t-if="node.get('linkedTitle')" class="bpi-layout__video-title" t-att-style="node['linkedTitleCss']" t-out="node['linkedTitle']"/>
             <div t-if="node['type'] == 'main'" class="bpi-layout__main" t-field="product.bpi_technical_description"/>
             <div t-elif="node['type'] in ('text', 'callout')" class="bpi-layout__text" t-out="node['html']"/>
             <figure t-elif="node['type'] == 'image'" class="bpi-layout__image-figure" t-att-style="node['imageStyle']">
-                <h3 t-if="node.get('title')" class="bpi-layout__video-title" t-att-style="node['titleCss']" t-out="node['title']"/>
+                <h3 t-if="node.get('title') and not node.get('hideTitle')" class="bpi-layout__video-title" t-att-style="node['titleCss']" t-out="node['title']"/>
                 <img t-att-src="node['src']" t-att-alt="node.get('alt', '')" loading="lazy" decoding="async"/>
                 <figcaption t-if="node.get('caption')" class="bpi-layout__video-caption" t-att-style="node['captionCss']" t-out="node['caption']"/>
             </figure>
@@ -29,7 +30,7 @@
                 </div>
                 <figcaption t-if="node.get('caption')" class="bpi-layout__video-caption" t-att-style="node['captionCss']" t-out="node['caption']"/>
             </figure>
-            <div t-elif="node['type'] in ('columns', 'container')" t-att-class="'bpi-layout__' + node['type'] + (' bpi-layout__columns--media' if node.get('columnLayout') == 'media' else '')" t-att-style="node.get('columnsStyle')">
+            <div t-elif="node['type'] in ('columns', 'container')" t-att-class="'bpi-layout__' + node['type'] + (' bpi-layout__columns--media' if node.get('columnLayout') == 'media' else '') + (' bpi-layout__columns--video-pair' if node.get('videoPair') else '')" t-att-style="node.get('columnsStyle')">
                 <t t-foreach="node['children']" t-as="child"><t t-call="bader_product_intelligence.description_layout_node"><t t-set="node" t-value="child"/></t></t>
             </div>
             <hr t-elif="node['type'] == 'divider'"/>

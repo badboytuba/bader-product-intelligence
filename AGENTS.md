@@ -1,3 +1,13 @@
+## 2026-09-30 — Variant-aware design and title alignment
+
+Release `16.0.1.15.0` keeps layout version1 with optional root `variantIds`.
+Validate product.product ownership; never confuse native hash PTAV IDs with
+variant IDs. Principal text stays common. Only selected-edition projection is
+returned via native website combination response; no pricing override or extra
+paid work. Image+text titles are projected/edited alongside text without migrating
+stored copy; video pairs share title/frame/caption rows. Preserve media, drafts,
+company/website gates and explicit save. QAS only; read NANCY_CONTENT_STUDIO.md.
+
 ## 2026-09-28 — Visible integrated header search
 
 Release `16.0.1.14.2` renders the enabled website search form server-side outside

@@ -4,3 +4,4 @@ from . import product_documents
 from . import taxonomy
 from . import description_media
 from . import content_studio
+from . import description_variant

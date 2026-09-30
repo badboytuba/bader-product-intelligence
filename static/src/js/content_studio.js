@@ -502,6 +502,39 @@ export const contentStudioMethods = {
     },
 
     descriptionLayout() { return this.state.contentForm.descriptionLayout || defaultDescriptionLayout(); },
+    descriptionVariants() { return this.state.detail?.variants || this.state.variantDrafts || []; },
+    descriptionVariantLabel(variant) {
+        return `${variant.attributeLabel || variant.name || variant.id}${variant.sku ? ' · ' + variant.sku : ''}${variant.active === false ? ' (archivada)' : ''}`;
+    },
+    descriptionCanScope(block) {
+        return !this.descriptionContainsMain(block) && !this.descriptionParentBlock(this.descriptionLayout().blocks, block.id);
+    },
+    setDescriptionScope(id, scoped) {
+        const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
+        if (!block || !this.descriptionCanScope(block)) return;
+        if (scoped) block.variantIds = []; // Fail closed until an explicit choice.
+        else delete block.variantIds;
+    },
+    toggleDescriptionVariant(id, variantId, checked) {
+        const block = findDescriptionBlock(this.descriptionLayout().blocks, id)?.block;
+        if (!block || !this.descriptionCanScope(block) || !Array.isArray(block.variantIds) ||
+            !this.descriptionVariants().some(v => v.id === variantId)) return;
+        block.variantIds = checked ? [...new Set([...block.variantIds, variantId])].sort((a,b) => a-b) : block.variantIds.filter(v => v !== variantId);
+    },
+    setDescriptionPreviewVariant(value) { this.state.descriptionPreviewVariantId = Number(value) || 0; },
+    descriptionPreviewBlocks() {
+        const selected = Number(this.state.descriptionPreviewVariantId) || 0;
+        const valid = this.descriptionVariants().some(v => v.id === selected && v.active !== false);
+        return this.descriptionLayout().blocks.filter(b => !Array.isArray(b.variantIds) || (valid && b.variantIds.includes(selected)));
+    },
+    descriptionLinkedTitle(block) {
+        if (!["text", "callout"].includes(block.type)) return null;
+        const row = this.descriptionParentBlock(this.descriptionLayout().blocks, block.id);
+        if (row?.type !== 'columns' || row.children.length !== 2) return null;
+        return row.children.find(b => b.type === 'image') || null;
+    },
+    descriptionImageTitleBeside(block) { return block.type === 'image' && !!this.descriptionSideTextRow(block.id); },
+    descriptionVideoPair(block) { return block.type === 'columns' && block.children?.length === 2 && block.children.every(b => b.type === 'video'); },
     ensureDescriptionLayout() { if (!this.state.contentForm.descriptionLayout) this.state.contentForm.descriptionLayout = defaultDescriptionLayout(); return this.state.contentForm.descriptionLayout; },
     setDescriptionMode(mode) { this.state.descriptionMode = mode; if (mode === "design") this.loadDescriptionMedia(); },
     toggleDescriptionDesign(ev) { this.ensureDescriptionLayout().enabled = !!ev.target.checked; },
@@ -568,6 +601,7 @@ export const contentStudioMethods = {
         text.html = this.sanitizeDescriptionHtml(caption.innerHTML);
         const row = reuse ? parent : this.newDescriptionBlock("columns");
         row.children = side === "left" ? [text, media] : [media, text];
+        if (Array.isArray(media.variantIds)) { row.variantIds = [...media.variantIds]; delete media.variantIds; }
         Object.assign(row, { columnLayout: "equal", columnGap: "normal", columnAlign: "center" });
         media.caption = "";
         if (!reuse) found.siblings.splice(found.index, 1, row);
