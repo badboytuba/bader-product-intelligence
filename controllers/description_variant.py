@@ -12,8 +12,15 @@ class DescriptionVariantController(WebsiteSaleVariantController):
     def get_combination_info_website(self, product_template_id, product_id, combination, add_qty, **kw):
         token = kw.pop('bpi_description_token', '')
         token = token if isinstance(token, str) and re.fullmatch(r'[0-9]{1,16}', token) else ''
+        storefront_token = kw.pop('bpi_storefront_token', '')
+        storefront_token = storefront_token if isinstance(storefront_token, str) and re.fullmatch(r'[0-9]{1,16}', storefront_token) else ''
         result = super().get_combination_info_website(
             product_template_id, product_id, combination, add_qty, **kw)
+        if request.website.bpi_premium_storefront_enabled and storefront_token:
+            # Echo only request metadata. Prices, permissions, variants and
+            # image HTML are still calculated solely by the native controller.
+            result['bpi_storefront'] = {'token': storefront_token,
+                'productTemplateId': result['product_template_id']}
         product = request.env['product.template'].browse(result['product_template_id']).exists()
         try:
             if product and product._bpi_has_variant_layout():

@@ -18,3 +18,5 @@ from . import test_content_studio
 from . import test_semantic_context
 from . import test_semantic_search
 from . import test_studio_fetch
+
+from . import test_storefront

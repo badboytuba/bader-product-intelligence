@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="bpi_premium_footer_content" name="Pie Bader editable">
+                <div id="footer" class="bpi-premium-footer bader-brand" data-name="Pie Bader">
+                    <div t-field="website.bpi_premium_footer_html" class="bpi-premium-footer__content"/>
+                    <div class="container bpi-premium-footer__copyright">
+                        <span><t t-out="website.bpi_premium_footer_legal_name"/> © <t t-out="website._bpi_storefront_year()"/>. Todos los derechos reservados.</span>
+                        <a href="/legal">Información legal</a>
+                    </div>
+                </div>
+    </template>
+    <!-- Late, conditional inheritance preserves the authored native footer as
+         the fallback. Never mutate its view or stored content on upgrade. -->
+    <template id="bpi_premium_footer" inherit_id="website.layout" priority="110">
+        <xpath expr="//footer[@id='bottom']" position="attributes">
+            <attribute name="t-attf-class" add="#{'bpi-premium-footer-shell' if website.bpi_premium_storefront_enabled else ''}" separator=" "/>
+        </xpath>
+        <xpath expr="//div[@id='footer']" position="replace">
+            <t t-if="website.bpi_premium_storefront_enabled">
+                <t t-call="bader_product_intelligence.bpi_premium_footer_content"/>
+            </t>
+            <t t-else="">$0</t>
+        </xpath>
+        <xpath expr="//div[hasclass('o_footer_copyright')]" position="attributes">
+            <attribute name="t-if">not website.bpi_premium_storefront_enabled</attribute>
+        </xpath>
+    </template>
+</odoo>

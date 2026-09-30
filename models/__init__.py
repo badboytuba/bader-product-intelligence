@@ -16,3 +16,5 @@ from . import taxonomy
 from . import taxonomy_search
 from . import description_layout
 from . import content_studio
+
+from . import storefront

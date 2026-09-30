@@ -8,6 +8,30 @@
         <field name="priority">90</field>
         <field name="active" eval="True"/>
         <field name="arch" type="xml">
+            <!-- Website must participate in the native product cache key:
+                 presentation is opt-in per website and can be switched off. -->
+            <xpath expr="//t[@t-cache='pricelist,product']" position="attributes">
+                <attribute name="t-cache">pricelist,product,website</attribute>
+            </xpath>
+            <xpath expr="//*[@id='product_detail']" position="attributes">
+                <attribute name="t-attf-class" add="#{'bpi-product-premium' if website.bpi_premium_storefront_enabled else ''}" separator=" "/>
+                <attribute name="t-att-data-bpi-storefront-product">product.id if website.bpi_premium_storefront_enabled else None</attribute>
+            </xpath>
+            <xpath expr="//*[@id='product_detail']/div[hasclass('row')][1]" position="attributes">
+                <attribute name="t-if">not website.bpi_premium_storefront_enabled</attribute>
+            </xpath>
+            <!-- The native toolbar also carries the tariff selector. Its
+                 calculation must run even when the old toolbar is omitted. -->
+            <xpath expr="//t[@t-call='website_sale.product_price']" position="before">
+                <t t-if="website.bpi_premium_storefront_enabled">
+                    <t t-set="website_sale_pricelists" t-value="website.get_pricelist_available(show_visible=True)"/>
+                    <t t-set="hasPricelistDropdown" t-value="website_sale_pricelists and len(website_sale_pricelists) &gt; 1"/>
+                    <div t-if="hasPricelistDropdown" class="bpi-product-pricelist">
+                        <t t-call="website_sale.pricelist_list"><t t-set="_classes" t-value="'d-inline-block'"/></t>
+                    </div>
+                </t>
+            </xpath>
+
             <xpath expr="//div[@id='product_details']/p[@t-field='product.description_sale']" position="replace">
                 <div t-if="product.bpi_ai_generated_description"
                      class="text-muted my-2 bpi-website-description bader-brand"

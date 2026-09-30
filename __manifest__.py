@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Producto Intelligence",
-    "version": "16.0.1.15.0",
+    "version": "16.0.1.16.0",
     "summary": "Producto Intelligence para Bader en Odoo 16",
     "description": """
 Producto Intelligence para Bader Argentina.
@@ -45,6 +45,7 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
         "views/website_product_templates.xml",
         "views/taxonomy_views.xml",
         "views/taxonomy_website.xml",
+        "views/storefront_templates.xml",
     ],
     "assets": {
         "web.assets_backend": [
@@ -68,6 +69,8 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
             "bader_product_intelligence/static/src/xml/content_studio.xml",
         ],
         "web.assets_frontend": [
+            "bader_product_intelligence/static/src/js/storefront.js",
+            "bader_product_intelligence/static/src/scss/storefront.scss",
             "bader_product_intelligence/static/src/js/taxonomy_header.js",
             "bader_product_intelligence/static/src/scss/taxonomy_header.scss",
             "bader_product_intelligence/static/src/scss/product_intelligence.scss",

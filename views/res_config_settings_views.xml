@@ -7,6 +7,19 @@
         <field name="arch" type="xml">
             <xpath expr="//div[hasclass('settings')]" position="inside">
                 <div class="app_settings_block bader-brand bader-brand-view bpi-brand-settings" data-string="Producto Intelligence" string="Producto Intelligence">
+                    <h2 groups="base.group_system">Diseño Bader del sitio web</h2>
+                    <div class="row mt16 o_settings_container" groups="base.group_system">
+                        <div class="col-12 o_setting_box">
+                            <div class="o_setting_right_pane">
+                                <label for="website_id"/><field name="website_id" options="{'no_create': True}"/>
+                                <div class="text-muted">Solo afecta al sitio seleccionado. Al desactivar se recupera su presentación anterior.</div>
+                                <field name="bpi_premium_storefront_enabled"/>
+                                <label for="bpi_premium_storefront_enabled"/>
+                                <label for="bpi_premium_footer_legal_name"/><field name="bpi_premium_footer_legal_name"/>
+                                <label for="bpi_premium_footer_html"/><field name="bpi_premium_footer_html" widget="html"/>
+                            </div>
+                        </div>
+                    </div>
                     <h2>Producto Intelligence</h2>
                     <div class="row mt16 o_settings_container">
                         <div class="col-12 col-lg-6 o_setting_box">

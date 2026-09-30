@@ -1,3 +1,13 @@
+## 2026-09-30 — Opt-in premium storefront
+
+Release `16.0.1.16.0`: read `docs/STOREFRONT_DESIGN.md`. Website flag defaults off;
+footer HTML/legal name are website-owned, sanitized and admin-edited. Keep native
+footer recoverable, native tariff selector with prices, and website in product
+cache keys. Enhance native carousel lifecycle, not an independent media payload;
+variant replacement must retain selection, zoom and keyboard controls. Scope all
+CSS/behavior to opt-in roots; preserve other websites, page footer visibility,
+header search, native variant radio values and business data. QAS only.
+
 ## 2026-09-30 — Variant-aware design and title alignment
 
 Release `16.0.1.15.0` keeps layout version1 with optional root `variantIds`.
