@@ -4,6 +4,31 @@ Release **16.0.1.17.0**, authorized for QAS website1 only. Production
 and website2 are excluded. Source version and test results are not a deployment
 certificate; external backup, rollback and activation must be verified separately.
 
+## QAS delivery — 2026-09-30
+
+Runtime **73a02e6** installed and enabled only on website1 (Bader Iberoamérica).
+Production and website2 are unchanged. A fresh verified external backup and
+rollback instructions are retained privately with the deployment evidence.
+
+- 534 backend + 183 actual Odoo/Chrome QUnit tests passed, plus public/editor/
+  document/media integration tests on an isolated disposable clone.
+- Live read-only QAS checks passed: High1750/Starter2080, SSR metadata/canonical,
+  invalid-edition404, rapid selection, native price/SKU/gallery, 360/768/1024/1440,
+  real page scrolling, no JavaScript/asset errors and healthy home/shop/contact.
+- No historical profiles were created. All business data were preserved. Stored
+  index initialization updated `product.product.write_date` on1616 records and
+  `write_uid` on1; an exact row comparison against the fresh backup confirmed
+  that these were the only non-index changes. Do not reset audit dates or mask
+  unexplained differences in future preservation checks.
+- Host-only QAS `X-Robots-Tag` and robots exclusion were verified; other hosts
+  were not opted in. Server Git configurations remained byte-identical.
+- Disposable clone/database/tunnel removed; main services healthy and roughly
+  4.5GiB available afterward. Private backup/credentials/logs are not addon assets.
+
+The final source documentation can be newer than the pinned runtime commit;
+that does not imply an untested runtime deployment. Subsequent business edits
+must never be overwritten by restoring this pre-upgrade backup indiscriminately.
+
 ## Data and boundaries
 
 - `bpi.variant.content`: unique optional profile per `product.product`, admin-only,
