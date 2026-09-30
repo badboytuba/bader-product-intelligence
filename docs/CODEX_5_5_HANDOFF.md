@@ -1,9 +1,10 @@
-## 2026-09-30 — 1.17.1 storefront refinement candidate
+## 2026-09-30 — 1.17.1 storefront refinements delivered to QAS
 
 See `STOREFRONT_DESIGN.md`: bounded desktop gallery follows real wrapwrap scroll;
 classic scrollbar space, native menu/search layering, per-layout heading alignment,
 private official YouTube cover recovery and pending-cover save guard. No automatic
-content migration. QAS-only user approval; runtime delivery must be verified separately.
+content migration. QAS-only delivery certified at runtime source `78fde6f`; see
+`QAS_STOREFRONT_REFINEMENTS.md`. Production and website2 were not changed.
 
 ## 2026-09-30 — Full variant workspace
 
