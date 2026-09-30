@@ -1,3 +1,10 @@
+## 2026-09-30 — 1.17.1 storefront refinement candidate
+
+See `STOREFRONT_DESIGN.md`: bounded desktop gallery follows real wrapwrap scroll;
+classic scrollbar space, native menu/search layering, per-layout heading alignment,
+private official YouTube cover recovery and pending-cover save guard. No automatic
+content migration. QAS-only user approval; runtime delivery must be verified separately.
+
 ## 2026-09-30 — Full variant workspace
 
 Release `16.0.1.17.0`; read `docs/VARIANT_WORKSPACE_WIP.md` before

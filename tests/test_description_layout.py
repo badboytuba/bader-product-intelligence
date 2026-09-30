@@ -11,7 +11,7 @@ from odoo.tests.common import TransactionCase, tagged
 
 from ..models.description_layout import (
     CHUNK_SIZE, MAX_VIDEO, MIN_FREE, QUOTA, auxiliary_html, empty_layout,
-    layout_media_ids, probe_video, social_video, validate_layout,
+    layout_media_ids, probe_video, social_video, validate_layout, description_heading_style,
 )
 
 
@@ -279,13 +279,52 @@ class TestDescriptionLayout(TransactionCase):
         before = self.product.bpi_editorial_revision
         with patch('odoo.addons.bader_product_intelligence.models.studio_fetch.fetch_public_image', return_value=raw.getvalue()) as fetch:
             payload = self.media._youtube_poster(self.product, 'https://youtu.be/abcdefghijk?si=discard')
-        fetch.assert_called_once_with('https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg')
+        fetch.assert_called_once_with('https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg')
         self.assertEqual(payload['kind'], 'image')
         self.assertEqual(payload['state'], 'ready')
         self.assertEqual(self.product.bpi_editorial_revision, before)
         self.assertFalse(self.product.bpi_description_layout)
         with self.assertRaises(UserError):
             self.media._youtube_poster(self.product, 'https://www.instagram.com/reel/abcdef/')
+
+    def test_heading_alignment_is_optional_bounded_and_matches_main_inset(self):
+        legacy = validate_layout(self.layout())
+        self.assertNotIn('headingAlign', legacy)
+        self.assertEqual(description_heading_style(empty_layout()), 'text-align:left')
+        for align in ('left', 'center', 'right'):
+            layout = dict(legacy, headingAlign=align)
+            layout['blocks'][0]['spacing'] = 'compact'
+            self.assertEqual(validate_layout(layout)['headingAlign'], align)
+            self.assertIn('padding-inline:12px', description_heading_style(layout))
+        for bad in ('left;position:fixed', '', None, [], True):
+            with self.subTest(bad=bad), self.assertRaises(ValidationError):
+                validate_layout(dict(legacy, headingAlign=bad))
+
+    def test_heading_render_does_not_rewrite_main_text(self):
+        before = self.product.bpi_technical_description
+        self.product.bpi_description_layout = dict(self.layout(), headingAlign='center')
+        self.assertIn('text-align:center', self.product._bpi_description_heading_style())
+        self.assertIn('max-width:none', self.product._bpi_description_heading_style())
+        self.assertEqual(self.product.bpi_technical_description, before)
+
+    def test_youtube_cover_falls_back_without_publishing(self):
+        small = io.BytesIO(); Image.new('RGB', (120, 90), 'black').save(small, 'JPEG')
+        normal = io.BytesIO(); Image.new('RGB', (480, 360), 'blue').save(normal, 'JPEG')
+        with patch('odoo.addons.bader_product_intelligence.models.studio_fetch.fetch_public_image', side_effect=[small.getvalue(), normal.getvalue()]) as fetch:
+            result = self.media._youtube_poster(self.product, 'https://youtu.be/abcdefghijk')
+        self.assertEqual(fetch.call_count, 2)
+        self.assertTrue(fetch.call_args.args[0].endswith('/hqdefault.jpg'))
+        self.assertEqual(result['width'], 480)
+        self.assertFalse(self.product.bpi_description_layout)
+
+    def test_youtube_cover_failure_creates_no_empty_media(self):
+        from ..models.studio_fetch import PublicFetchError
+        before = self.media.search_count([])
+        with patch('odoo.addons.bader_product_intelligence.models.studio_fetch.fetch_public_image', side_effect=PublicFetchError('unavailable')) as fetch:
+            with self.assertRaises(UserError):
+                self.media._youtube_poster(self.product, 'https://youtu.be/abcdefghijk')
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual(self.media.search_count([]), before)
 
     def test_video_projection_is_local_and_safe_for_public_render(self):
         poster = self.image()

@@ -1,6 +1,6 @@
 // Explicit scoped palette: never inherit petrol text onto the petrol navbar.
 #wrapwrap .bpi-header-search {
-    position: relative; z-index: 1031; color: #003841; background: #f2f7f5;
+    position: relative; z-index: 1; color: #003841; background: #f2f7f5;
     border-top: 1px solid #d7e7e2; border-bottom: 1px solid #c2d8d1;
     font-family: var(--bader-font-body, Arial, sans-serif);
     .bpi-hs-inner { display: flex; align-items: center; gap: 32px; padding-top: 12px; padding-bottom: 12px; }
@@ -44,5 +44,16 @@
         .bpi-hs-image { flex-basis: 50px; width: 50px; height: 50px; }
         .bpi-hs-copy { flex-basis: calc(100% - 60px); strong { font-size: 13px; } }
         .bpi-hs-price { margin-left: 60px; font-size: 13px; }
+    }
+}
+
+// The native menu floats above search. Keep its native anchor: adding a gap
+// for the search row makes hover menus close while the pointer crosses it.
+// Do not change mobile's in-flow accordion or non-BPI websites.
+@media (min-width: 992px) {
+    #wrapwrap #top:has(.bpi-header-search) .o_mega_menu {
+        max-height: calc(100dvh - var(--bpi-header-height, 152px) - 12px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
     }
 }

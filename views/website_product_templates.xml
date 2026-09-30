@@ -61,7 +61,7 @@
                          class="bpi-website-technical-description bader-brand"
                          data-bpi-technical-description="formatted"
                          aria-labelledby="bpi-product-technical-description-title">
-                    <div class="bpi-website-technical-description__header">
+                    <div class="bpi-website-technical-description__header" t-att-style="product._bpi_description_heading_style() if website.bpi_premium_storefront_enabled else None">
                         <span class="bpi-website-technical-description__eyebrow">Información técnica</span>
                         <h2 id="bpi-product-technical-description-title">
                             Descripción técnica de <t t-out="product.name"/>

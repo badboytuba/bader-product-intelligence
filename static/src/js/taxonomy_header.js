@@ -45,6 +45,15 @@ export const BpiTaxonomySearch = publicWidget.Widget.extend({
         this.clear.hidden = !this.input.value;
         this.outside = ev => { if (!this.el.contains(ev.target)) this.closeResults(); };
         document.addEventListener('click', this.outside);
+        this.header = this.el.closest('header');
+        if (this.header) {
+            this.headerResize = new ResizeObserver(() => {
+                this.header.style.setProperty('--bpi-header-height', this.header.offsetHeight + 'px');
+            });
+            this.headerResize.observe(this.el); this.headerResize.observe(this.header);
+            this.menuOpening = () => this.closeResults();
+            $(this.header).on('show.bs.dropdown.bpiSearch', this.menuOpening);
+        }
         return this._super(...arguments);
     },
     shopUrl() {
@@ -70,6 +79,9 @@ export const BpiTaxonomySearch = publicWidget.Widget.extend({
         if (this.input.value.trim().length >= 2) this.timer = setTimeout(() => this.search(), 180);
     },
     _onFocus() {
+        // Native hover menus restore the previous input focus after opening.
+        // Do not restart autocomplete behind the menu on that synthetic focus.
+        if (this.header?.querySelector('.dropdown-menu.show')) return;
         if (this.popup.hidden && this.input.value.trim().length >= 2) this._onInput();
     },
     _onClear() { this.input.value = ''; this._onInput(); this.input.focus(); },
@@ -170,6 +182,11 @@ export const BpiTaxonomySearch = publicWidget.Widget.extend({
     destroy() {
         clearTimeout(this.timer); clearTimeout(this.deadline); this.sequence++; this.controller?.abort();
         document.removeEventListener('click', this.outside);
+        this.headerResize?.disconnect();
+        if (this.header) {
+            $(this.header).off('show.bs.dropdown.bpiSearch', this.menuOpening);
+            this.header.style.removeProperty('--bpi-header-height');
+        }
         // Server-rendered form remains usable even without JS.
         this._super(...arguments);
     },

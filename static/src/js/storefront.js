@@ -48,11 +48,38 @@ NativeCarousel.include({
                 control.setAttribute("aria-label", control.classList.contains("carousel-control-prev") ? "Imagen anterior" : "Imagen siguiente");
             });
             this._bpiSyncIndicators();
+            this._bpiGalleryColumn = this.el.closest('.o_wsale_product_images');
+            this._bpiHeader = document.querySelector('#top');
+            this._bpiGalleryResize = new ResizeObserver(() => this._bpiUpdateGalleryFollow());
+            this._bpiGalleryResize.observe(this.el);
+            if (this._bpiHeader) this._bpiGalleryResize.observe(this._bpiHeader);
+            this._bpiWindowResize = () => this._bpiUpdateGalleryFollow();
+            window.addEventListener('resize', this._bpiWindowResize);
+            this._bpiUpdateGalleryFollow();
         }
+    },
+    _bpiUpdateGalleryFollow() {
+        const column = this._bpiGalleryColumn;
+        if (!column || !this.el.isConnected) return;
+        // CSS sticky is bounded by the native purchasing row. Never pin a
+        // card taller than the available viewport or animate page scrolling.
+        const header = this._bpiHeader;
+        const offset = Math.max(0, header ? header.getBoundingClientRect().bottom : 0) + 16;
+        const enabled = window.innerWidth >= 992 && this.el.offsetHeight + offset + 16 <= window.innerHeight;
+        column.style.setProperty('--bpi-gallery-top', offset + 'px');
+        column.classList.toggle('bpi-gallery-follow', enabled);
+    },
+    destroy() {
+        this._bpiGalleryResize?.disconnect();
+        if (this._bpiWindowResize) window.removeEventListener('resize', this._bpiWindowResize);
+        this._bpiGalleryColumn?.classList.remove('bpi-gallery-follow');
+        this._bpiGalleryColumn?.style.removeProperty('--bpi-gallery-top');
+        return this._super(...arguments);
     },
     _updateCarouselPosition() {
         if (!this._bpiIsPremium()) return this._super(...arguments);
         this.el.style.removeProperty("top");
+        this._bpiUpdateGalleryFollow();
     },
     _updateJustifyContent() {
         if (!this._bpiIsPremium()) return this._super(...arguments);

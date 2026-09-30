@@ -802,10 +802,10 @@ export class ProductIntelligenceAction extends Component {
     }
 
     detailBaseSaveBusy() {
-        return !!(this.state.variantScopeLoading || this.state.saveBusy || this.state.contentBusy || this.state.faqBusy || this.state.seoBusy || this.state.categoryBusy);
+        return !!(this.state.variantScopeLoading || this.state.saveBusy || this.state.contentBusy || this.state.faqBusy || this.state.seoBusy || this.state.categoryBusy || this.descriptionPostersBusy());
     }
 
-    detailSaveLabel() { return this.state.saveBusy ? 'Guardando ficha…' : 'Guardar ficha'; }
+    detailSaveLabel() { return this.descriptionPostersBusy() ? 'Preparando portada…' : this.state.saveBusy ? 'Guardando ficha…' : 'Guardar ficha'; }
 
     detailSaveDisabled() { return !this.state.productId || this.detailBaseSaveBusy(); }
 

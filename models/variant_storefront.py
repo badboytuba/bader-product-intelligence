@@ -8,7 +8,7 @@ from odoo.exceptions import AccessError, MissingError, UserError
 from odoo.http import request
 from odoo.tools.json import scriptsafe
 
-from .description_layout import auxiliary_html
+from .description_layout import auxiliary_html, description_heading_style
 from .variant_content import fingerprint
 
 
@@ -64,6 +64,7 @@ class VariantStorefrontProduct(models.Model):
             'short': Markup(auxiliary_html(values['description']) if values['description'] else ''),
             'long': Markup(auxiliary_html(values['technicalDescription']) if values['technicalDescription'] else ''), 'layout': layout,
             'video': video,
+            'headingStyle': description_heading_style(values['descriptionLayout']),
             'faqs': [{'question': row['question'], 'answer': row['answer']} for row in values['faqs']],
             'documents': documents if documents['buttons'] else False,
             'title': values['seoTitle'] or name, 'description': values['seoDescription'],

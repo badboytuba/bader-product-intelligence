@@ -305,3 +305,12 @@
         p { color: #945500; margin: 4px 0 0; }
     }
 }
+
+.bpi-designer {
+    .bpi-designer__heading-settings, .bpi-designer__poster-status { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; padding: 16px 20px; border-bottom: 1px solid #c2d8d1; }
+    .bpi-designer__heading-settings label { display: grid; gap: 6px; min-width: 0; width: 280px; max-width: 100%; margin: 0; font-weight: 600; }
+    .bpi-designer__heading-settings small, .bpi-designer__poster-status small { color: #48676b; }
+    .bpi-designer__heading-preview { margin: 0 0 24px; color: #003841; }
+    .bpi-designer__heading-preview small { color: #2f7d32; letter-spacing: .1em; font-weight: 700; }
+    .bpi-designer__heading-preview h2 { font-family: var(--bader-font-body); font-size: clamp(24px, 3vw, 32px); margin: 6px 0; line-height: 1.2; }
+}

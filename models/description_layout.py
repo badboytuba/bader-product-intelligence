@@ -46,6 +46,19 @@ def empty_layout():
     return {'version': 1, 'enabled': False, 'blocks': [{'id': 'principal', 'type': 'main'}]}
 
 
+def description_heading_style(layout):
+    """Presentation only; align the section heading to the main text's inset."""
+    layout = layout or {}
+    align = layout.get('headingAlign', 'left')
+    align = align if align in ('left', 'center', 'right') else 'left'
+    style = 'text-align:%s' % align
+    if layout.get('enabled'):
+        main = next((block for block in layout.get('blocks', []) if block.get('type') == 'main'), {})
+        inset = {'compact': '12px', 'spacious': 'clamp(24px,4vw,48px)'}.get(main.get('spacing'), 'clamp(16px,3vw,32px)')
+        style += ';max-width:none;padding-inline:%s' % inset
+    return style
+
+
 def video_text_style(value, field):
     """Bounded typography, never user-supplied CSS. Also supplies legacy defaults."""
     default = {'font': 'display' if field == 'title' else 'body',
@@ -202,7 +215,7 @@ def auxiliary_html(value):
 def validate_layout(value, media_lookup=None, variant_lookup=None):
     if value is None or value is False:
         return empty_layout()
-    if not isinstance(value, dict) or set(value) - {'version', 'enabled', 'blocks'} or type(value.get('version')) is not int or value.get('version') != 1:
+    if not isinstance(value, dict) or set(value) - {'version', 'enabled', 'blocks', 'headingAlign'} or type(value.get('version')) is not int or value.get('version') != 1:
         raise ValidationError(_('El diseño no es compatible. Recarga la ficha.'))
     if not isinstance(value.get('enabled'), bool) or not isinstance(value.get('blocks'), list):
         raise ValidationError(_('El diseño debe contener bloques válidos.'))
@@ -328,6 +341,10 @@ def validate_layout(value, media_lookup=None, variant_lookup=None):
                 result[field] = text.strip()
         return result
     result = {'version': 1, 'enabled': value['enabled'], 'blocks': [visit(block) for block in value['blocks']]}
+    if 'headingAlign' in value:
+        if value['headingAlign'] not in ('left', 'center', 'right'):
+            raise ValidationError(_('Alineación del título no válida.'))
+        result['headingAlign'] = value['headingAlign']
     if mains[0] != 1:
         raise ValidationError(_('El diseño debe incluir exactamente un bloque de texto principal.'))
     return result
@@ -483,6 +500,10 @@ class ProductTemplate(models.Model):
     def _bpi_public_description_layout(self, website, variant_id=False):
         return self._bpi_project_description_layout(website, self.bpi_description_layout,
             self.bpi_technical_description, self.bpi_editorial_revision or 1, variant_id)
+
+    def _bpi_description_heading_style(self):
+        self.ensure_one()
+        return description_heading_style(self.bpi_description_layout)
 
     def _bpi_project_description_layout(self, website, layout, technical, revision, variant_id=False, variant_content=False):
         self.ensure_one()
@@ -883,10 +904,21 @@ class DescriptionMedia(models.Model):
             raise UserError(_('Para esta red, sube una portada o elige una imagen de la biblioteca.'))
         from .studio_fetch import fetch_public_image, PublicFetchError
         video_id = parse_qs(urlsplit(info['url']).query)['v'][0]
-        try:
-            # Constructed CDN URL, not arbitrary user-provided image URLs. No API key.
-            raw = fetch_public_image('https://i.ytimg.com/vi/%s/hqdefault.jpg' % video_id)
-        except PublicFetchError:
+        raw = None
+        # HD is not available for every video. Both candidates are bounded,
+        # SSRF-validated server downloads, never visitor requests to YouTube.
+        for quality in ('maxresdefault', 'hqdefault'):
+            try:
+                candidate = fetch_public_image('https://i.ytimg.com/vi/%s/%s.jpg' % (video_id, quality))
+                with Image.open(io.BytesIO(candidate)) as image:
+                    if image.width < 320 or image.height < 180:
+                        continue  # YouTube can return a tiny placeholder with HTTP200.
+                    image.verify()
+                raw = candidate
+                break
+            except (PublicFetchError, OSError, SyntaxError, Image.DecompressionBombError):
+                continue
+        if not raw:
             raise UserError(_('No se pudo obtener la portada. Puedes subir una imagen o volver a intentarlo.'))
         with self.env.cr.savepoint():
             record = self._start(product, 'Portada YouTube %s.jpg' % video_id, len(raw), 'image')

@@ -502,6 +502,33 @@ export const contentStudioMethods = {
     },
 
     descriptionLayout() { return this.state.contentForm.descriptionLayout || defaultDescriptionLayout(); },
+    setDescriptionHeadingAlign(value) {
+        if (["left", "center", "right"].includes(value)) this.ensureDescriptionLayout().headingAlign = value;
+    },
+    descriptionHeadingStyle() {
+        const layout = this.descriptionLayout(), main = layout.blocks.find(b => b.type === "main") || {};
+        const align = ["left", "center", "right"].includes(layout.headingAlign) ? layout.headingAlign : "left";
+        const inset = ({compact: "12px", spacious: "clamp(24px,4vw,48px)"})[main.spacing] || "clamp(16px,3vw,32px)";
+        return `text-align:${align};padding-inline:${layout.enabled ? inset : '0px'}`;
+    },
+    descriptionPostersBusy() {
+        const blocks = this.state.contentForm?.descriptionLayout?.blocks || [];
+        return Object.entries(this.state.descriptionPostersPending || {}).some(([id, pending]) => pending && findDescriptionBlock(blocks, id));
+    },
+    descriptionMissingPosters() {
+        const found = [];
+        const visit = blocks => { for (const block of blocks) {
+            if (block.type === "video" && !block.mediaId && !block.posterMediaId && this.descriptionIsYouTube(block)) found.push(block);
+            visit(block.children || []);
+        }};
+        visit(this.descriptionLayout().blocks); return found;
+    },
+    async recoverDescriptionPosters() {
+        if (this.descriptionPostersBusy()) return;
+        // An explicit editor action, never a fetch on opening the page. Each
+        // request has its own product/edition/block/URL guards.
+        await Promise.all(this.descriptionMissingPosters().slice(0, 5).map(block => this.fetchDescriptionPoster(block.id)));
+    },
     descriptionVariants() { return this.state.detail?.variants || this.state.variantDrafts || []; },
     descriptionVariantLabel(variant) {
         return `${variant.attributeLabel || variant.name || variant.id}${variant.sku ? ' · ' + variant.sku : ''}${variant.active === false ? ' (archivada)' : ''}`;

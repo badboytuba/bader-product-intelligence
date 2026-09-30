@@ -1,3 +1,12 @@
+## 2026-09-30 — Storefront refinements
+
+Release `16.0.1.17.1`; read `docs/STOREFRONT_DESIGN.md`. The user now requests
+bounded desktop CSS sticky (not animated native pinning), static mobile/oversized
+cards, reserved thumbnail scrollbar space, native mega-menu above search, optional
+allowlisted description heading alignment and explicit private YouTube cover recovery.
+Block content saves while current covers are pending; never fetch on opening pages.
+Preserve common/variant draft guards and native media lifecycle. QAS website1 only.
+
 ## 2026-09-30 — Full variant workspace
 
 Release `16.0.1.17.0`; read `docs/VARIANT_WORKSPACE_WIP.md` before

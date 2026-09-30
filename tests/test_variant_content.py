@@ -44,6 +44,19 @@ class TestVariantContent(TransactionCase):
         self.assertEqual(data['values']['description'], '<p>Contenido común</p>')
         self.assertFalse(self.profiles.search([('product_id', '=', self.high.id)]))
 
+    def test_public_heading_alignment_respects_selected_edition(self):
+        from ..models.description_layout import empty_layout
+        website = self.env['website'].search([], limit=1)
+        website.bpi_variant_content_enabled = True
+        self.product.write({'is_published': True, 'website_id': website.id})
+        layout = dict(empty_layout(), enabled=True, headingAlign='right')
+        self.save({'descriptionLayout': layout})
+        high = self.product._bpi_public_variant_content(website, self.high.id)
+        starter = self.product._bpi_public_variant_content(website, self.starter.id)
+        self.assertIn('text-align:right', high['headingStyle'])
+        self.assertIn('text-align:left', starter['headingStyle'])
+        self.assertEqual(high['long'], starter['long'])
+
     def test_override_does_not_touch_template_or_sibling(self):
         before = (self.product.write_date, self.product.bpi_editorial_revision, self.product.list_price)
         self.save({'description': '<p>Solo High</p>', 'seoTitle': 'High Edition'})

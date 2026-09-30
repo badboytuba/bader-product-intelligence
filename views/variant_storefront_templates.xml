@@ -2,7 +2,7 @@
 <odoo>
     <template id="variant_editorial" name="Contenido efectivo de la edición">
         <section t-if="bpi_variant_public['long'] or bpi_variant_public['layout']" class="bpi-website-technical-description bader-brand" data-bpi-technical-description="variant">
-            <div class="bpi-website-technical-description__header"><span class="bpi-website-technical-description__eyebrow">Información técnica</span><h2>Descripción técnica de <t t-out="bpi_variant_public['name']"/></h2></div>
+            <div class="bpi-website-technical-description__header" t-att-style="bpi_variant_public.get('headingStyle')"><span class="bpi-website-technical-description__eyebrow">Información técnica</span><h2>Descripción técnica de <t t-out="bpi_variant_public['name']"/></h2></div>
             <div class="bpi-description-host"><t t-set="bpi_layout" t-value="bpi_variant_public['layout']"/><t t-if="bpi_layout" t-call="bader_product_intelligence.description_layout"/><div t-else="" class="bpi-website-technical-description__content" t-out="bpi_variant_public['long']"/></div>
         </section>
         <section t-if="bpi_variant_public.get('video')" class="bpi-description-host bader-brand" aria-label="Vídeo de esta edición" data-bpi-edition-video="1"><t t-set="bpi_layout" t-value="bpi_variant_public['video']"/><t t-call="bader_product_intelligence.description_layout"/></section>

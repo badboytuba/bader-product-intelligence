@@ -1,4 +1,4 @@
-# Bader storefront · 16.0.1.16.0
+# Bader storefront · 16.0.1.17.1
 
 Opt-in QAS presentation. The addon does not activate the design on upgrade.
 `website.bpi_premium_storefront_enabled` defaults to false; the website must have
@@ -20,8 +20,10 @@ Do not change native prices, permissions, forms, variant radio values or cart.
 The native carousel remains authoritative: IDs, media order, zoom URLs and HTML
 replacement on variant selection are unchanged. Scope the skin to
 `.bpi-product-premium`; enhance the native carousel widget so replacement starts
-its keyboard/thumbnail behavior again. Remove sticky/top animation only there;
-keep the legacy widget behavior on other pages/sites. Wheel scrolling must not
+its keyboard/thumbnail behavior again. Replace native animated pinning only there
+with bounded CSS sticky on the gallery column at >=992px. Track header/card resize;
+if the card does not fit the viewport, keep it static and fully accessible. Stop at
+the native purchase row before descriptions. Keep legacy behavior on other sites. Wheel scrolling must not
 change slides accidentally. The native grid option and hidden-gallery setting
 remain native, not forced into a carousel.
 
@@ -71,3 +73,33 @@ La marca del pie debe contrastar con petróleo: utiliza el SVG oficial
 acompaña iconos sociales con texto `visually-hidden` (no dependas solo de aria-label,
 que el saneamiento nativo puede retirar). Revisa también las traducciones del
 website al cambiar contenido desde administración.
+
+## 1.17.1 refinements (QAS approval)
+
+- The user changed the earlier static-gallery choice to **bounded desktop sticky**,
+  without animation. Native carousel, variant lifecycle, zoom and order remain intact.
+- Reserve a 96px vertical thumbnail rail, including classic-scrollbar and focus space;
+  below 1200px keep the horizontal rail. Override the native mobile dot-only rule
+  inside this opt-in card so actual thumbnail images remain visible. Test real `#wrapwrap` scrolling.
+- Keep native mega-menu anchoring: the search row belongs **below its stacking layer**.
+  Moving the menu down creates a hover gap. Opening it closes pending autocomplete.
+- Optional version-1 layout key `headingAlign` accepts left/center/right only. Default
+  left aligns to the principal block inset, without rewriting saved layout or copy.
+  Common and selected-variant projections share the same server style resolver.
+  Designer control: **Título de la descripción**; preview/save stay explicit.
+- While a current-block YouTube cover is downloading, content/all/variant saves wait.
+  Old missing covers use **Obtener portadas pendientes**, not a fetch on page open.
+  Custom covers and removed/stale blocks are preserved. Explicit server fetch tries
+  verified HD then standard official cover; both are bounded and SSRF-protected.
+  Visitors load only authorized local media; no YouTube player/network until play.
+- This release changes no price, stock, classification, saved copy or native media.
+  The approved TREKC pilot cover link is a separate revision-guarded QAS operation.
+
+Source validation and deployment evidence are recorded separately. Never treat a
+version bump or these notes as proof that a target environment has been upgraded.
+
+Candidate validation: 539 isolated backend tests and 186 real Odoo QUnit tests
+passed. The focused browser suite validates all four widths, real scroll boundaries,
+classic-scrollbar clearance, hover reachability, native variant replacement and
+actual OWL alignment preview/save/public round trip. See runtime delivery notes
+for final live verification; no paid AI is used in these checks.

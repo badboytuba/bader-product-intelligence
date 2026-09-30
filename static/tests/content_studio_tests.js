@@ -712,3 +712,39 @@ QUnit.test('mounted image title controls live in text column and variant preview
         assert.ok(calls.every(route=>/\/(data|list)$/.test(route)),'no save or AI on edit/preview');
     } finally {app.destroy();target.remove();}
 });
+
+QUnit.test('heading alignment edits only presentation and keeps legacy defaults clean', assert => {
+    const a=action(), before=JSON.stringify(a.descriptionLayout()), text=a.state.contentForm.technicalDescription;
+    assert.ok(a.descriptionHeadingStyle().includes('text-align:left'));
+    assert.equal(JSON.stringify(a.descriptionLayout()),before);
+    a.setDescriptionHeadingAlign('center');assert.equal(a.descriptionLayout().headingAlign,'center');
+    a.setDescriptionHeadingAlign('left;position:fixed');assert.equal(a.descriptionLayout().headingAlign,'center');
+    a.descriptionLayout().enabled=true;a.descriptionLayout().blocks[0].spacing='compact';
+    assert.ok(a.descriptionHeadingStyle().includes('padding-inline:12px'));
+    assert.equal(a.state.contentForm.technicalDescription,text);
+});
+
+QUnit.test('pending YouTube cover blocks common and edition saves until the reference arrives', async assert => {
+    const a=action(), pending=later(), calls=[];a.addDescriptionBlock('video');
+    const v=a.descriptionLayout().blocks.at(-1);v.url='https://youtu.be/abcdefghijk';
+    a.rpc=(route)=>{calls.push(route);return pending.promise;};
+    const work=a.fetchDescriptionPoster(v.id);
+    assert.ok(a.detailSaveDisabled());assert.ok(a.variantScopeBusy());
+    assert.equal(a.detailSaveLabel(),'Preparando portada…');
+    await a.saveContentOnly();await a.saveAll();await a.saveVariantScope('content');
+    assert.equal(calls.length,1,'no premature save without cover');
+    pending.resolve({media:{id:999,kind:'image',state:'ready'}});await work;
+    assert.notOk(a.detailSaveDisabled());assert.equal(v.posterMediaId,999);
+    assert.ok(a.contentSaveValues().descriptionLayout.blocks.at(-1).posterMediaId);
+});
+
+QUnit.test('missing-cover recovery preserves custom and local media covers and needs explicit action', async assert => {
+    const a=action(), calls=[];a.addDescriptionComposition('video-pair');
+    const [v,w]=a.descriptionLayout().blocks.at(-1).children;
+    v.url='https://youtu.be/abcdefghijk';w.url='https://youtu.be/12345678901';w.posterMediaId=77;
+    a.rpc=async(route)=>{calls.push(route);return {media:{id:88,kind:'image',state:'ready'}};};
+    assert.equal(a.descriptionMissingPosters().length,1);assert.equal(calls.length,0);
+    await a.recoverDescriptionPosters();assert.equal(calls.length,1);
+    assert.equal(v.posterMediaId,88);assert.equal(w.posterMediaId,77);assert.equal(a.descriptionMissingPosters().length,0);
+    a.state.descriptionPostersPending={'removed-block':true};assert.notOk(a.descriptionPostersBusy());
+});
