@@ -57,6 +57,16 @@ publicWidget.registry.WebsiteSale.include({
         }
         return this._super.apply(this, arguments);
     },
+    _onClickConfirmOrder(ev) {
+        // Native implicit form submission (Enter) does not use _onClickAdd.
+        // Preserve checkout/search handlers outside this main-product form.
+        const root = this._bpiVariantRoot(), form = ev.target;
+        if (root && root.contains(form) && form.matches('form') && form.querySelector('input.product_id') &&
+                (root.hasAttribute('aria-busy') || root.dataset.bpiVariantError)) {
+            ev.preventDefault(); ev.stopImmediatePropagation(); return;
+        }
+        return this._super.apply(this, arguments);
+    },
     _checkExclusions($parent, combination) {
         if (this._bpiVariantRoot() && $parent.hasClass('js_main_product')) {
             const selected = this.getSelectedVariantValues($parent).map(Number).sort((a,b)=>a-b);

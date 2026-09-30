@@ -521,9 +521,9 @@ export const contentStudioMethods = {
             !this.descriptionVariants().some(v => v.id === variantId)) return;
         block.variantIds = checked ? [...new Set([...block.variantIds, variantId])].sort((a,b) => a-b) : block.variantIds.filter(v => v !== variantId);
     },
-    setDescriptionPreviewVariant(value) { this.state.descriptionPreviewVariantId = Number(value) || 0; },
+    setDescriptionPreviewVariant(value) { this.state.descriptionPreviewVariantId = Number(this.state.workspaceVariantId || value) || 0; },
     descriptionPreviewBlocks() {
-        const selected = Number(this.state.descriptionPreviewVariantId) || 0;
+        const selected = Number(this.state.workspaceVariantId || this.state.descriptionPreviewVariantId) || 0;
         const valid = this.descriptionVariants().some(v => v.id === selected && v.active !== false);
         return this.descriptionLayout().blocks.filter(b => !Array.isArray(b.variantIds) || (valid && b.variantIds.includes(selected)));
     },

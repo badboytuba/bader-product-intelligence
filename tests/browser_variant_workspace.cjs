@@ -123,6 +123,8 @@ const result={checks:[],errors:[]};
   await page.locator('.bpi-variant-status').waitFor();
   assert(await page.locator('#add_to_cart').evaluate(el=>el.classList.contains('disabled')));
   assert.equal(Number(await page.locator('input.product_id').first().inputValue()),high.id);
+  assert.equal(await page.evaluate(()=>document.querySelector('#product_details input.product_id').closest('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))),false,'implicit Enter submission must not purchase the stale SKU');
+  result.checks.push('native_form_submit_blocked_while_selected_edition_failed');
   await page.getByRole('button',{name:'Reintentar',exact:true}).click();
   await page.waitForFunction(id=>document.querySelector('#product_detail')?.dataset.bpiSelectedVariant===String(id)&&!document.querySelector('#product_detail').hasAttribute('aria-busy'),starter.id);
   assert((await page.locator('.bpi-variant-short').innerText()).includes('exclusiva 1'));

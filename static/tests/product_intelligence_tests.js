@@ -3006,6 +3006,17 @@ QUnit.test('mounted mind map exposes editable branches, optional AI explanations
 });
 
 QUnit.module('Bader variant workspace');
+QUnit.test('design preview follows selected editorial edition instead of common or sibling', assert => {
+    const action=stabilizationAction();action.applyDetailPayload(variantWorkspacePayload());
+    action.state.contentForm.descriptionLayout.blocks=[{id:'main',type:'main'},
+        {id:'high',type:'text',html:'High',variantIds:[10]},
+        {id:'starter',type:'text',html:'Starter',variantIds:[11]}];
+    assert.deepEqual(action.descriptionPreviewBlocks().map(b=>b.id),['main','high']);
+    action.setDescriptionPreviewVariant(11);
+    assert.deepEqual(action.descriptionPreviewBlocks().map(b=>b.id),['main','high'],'cannot mix sibling layout with selected description');
+    action.state.workspaceVariantId=false;action.setDescriptionPreviewVariant(11);
+    assert.deepEqual(action.descriptionPreviewBlocks().map(b=>b.id),['main','starter'],'common workspace retains explicit variant previews');
+});
 QUnit.test('classification revisions are not drafts and pending labels identify other editions', assert => {
     const action=stabilizationAction();action.applyDetailPayload(variantWorkspacePayload());
     action.state.categoryForm.classification.revision=99;

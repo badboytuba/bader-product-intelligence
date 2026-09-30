@@ -107,8 +107,8 @@ search and private references. Browser certificates are generated separately:
   private route rejected; inheritance revokes delivery without deleting history.
 - `media_browser_results.json`: native keyboard/touch/zoom, pending player stop,
   carousel rebuild and intentionally empty gallery.
-- `clone_qunit_certificate.json`: **182 real Odoo/Chrome QUnit tests**, zero failures,
-  including9 variant tests and173 existing regressions. Check status/count/current
+- `clone_qunit_certificate.json`: **183 real Odoo/Chrome QUnit tests**, zero failures,
+  including10 variant tests and173 existing regressions. Check status/count/current
   code hashes; do not treat an older file as certification of newer changes.
 
 The real QAS initially lacked robots/noindex protection; activation requires a
