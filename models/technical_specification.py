@@ -142,6 +142,8 @@ class TechnicalProduct(models.Model):
         facts = super()._bpi_content_facts()
         rows = self.env['bpi.product.specification']._payload(self)
         active = [r for r in rows if r['active']]
+        if self.env.context.get('_bpi_selected_facts'):
+            active = [r for r in rows if r['variantId'] == self.env.context['_bpi_selected_facts']]
         for row in active:
             # Dedicated net weight supersedes native logistics weight as evidence.
             if 'weight' in row['values']:

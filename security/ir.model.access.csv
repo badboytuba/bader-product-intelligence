@@ -15,3 +15,4 @@ access_bpi_studio_source_manager,bpi.content.studio.source manager,model_bpi_con
 access_bpi_studio_message_manager,bpi.content.studio.message manager,model_bpi_content_studio_message,base.group_system,1,1,1,1
 access_bpi_studio_proposal_manager,bpi.content.studio.proposal manager,model_bpi_content_studio_proposal,base.group_system,1,1,1,1
 access_bpi_description_media_manager,bpi.description.media manager,model_bpi_description_media,base.group_system,1,1,1,1
+access_bpi_variant_content_manager,bpi.variant.content manager,model_bpi_variant_content,base.group_system,1,1,1,0

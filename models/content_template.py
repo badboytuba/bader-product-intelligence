@@ -224,13 +224,20 @@ class ProductTemplate(models.Model):
             add(prefix + name, label_prefix + (_("Peso") if name == "weight" else _("Volumen")), value + (" kg" if name == "weight" else " m³"))
 
         variants = self._bpi_all_variants().filtered("active")
+        selected = self.env.context.get('_bpi_selected_facts')
+        if selected:
+            variants = self.env['bpi.variant.content']._variant(self, selected)
         if len(variants) <= 1:
             record = variants[:1] or self
             for field in ("weight", "volume"):
                 measurement(record, field)
-            for line in self.attribute_line_ids:
-                for value in line.value_ids:
-                    add("attribute:%s:%s" % (line.id, value.id), line.attribute_id.name, value.name)
+            if selected:
+                for value in variants.product_template_attribute_value_ids:
+                    add('variant:%s:attribute:%s' % (variants.id, value.id), value.attribute_id.name, value.name)
+            else:
+                for line in self.attribute_line_ids:
+                    for value in line.value_ids:
+                        add("attribute:%s:%s" % (line.id, value.id), line.attribute_id.name, value.name)
         else:
             for variant in variants[:30]:
                 label = "%s — " % (variant.default_code or variant.display_name)

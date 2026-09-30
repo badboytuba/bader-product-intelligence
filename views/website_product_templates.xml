@@ -11,10 +11,12 @@
             <!-- Website must participate in the native product cache key:
                  presentation is opt-in per website and can be switched off. -->
             <xpath expr="//t[@t-cache='pricelist,product']" position="attributes">
-                <attribute name="t-cache">pricelist,product,website</attribute>
+                <attribute name="t-cache">pricelist,product,website,bpi_variant_public and bpi_variant_public['cacheKey']</attribute>
             </xpath>
             <xpath expr="//*[@id='product_detail']" position="attributes">
                 <attribute name="t-attf-class" add="#{'bpi-product-premium' if website.bpi_premium_storefront_enabled else ''}" separator=" "/>
+                <attribute name="t-att-data-bpi-variant-workspace">product.id if bpi_variant_public else None</attribute>
+                <attribute name="t-att-data-bpi-selected-variant">bpi_variant_public['variantId'] if bpi_variant_public else None</attribute>
                 <attribute name="t-att-data-bpi-storefront-product">product.id if website.bpi_premium_storefront_enabled else None</attribute>
             </xpath>
             <xpath expr="//*[@id='product_detail']/div[hasclass('row')][1]" position="attributes">
@@ -32,8 +34,15 @@
                 </t>
             </xpath>
 
+            <xpath expr="//h1[@t-field='product.name']" position="before">
+                <h1 t-if="bpi_variant_public" itemprop="name" class="bpi-variant-name" t-out="bpi_variant_public['name']"/>
+            </xpath>
+            <xpath expr="//h1[@t-field='product.name']" position="attributes">
+                <attribute name="t-if">not bpi_variant_public</attribute>
+            </xpath>
             <xpath expr="//div[@id='product_details']/p[@t-field='product.description_sale']" position="replace">
-                <div t-if="product.bpi_ai_generated_description"
+                <div t-if="bpi_variant_public" class="text-muted my-2 bpi-website-description bader-brand bpi-variant-short" itemprop="description" t-out="bpi_variant_public['short']"/>
+                <div t-elif="product.bpi_ai_generated_description"
                      class="text-muted my-2 bpi-website-description bader-brand"
                      itemprop="description"
                      data-bpi-description="formatted"
@@ -46,7 +55,8 @@
             </xpath>
 
             <xpath expr="//div[@id='product_detail_main']" position="after">
-                <section t-if="product.bpi_technical_description"
+                <div t-if="bpi_variant_public" class="bpi-variant-editorial"><t t-call="bader_product_intelligence.variant_editorial"/></div>
+                <section t-if="not bpi_variant_public and product.bpi_technical_description"
                          id="bpi-product-technical-description"
                          class="bpi-website-technical-description bader-brand"
                          data-bpi-technical-description="formatted"
@@ -66,7 +76,7 @@
                     </div>
                 </section>
 
-                <t t-set="bpi_documents" t-value="product._bpi_public_document_panel(website)"/>
+                <t t-set="bpi_documents" t-value="not bpi_variant_public and product._bpi_public_document_panel(website)"/>
                 <section t-if="bpi_documents" class="bpi-product-documents bader-brand" aria-labelledby="bpi-documents-public-title" data-bpi-documents="public">
                     <div class="bpi-product-documents__cover">
                         <img t-if="bpi_documents['coverUrl']" t-att-src="bpi_documents['coverUrl']" t-att-alt="bpi_documents['title'] or 'Catálogos y documentación'" loading="lazy"/>
@@ -77,7 +87,7 @@
                     </div>
                 </section>
 
-                <section t-if="product.bpi_public_faqs"
+                <section t-if="not bpi_variant_public and product.bpi_public_faqs"
                          id="bpi-product-faq"
                          class="bpi-website-faq bader-brand"
                          data-bpi-faq="public"

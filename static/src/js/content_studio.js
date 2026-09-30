@@ -408,7 +408,7 @@ export const contentStudioMethods = {
     studioFormData(values) {
         const form = new FormData();
         form.append("csrf_token", window.odoo?.csrf_token || "");
-        form.append("context", JSON.stringify(this.user?.context || {}));
+        form.append("context", JSON.stringify({...this.user?.context, bpi_product_variant_id: this.state.workspaceVariantId || false}));
         for (const [key, value] of Object.entries(values)) form.append(key, String(value));
         return form;
     },

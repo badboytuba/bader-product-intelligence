@@ -15,6 +15,7 @@
                                 <div class="text-muted">Solo afecta al sitio seleccionado. Al desactivar se recupera su presentación anterior.</div>
                                 <field name="bpi_premium_storefront_enabled"/>
                                 <label for="bpi_premium_storefront_enabled"/>
+                                <div><field name="bpi_variant_content_enabled"/><label for="bpi_variant_content_enabled"/><p class="text-muted">Fichas por variante y URLs propias. Desactivado conserva el comportamiento común del sitio.</p></div>
                                 <label for="bpi_premium_footer_legal_name"/><field name="bpi_premium_footer_legal_name"/>
                                 <label for="bpi_premium_footer_html"/><field name="bpi_premium_footer_html" widget="html"/>
                             </div>

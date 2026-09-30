@@ -112,6 +112,7 @@ class ProductDocumentPanel(models.Model):
 
     product_id = fields.Many2one('product.template', required=True, ondelete='cascade', index=True)
     company_id = fields.Many2one(related='product_id.company_id', store=True, index=True)
+    product_variant_id = fields.Many2one('product.product', ondelete='cascade', index=True, copy=False)
     title = fields.Char()
     intro = fields.Text()
     buttons = fields.Json(default=list)
@@ -120,7 +121,16 @@ class ProductDocumentPanel(models.Model):
     file_2 = fields.Binary(attachment=True)
     file_3 = fields.Binary(attachment=True)
     revision = fields.Integer(default=1, readonly=True)
-    _sql_constraints = [('product_unique', 'unique(product_id)', 'El producto ya tiene un bloque de documentos.')]
+    _sql_constraints = [('variant_unique', 'unique(product_variant_id)', 'La variante ya tiene un bloque de documentos.')]
+
+    def init(self):
+        # Replace the previous template-only uniqueness without copying any data.
+        self.env.cr.execute('ALTER TABLE bpi_product_document_panel DROP CONSTRAINT IF EXISTS bpi_product_document_panel_product_unique')
+        self.env.cr.execute('CREATE UNIQUE INDEX IF NOT EXISTS bpi_document_common_unique ON bpi_product_document_panel(product_id) WHERE product_variant_id IS NULL')
+
+    def _scope_domain(self, product, variant_id=False):
+        return [('product_id', '=', product.id), ('product_variant_id', '=', variant_id or False)]
+
 
     def _guard(self, product):
         product = self.env['bpi.service']._meli_product(product.id)
@@ -129,7 +139,7 @@ class ProductDocumentPanel(models.Model):
 
     def _prepare(self, values, record=None):
         values = dict(values)
-        if set(values) - {'product_id', 'title', 'intro', 'buttons', 'cover', 'file_1', 'file_2', 'file_3'}:
+        if set(values) - {'product_id', 'product_variant_id', 'title', 'intro', 'buttons', 'cover', 'file_1', 'file_2', 'file_3'}:
             raise ValidationError(_('Campos de documentos no permitidos.'))
         for name, maximum in (('title', 120), ('intro', 600)):
             if name in values:
@@ -179,12 +189,14 @@ class ProductDocumentPanel(models.Model):
     def create(self, values_list):
         prepared = []
         for values in values_list:
-            self._guard(self.env['product.template'].browse(values.get('product_id')))
+            product = self._guard(self.env['product.template'].browse(values.get('product_id')))
+            if values.get('product_variant_id'):
+                self.env['bpi.variant.content']._variant(product, values['product_variant_id'])
             prepared.append(dict(self._prepare(values), revision=1))
         return super().create(prepared)
 
     def write(self, values):
-        if 'product_id' in values:
+        if {'product_id', 'product_variant_id'}.intersection(values):
             raise ValidationError(_('No se puede reasignar el bloque a otro producto.'))
         for record in self:
             record._guard(record.product_id)
@@ -209,10 +221,14 @@ class ProductDocumentPanel(models.Model):
         for index, button in enumerate(self.buttons, 1):
             data['buttons'][index - 1].update(button, hasFile=bool(button.get('size')),
                 fileUrl=base + '%s?v=%s' % (index, self.revision) if button.get('size') else '')
+        if self.product_variant_id:
+            for row in data['buttons']:
+                if row['fileUrl']: row['fileUrl'] += '&variant=%s' % self.product_variant_id.id
+            if data['coverUrl']: data['coverUrl'] += '&variant=%s' % self.product_variant_id.id
         return data
 
     @api.model
-    def _save_panel(self, product, data):
+    def _save_panel(self, product, data, variant_id=False):
         self._guard(product)
         if not isinstance(data, dict) or set(data) - {'revision','title','intro','buttons','cover','coverUrl'}:
             raise ValidationError(_('Bloque de documentos inválido.'))
@@ -221,7 +237,9 @@ class ProductDocumentPanel(models.Model):
             raise ValidationError(_('Revisión de documentos inválida.'))
         # Serialize creation and edits on the parent, including concurrent first saves.
         self.env.cr.execute('UPDATE product_template SET write_date=write_date WHERE id=%s', [product.id])
-        panel = self.search([('product_id','=',product.id)])
+        if variant_id:
+            self.env['bpi.variant.content']._variant(product, variant_id)
+        panel = self.search(self._scope_domain(product, variant_id))
         if revision != (panel.revision if panel else 0):
             raise UserError(_('Los documentos cambiaron. Conservamos tus borradores; recarga antes de guardar.'))
         values = {key:data.get(key,'') for key in ('title','intro')}
@@ -237,14 +255,25 @@ class ProductDocumentPanel(models.Model):
                 values['file_%s'%index] = row['upload']
         if 'cover' in data:
             values['cover'] = data['cover']
+        if variant_id:
+            common = self.search(self._scope_domain(product), limit=1)
+            if common:
+                inherited = common._payload()
+                if 'cover' not in values and (not panel or data.get('coverUrl') == inherited['coverUrl']):
+                    values['cover'] = common.cover or False
+                for index, row in enumerate(values['buttons'], 1):
+                    field = 'file_%s' % index
+                    from_common = (not panel or data['buttons'][index - 1].get('fileUrl') == inherited['buttons'][index - 1]['fileUrl'])
+                    if row.get('kind') == 'file' and field not in values and common[field] and from_common:
+                        values[field] = common[field]
         prepared = self._prepare(values, panel)
         if panel:
             # Unchanged content saves must not invalidate open document drafts.
             if all((panel[k] or '') == (v or '') for k,v in prepared.items() if k not in ('file_1','file_2','file_3','cover')) and not any(k in values for k in ('file_1','file_2','file_3','cover')):
                 return
             panel.write(values)
-        elif any(row['label'] for row in prepared['buttons']) or values['title'] or values['intro'] or values.get('cover'):
-            self.create(dict(values,product_id=product.id))
+        elif variant_id or any(row['label'] for row in prepared['buttons']) or values['title'] or values['intro'] or values.get('cover'):
+            self.create(dict(values,product_id=product.id,product_variant_id=variant_id or False))
 
 
 class DocumentProduct(models.Model):
@@ -252,7 +281,7 @@ class DocumentProduct(models.Model):
 
     def bpi_build_payload(self):
         result = super().bpi_build_payload()
-        panel = self.env['bpi.product.document.panel'].search([('product_id','=',self.id)])
+        panel = self.env['bpi.product.document.panel'].search([('product_id','=',self.id), ('product_variant_id','=',False)])
         result['documents'] = panel._payload() if panel else empty_panel()
         return result
 
@@ -267,7 +296,7 @@ class DocumentProduct(models.Model):
         if not self._bpi_visible_documents(website):
             return False
         # Narrow elevation after product/website/company/publication checks.
-        panel = self.env['bpi.product.document.panel'].sudo().search([('product_id','=',self.id)],limit=1)
+        panel = self.env['bpi.product.document.panel'].sudo().search([('product_id','=',self.id), ('product_variant_id','=',False)],limit=1)
         if not panel:
             return False
         data = panel._payload()

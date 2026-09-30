@@ -3004,3 +3004,129 @@ QUnit.test('mounted mind map exposes editable branches, optional AI explanations
         assert.deepEqual(calls, ['/bader_product_intelligence/data'], 'opening, reviewing and editing the map call no providers or writes');
     } finally { app.destroy(); target.remove(); }
 });
+
+QUnit.module('Bader variant workspace');
+QUnit.test('classification revisions are not drafts and pending labels identify other editions', assert => {
+    const action=stabilizationAction();action.applyDetailPayload(variantWorkspacePayload());
+    action.state.categoryForm.classification.revision=99;
+    action.state.categoryForm.classification.vocabularyRevision='new metadata';
+    assert.deepEqual(action.detailDirtySections(),[],'revision metadata is not an editorial edit');
+    action.variantWorkspaceDrafts={[action.variantWorkspaceKey()]:{dirty:true}};
+    assert.notOk(action.detailHasUnsavedChanges(),'the current live state supersedes its old cached snapshot');
+    action.variantWorkspaceDrafts[`${action.state.productId}:11`]={dirty:true,detail:{variantContent:{variantId:11,sku:'STARTER'}}};
+    assert.ok(action.detailHasUnsavedChanges());
+    assert.ok(action.variantPendingSummary().includes('STARTER'));
+    assert.notOk(action.detailCanSaveBeforeLeave(),'cannot discard another edition by saving the current one');
+    action.state.categoryForm.classification.termIds=[12];
+    assert.deepEqual(action.detailDirtySections().map(row=>row.id),['categorization']);
+});
+function variantWorkspacePayload(id = 10, revision = 0, overrides = {}) {
+    const base = stabilizationPayload();
+    base.variantWorkspaceEnabled = true;
+    base.variants.push({id:11, sku:'STARTER', active:true});
+    if (!id) return base;
+    const values = {description:'Base', technicalDescription:'<p>Larga</p>', templateId:false,
+        descriptionLayout:{version:1, enabled:false, blocks:[{id:'main', type:'main'}]}, faqs:[], tone:'profesional', audience:'clinicas',
+        seoTitle:'Base SEO', seoDescription:'', seoKeywords:[], geoTitle:'', geoDescription:'', geoKeywords:[], geoFeatures:[],
+        classification:{termIds:[],excludedTermIds:[]}, publicCategoryIds:[], gallery:[], videoUrl:''};
+    return {...base, variantContent:{variantId:id, revision, baseRevision:1, contextRevision:'a'.repeat(64),
+        overridden:Object.keys(overrides), values:{...values,...overrides}, baseValues:values}};
+}
+QUnit.test('explicit empty text and restore inheritance stay distinct', assert => {
+    const action=stabilizationAction(); action.applyDetailPayload(variantWorkspacePayload(10,1,{description:''}));
+    assert.strictEqual(action.state.contentForm.description,''); assert.ok(action.variantFieldCustomized('description'));
+    action.toggleVariantInheritance('description');
+    assert.strictEqual(action.state.contentForm.description,'Base'); assert.notOk(action.variantFieldCustomized('description'));
+    assert.ok(action.variantScopeModesDirty());
+    action.toggleVariantInheritance('description');
+    assert.ok(action.variantFieldCustomized('description'));
+});
+QUnit.test('switching keeps separate unsaved contexts and performs only reads', async assert => {
+    const action=stabilizationAction(); action.applyDetailPayload(variantWorkspacePayload());
+    action.state.contentForm.description='Borrador High';
+    const calls=[]; action.rpc=async (route,args)=>{calls.push(route); return variantWorkspacePayload(args.product_variant_id);};
+    await action.switchWorkspaceVariant({target:{value:'11'}});
+    assert.strictEqual(action.state.workspaceVariantId,11); assert.strictEqual(action.state.contentForm.description,'Base');
+    action.state.contentForm.description='Borrador Starter';
+    await action.switchWorkspaceVariant({target:{value:'10'}});
+    assert.strictEqual(action.state.contentForm.description,'Borrador High');
+    assert.notOk(action.detailCanSaveBeforeLeave(), 'saving one context cannot silently leave another unsaved');
+    assert.deepEqual(calls,['/bader_product_intelligence/data','/bader_product_intelligence/data']);
+});
+QUnit.test('a clean cached context receives fresh saved data', async assert => {
+    const action=stabilizationAction(); action.applyDetailPayload(variantWorkspacePayload());
+    action.rpc=async (route,args)=>variantWorkspacePayload(args.product_variant_id,2,{description:'Actualizada'});
+    await action.switchWorkspaceVariant({target:{value:'11'}});
+    await action.switchWorkspaceVariant({target:{value:'10'}});
+    assert.strictEqual(action.state.contentForm.description,'Actualizada');
+});
+QUnit.test('saving a section preserves collections and modes edited during request', async assert => {
+    const action=stabilizationAction(); action.applyDetailPayload(variantWorkspacePayload());
+    action.state.variantModes.description=true;
+    const pending=stabilizationDeferred(); let payload;
+    action.rpc=(route,args)=>{payload=args; return pending.promise;};
+    const saving=action.saveVariantScope('content');
+    action.state.variantGalleryTokens=['odoo:9']; action.state.variantPublicCategoryIds=[12];
+    action.toggleVariantInheritance('description'); // UI normally busy; simulate new state from an external editor.
+    action.state.variantModes.description=false;
+    action.state.contentForm.description='Nuevo borrador';
+    pending.resolve(variantWorkspacePayload(10,1,{description:'Base'})); await saving;
+    assert.deepEqual(action.state.variantGalleryTokens,['odoo:9']); assert.deepEqual(action.state.variantPublicCategoryIds,[12]);
+    assert.strictEqual(action.state.contentForm.description,'Nuevo borrador');
+    assert.strictEqual(action.state.variantModes.description,false);
+    assert.strictEqual(payload.product_variant_id,10); assert.strictEqual(payload.changes.description,'Base');
+    assert.notOk('gallery' in payload.changes); assert.notOk('publicCategoryIds' in payload.changes);
+});
+QUnit.test('variant request cannot apply to its sibling or clear new loading state', async assert => {
+    const action=stabilizationAction(); action.applyDetailPayload(variantWorkspacePayload());
+    const pending=stabilizationDeferred(); action.rpc=()=>pending.promise;
+    const switching=action.switchWorkspaceVariant({target:{value:'11'}});
+    action.invalidateProductRequests(); action.state.productId=2; action.state.variantScopeLoading=true;
+    action.applyDetailPayload(stabilizationPayload(2));
+    pending.resolve(variantWorkspacePayload(11)); await switching;
+    assert.strictEqual(action.state.detail.product.id,2); assert.ok(action.state.variantScopeLoading);
+});
+QUnit.test('per-variant gallery and category edits participate in unsaved detection', assert => {
+    const action=stabilizationAction(); action.applyDetailPayload(variantWorkspacePayload());
+    action.state.variantGalleryTokens=['odoo:8']; action.state.variantPublicCategoryIds=[3];
+    assert.deepEqual(action.detailDirtySections().map(row=>row.id).sort(),['categorization','images']);
+});
+QUnit.test('actual selector preserves drafts and exposes inheritance without writes', async assert => {
+    const target = document.createElement('div'); document.body.appendChild(target); const calls=[];
+    const app=new App(ProductIntelligenceAction,{templates,test:true,props:{action:{params:{product_tmpl_id:1},context:{}}},
+        env:{services:{user:{context:{}},notification:{add(){}},action:{doAction(){}},rpc:async(route,args)=>{
+            calls.push(route); if(route.endsWith('/data')) return variantWorkspacePayload(args.product_variant_id || false);
+            throw new Error('Unexpected '+route);
+        }}}});
+    try {
+        const action=await app.mount(target); await workspacePatched();
+        const select=target.querySelector('.bpi-variant-workspace select'); assert.ok(select);
+        select.value='10';select.dispatchEvent(new Event('change',{bubbles:true}));await workspacePatched();await workspacePatched();
+        assert.equal(action.state.workspaceVariantId,10);
+        await action.selectDetailSection('content');await workspacePatched();
+        assert.ok(target.querySelector('.bpi-variant-workspace__fields').textContent.includes('Heredado'));
+        action.state.contentForm.description='High local';
+        await action.switchWorkspaceVariant({target:{value:'11'}});await workspacePatched();
+        assert.notEqual(action.state.contentForm.description,'High local');
+        await action.switchWorkspaceVariant({target:{value:'10'}});await workspacePatched();
+        assert.equal(action.state.contentForm.description,'High local');
+        assert.ok(calls.every(route=>route==='/bader_product_intelligence/data'), 'no save or paid generation');
+    } finally {app.destroy(); target.remove();}
+});
+
+QUnit.test('variant navigation preserves image/chat input and waits for synchronous media work', async assert => {
+    const action=stabilizationAction(); action.applyDetailPayload(variantWorkspacePayload());
+    action.state.playground={messages:[{role:'user',text:'Referencia High'}],canvasUrl:'data:image/png;base64,test',inputText:'Mi pedido de imagen'};
+    action.state.chatInput='Nota sin enviar';
+    let calls=0;action.rpc=async(route,args)=>{calls++;return variantWorkspacePayload(args.product_variant_id);};
+    action.state.imageBusy=true;
+    await action.switchWorkspaceVariant({target:{value:'11'}});
+    assert.equal(calls,0,'cannot lose an in-flight paid image response');
+    action.state.imageBusy=false;
+    await action.switchWorkspaceVariant({target:{value:'11'}});
+    assert.notEqual(action.state.playground.inputText,'Mi pedido de imagen');
+    await action.switchWorkspaceVariant({target:{value:'10'}});
+    assert.equal(action.state.playground.inputText,'Mi pedido de imagen');
+    assert.equal(action.state.playground.messages[0].text,'Referencia High');
+    assert.equal(action.state.chatInput,'Nota sin enviar');
+});

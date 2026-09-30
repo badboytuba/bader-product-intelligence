@@ -481,9 +481,12 @@ class ProductTemplate(models.Model):
         return bool(layout.get('enabled')) and any('variantIds' in b for b in layout.get('blocks', []))
 
     def _bpi_public_description_layout(self, website, variant_id=False):
+        return self._bpi_project_description_layout(website, self.bpi_description_layout,
+            self.bpi_technical_description, self.bpi_editorial_revision or 1, variant_id)
+
+    def _bpi_project_description_layout(self, website, layout, technical, revision, variant_id=False, variant_content=False):
         self.ensure_one()
-        layout = self.bpi_description_layout
-        if not layout or not layout.get('enabled') or not self._bpi_plain_text(self.bpi_technical_description).strip() or not self._bpi_visible_documents(website):
+        if not layout or not layout.get('enabled') or (not variant_content and not self._bpi_plain_text(technical).strip()) or not self._bpi_visible_documents(website):
             return False
         # Do not interpret hash attribute-value IDs as product.product IDs. The
         # native combination response supplies the selected, existing variant.
@@ -499,14 +502,16 @@ class ProductTemplate(models.Model):
             dimensions = {row[0]: row[1:] for row in self.env.cr.fetchall()}
         def project(block):
             block = dict(block)
+            if variant_content and block.get('type') == 'main':
+                block['mainHtml'] = Markup(auxiliary_html(technical) if technical else '')
             if 'html' in block:
                 block['html'] = Markup(auxiliary_html(block['html']))
             if block.get('mediaId'):
-                block['src'] = '/bader_product_intelligence/description_media/%s/file?r=%s' % (block['mediaId'], self.bpi_editorial_revision or 1)
+                block['src'] = '/bader_product_intelligence/description_media/%s/file?r=%s' % (block['mediaId'], revision) + ('&variant=%s' % variant_id if variant_content else '')
             if block.get('url'):
                 block.update(social_video(block['url']))
             if block.get('posterMediaId'):
-                block['posterSrc'] = '/bader_product_intelligence/description_media/%s/file?r=%s' % (block['posterMediaId'], self.bpi_editorial_revision or 1)
+                block['posterSrc'] = '/bader_product_intelligence/description_media/%s/file?r=%s' % (block['posterMediaId'], revision) + ('&variant=%s' % variant_id if variant_content else '')
             if block.get('type') in ('image', 'video'):
                 for field in ('title', 'caption'):
                     block[field + 'Css'] = video_text_css(block.get(field + 'Style', {}), field)
@@ -906,7 +911,7 @@ class DescriptionMedia(models.Model):
         for record in self.sorted('id'):
             record._lock()
             self.env['bpi.service']._meli_product(record.product_id.id)
-            if record.id in layout_media_ids(record.product_id.bpi_description_layout):
+            if record.id in record.product_id._bpi_saved_layout_media_ids():
                 raise UserError(_('Guarda el diseño sin este archivo antes de eliminarlo.'))
         paths = [record._path() for record in self]
         result = super().unlink()
@@ -927,7 +932,7 @@ class DescriptionMedia(models.Model):
         cutoff = fields.Datetime.now() - timedelta(days=7)
         records = self.search([('write_date', '<', cutoff)], limit=100)
         for record in records:
-            if record.id not in layout_media_ids(record.product_id.bpi_description_layout):
+            if record.id not in record.product_id._bpi_saved_layout_media_ids():
                 record.unlink()
         # Rollbacks and deleted products may leave opaque files without rows.
         # Old orphans only; never touch a key owned by any current record.

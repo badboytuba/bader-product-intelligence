@@ -20,3 +20,4 @@ from . import test_semantic_search
 from . import test_studio_fetch
 
 from . import test_storefront
+from . import test_variant_content

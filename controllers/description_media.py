@@ -3,7 +3,7 @@
 import json
 import os
 
-from odoo import http
+from odoo import http, SUPERUSER_ID
 from odoo.exceptions import AccessError, MissingError, UserError, ValidationError
 from odoo.http import content_disposition, request
 
@@ -107,7 +107,7 @@ class DescriptionMediaController(http.Controller):
             return request.not_found()
 
     @http.route('/bader_product_intelligence/description_media/<int:media_id>/file', type='http', auth='public', website=True, methods=['GET', 'HEAD'], sitemap=False)
-    def public_file(self, media_id, r=None, **kwargs):
+    def public_file(self, media_id, r=None, variant=None, **kwargs):
         try:
             # Read only the parent identity first, then apply the same public
             # template/website/company/publication access gate as the documents.
@@ -116,9 +116,20 @@ class DescriptionMediaController(http.Controller):
             if not row:
                 return request.not_found()
             product = request.env['product.template'].browse(row[0]).exists()
-            if not product or not product._bpi_visible_documents(request.website) or not product._bpi_plain_text(product.bpi_technical_description).strip() or str(product.bpi_editorial_revision or 1) != r:
+            if not product or not product._bpi_visible_documents(request.website):
                 return request.not_found()
-            layout = product.bpi_description_layout or {}
+            if variant is not None:
+                if not isinstance(variant, str) or not variant.isdigit() or not product._bpi_public_variant(request.website, int(variant)):
+                    return request.not_found()
+                _edition, profile, _base, values = product.with_user(SUPERUSER_ID).with_context(allowed_company_ids=[request.website.company_id.id])._bpi_effective_variant(int(variant))
+                revision = '%s-%s' % (product.bpi_editorial_revision or 1, profile.revision if profile else 0)
+                if revision != r:
+                    return request.not_found()
+                layout = values['descriptionLayout'] or {}
+            else:
+                if not product._bpi_plain_text(product.bpi_technical_description).strip() or str(product.bpi_editorial_revision or 1) != r:
+                    return request.not_found()
+                layout = product.bpi_description_layout or {}
             if not layout.get('enabled') or media_id not in layout_media_ids(layout):
                 return request.not_found()
             # Scoped elevation of one approved reference AFTER all public gates.

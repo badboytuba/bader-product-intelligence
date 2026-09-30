@@ -217,7 +217,7 @@ class TaxonomyProduct(models.Model):
         catalog = self.env['bpi.taxonomy.term']._catalog()
         keys = [normalize(x).replace('_', ' ') for x in (self.bpi_intelligent_niches or []) + [self.bpi_intelligent_type or '', self.bpi_intelligent_subcategory or '']]
         legacy = [t['id'] for t in catalog if t['key'] in keys or set(t['aliases']).intersection(keys)]
-        job = self.env['bpi.ai.job'].search([('product_tmpl_id', '=', self.id), ('job_type', '=', 'classification')], order='id desc', limit=1)
+        job = self.env['bpi.ai.job'].search([('product_tmpl_id', '=', self.id), ('job_type', '=', 'classification'), ('product_variant_id','=',False)], order='id desc', limit=1)
         return {'revision': self.bpi_classification_revision, 'termIds': self.bpi_taxonomy_term_ids.ids,
                 'vocabularyRevision': self.env['bpi.taxonomy.term']._revision(), 'terms': catalog,
                 'excludedTermIds': [i for i in (self.bpi_classification_excluded_ids or []) if i in {t['id'] for t in catalog}],
@@ -402,16 +402,19 @@ class ClassificationJob(models.Model):
     def _create_classification_job(self, product):
         manager(self.env)
         product = self.env['bpi.service']._meli_product(product.id)
-        domain = [('product_tmpl_id','=',product.id),('job_type','=','classification'),('target_audience','=','general'),('state','in',['pending','running'])]
+        variant_id = self.env.context.get('bpi_product_variant_id') or False
+        if variant_id:
+            self.env['bpi.variant.content']._variant(product, variant_id)
+        domain = [('product_tmpl_id','=',product.id),('product_variant_id','=',variant_id),('job_type','=','classification'),('target_audience','=','general'),('state','in',['pending','running'])]
         active = self.search(domain, limit=1)
         if active:
             return active
         source = product._bpi_classification_source()
         catalog = self.env['bpi.taxonomy.term']._catalog()
         values = {'name':_('Clasificación Nancy — %s') % product.name, 'job_type':'classification', 'target_audience':'general',
-                  'product_tmpl_id':product.id, 'requested_by_id':self.env.uid,
+                  'product_tmpl_id':product.id, 'product_variant_id':variant_id, 'requested_by_id':self.env.uid,
                   'classification_request':{'source':source,'sourceRevision':digest(source), 'terms':catalog,
-                    'vocabularyRevision':self.env['bpi.taxonomy.term']._revision(), 'classificationRevision':product.bpi_classification_revision,
+                    'vocabularyRevision':self.env['bpi.taxonomy.term']._revision(), 'classificationRevision':product._bpi_classification_payload()['revision'],
                     'companies':self.env.companies.ids, 'language':self.env.context.get('lang') or self.env.user.lang}}
         try:
             with self.env.cr.savepoint():
@@ -429,7 +432,7 @@ class ClassificationJob(models.Model):
         if not self.requested_by_id or not self.requested_by_id.active:
             raise UserError(_('El solicitante ya no está disponible.'))
         data = self.classification_request or {}
-        service = self.env['bpi.service'].with_user(self.requested_by_id).with_context(allowed_company_ids=data.get('companies', []), lang=data.get('language') or self.requested_by_id.lang)
+        service = self.env['bpi.service'].with_user(self.requested_by_id).with_context(allowed_company_ids=data.get('companies', []), lang=data.get('language') or self.requested_by_id.lang, bpi_product_variant_id=self.product_variant_id.id or False)
         service._ensure_manager()
         product = service._meli_product(self.product_tmpl_id.id)
         if digest(product._bpi_classification_source()) != data.get('sourceRevision') or service.env['bpi.taxonomy.term']._revision() != data.get('vocabularyRevision'):

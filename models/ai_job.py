@@ -25,11 +25,11 @@ class BPIAIJob(models.Model):
         # deduplication. Studio conversations have their own active-job index.
         self.env.cr.execute("SELECT indexdef FROM pg_indexes WHERE schemaname=current_schema() AND indexname='bpi_ai_job_unique_active'")
         old_index = self.env.cr.fetchone()
-        if old_index and "content_studio" not in old_index[0]:
+        if old_index and ("content_studio" not in old_index[0] or "product_variant_id" not in old_index[0]):
             self.env.cr.execute("DROP INDEX bpi_ai_job_unique_active")
         self.env.cr.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS bpi_ai_job_unique_active
-            ON bpi_ai_job (product_tmpl_id, job_type, target_audience)
+            ON bpi_ai_job (product_tmpl_id, COALESCE(product_variant_id, 0), job_type, target_audience)
             WHERE state IN ('pending', 'running') AND job_type <> 'content_studio'
         """)
 
@@ -43,6 +43,7 @@ class BPIAIJob(models.Model):
         index=True,
     )
     product_tmpl_id = fields.Many2one("product.template", required=True, ondelete="cascade", index=True)
+    product_variant_id = fields.Many2one("product.product", ondelete="cascade", index=True, copy=False)
     requested_by_id = fields.Many2one("res.users", string="Solicitado por", ondelete="set null")
     target_audience = fields.Char(default="clinicas")
     state = fields.Selection(
@@ -76,6 +77,7 @@ class BPIAIJob(models.Model):
             "name": self.name,
             "jobType": self.job_type,
             "productId": self.product_tmpl_id.id,
+            **({"variantId": self.product_variant_id.id} if self.product_variant_id else {}),
             "state": self.state,
             "progress": self.progress or 0,
             "message": self.message or "",
@@ -97,6 +99,7 @@ class BPIAIJob(models.Model):
         domain = [
                 ("product_tmpl_id", "=", product.id),
                 ("job_type", "=", "seo"),
+                ("product_variant_id", "=", False),
                 ("target_audience", "=", target_audience),
                 ("state", "in", ["pending", "running"]),
             ]

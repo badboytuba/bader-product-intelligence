@@ -22,12 +22,25 @@ class TaxonomyShop(WebsiteSale):
         return result
 
     def _get_search_domain(self, search, category, attrib_values, search_in_description=True):
-        if not request.website.bpi_taxonomy_search_enabled:
-            return super()._get_search_domain(search, category, attrib_values, search_in_description)
         from odoo.osv import expression
         model = request.env['product.template']
-        return expression.AND([super()._get_search_domain('',category,attrib_values,False),
-            model._bpi_query_domain(search or '', descriptions=True), model._bpi_filter_domain(model._bpi_filter_ids(request.params.get('bpi_terms')))])
+        if request.website.bpi_variant_content_enabled:
+            model = model.with_context(bpi_variant_term_ids=model._bpi_filter_ids(request.params.get('bpi_terms')),
+                                       bpi_variant_category_id=int(category) if category else False)
+        if not request.website.bpi_taxonomy_search_enabled:
+            result = super()._get_search_domain(search, category, attrib_values, search_in_description)
+        else:
+            result = expression.AND([super()._get_search_domain('',category,attrib_values,False),
+                model._bpi_query_domain(search or '', descriptions=True), model._bpi_filter_domain(model._bpi_filter_ids(request.params.get('bpi_terms')))])
+        if request.website.bpi_variant_content_enabled:
+            adapted = []
+            for leaf in result:
+                if isinstance(leaf, (tuple,list)) and len(leaf)==3 and leaf[0]=='public_categ_ids' and leaf[1]=='child_of':
+                    adapted.extend(model._bpi_effective_category_domain(leaf[2]))
+                else:
+                    adapted.append(leaf)
+            return adapted
+        return result
 
     @http.route()
     def shop(self, page=0, category=None, search='', min_price=0.0, max_price=0.0, ppg=False, **post):
@@ -46,4 +59,11 @@ class TaxonomyShop(WebsiteSale):
             response.qcontext.update(bpi_taxonomy_axes=AXES, bpi_taxonomy_facets=facets,
                 bpi_taxonomy_selected=ids, bpi_taxonomy_search=search,
                 bpi_taxonomy_preserved=[(k,v) for k,vs in request.httprequest.args.lists() if k not in ('bpi_terms','page') for v in vs])
+        if request.website.bpi_variant_content_enabled and search and getattr(response, 'qcontext', None):
+            products = response.qcontext.get('search_product', request.env['product.template'])
+            variants = request.env['product.product'].search([('product_tmpl_id','in',products.ids), ('active','=',True)])
+            Category = request.env['product.public.category']
+            categories = Category.search([('id','in',variants.bpi_effective_category_ids.ids)] + request.website.website_domain()).parents_and_self
+            response.qcontext.update(categories=categories.filtered(lambda category: not category.parent_id),
+                                     search_categories_ids=categories.ids)
         return response

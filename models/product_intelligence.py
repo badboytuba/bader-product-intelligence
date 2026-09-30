@@ -1680,6 +1680,10 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
     @api.model
     def update_pack(self, product, pack_revision, values):
         product.ensure_one()
+        selected_id = self.env.context.get('bpi_product_variant_id')
+        if selected_id:
+            self.env['bpi.variant.content']._variant(product, selected_id)
+            self.env.cr.execute('UPDATE product_template SET write_date=write_date WHERE id=%s', [product.id])
         if not product.pack_ok:
             raise UserError(_("El producto no está configurado como Pack en Odoo."))
         if not pack_revision or pack_revision != product._bpi_pack_revision():
@@ -1708,6 +1712,10 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
         if not isinstance(compositions, list):
             raise UserError(_("La composición del Pack no es válida."))
         variants = product._bpi_all_variants()
+        if selected_id:
+            if (pack_type, component_price_mode, modifiable) != (product.pack_type, product.pack_component_price, product.pack_modifiable):
+                raise UserError(_('Los ajustes del Pack son comunes. Selecciona Contenido común para cambiarlos.'))
+            variants = variants.filtered(lambda v: v.id == selected_id)
         variant_by_id = {variant.id: variant for variant in variants}
         received_variant_ids = set()
         prepared_commands = {}
@@ -1782,13 +1790,9 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
         if received_variant_ids != set(variant_by_id):
             raise UserError(_("Debes enviar la composición de todas las variantes del Pack."))
 
-        product.write(
-            {
-                "pack_type": pack_type,
-                "pack_component_price": component_price_mode,
-                "pack_modifiable": modifiable,
-            }
-        )
+        if not selected_id:
+            product.write({"pack_type": pack_type, "pack_component_price": component_price_mode,
+                           "pack_modifiable": modifiable})
         for variant in variants:
             variant.write({"pack_line_ids": prepared_commands[variant.id]})
         return product.bpi_build_payload()

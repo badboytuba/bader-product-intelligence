@@ -201,7 +201,7 @@ class StudioOwned(models.AbstractModel):
         self._studio_check()
         self.check_access_rights('write')
         self.check_access_rule('write')
-        if set(vals).intersection({'session_id', 'product_tmpl_id', 'company_id'}):
+        if set(vals).intersection({'session_id', 'product_tmpl_id', 'product_variant_id', 'company_id'}):
             raise ValidationError(_('No se puede cambiar el producto de una conversación o fuente.'))
         return super().write(vals)
 
@@ -220,6 +220,7 @@ class StudioSession(models.Model):
 
     name = fields.Char(required=True, default='Estrategia editorial')
     product_tmpl_id = fields.Many2one('product.template', required=True, ondelete='cascade', index=True)
+    product_variant_id = fields.Many2one('product.product', ondelete='cascade', index=True, copy=False)
     company_id = fields.Many2one(related='product_tmpl_id.company_id', store=True, index=True)
     revision = fields.Integer(default=1, required=True, copy=False)
     brief = fields.Json(default=dict)
@@ -227,6 +228,14 @@ class StudioSession(models.Model):
     source_ids = fields.One2many('bpi.content.studio.source', 'session_id')
     message_ids = fields.One2many('bpi.content.studio.message', 'session_id')
     proposal_ids = fields.One2many('bpi.content.studio.proposal', 'session_id')
+
+    @api.model_create_multi
+    def create(self, values_list):
+        for values in values_list:
+            if values.get('product_variant_id'):
+                product = self.env['bpi.service']._meli_product(values.get('product_tmpl_id'))
+                self.env['bpi.variant.content']._variant(product, values['product_variant_id'])
+        return super().create(values_list)
 
     def unlink(self):
         self._studio_check()
@@ -264,6 +273,17 @@ class StudioSession(models.Model):
             },
             'editorialRevision': product.bpi_editorial_revision if 'bpi_editorial_revision' in product._fields else 0,
         }
+        if self.product_variant_id:
+            scope = product._bpi_resolve_variant(self.product_variant_id.id)
+            values = scope['values']
+            data.update(variantId=scope['variantId'], variantRevision=scope['revision'],
+                variantFingerprint=scope['fingerprint'], name=scope['name'], sku=scope['sku'],
+                facts=product._bpi_variant_facts(self.product_variant_id.id),
+                variantsAndPacks=product._bpi_variant_catalog_context(self.product_variant_id.id),
+                semantic=product._bpi_variant_semantic_context(scope),
+                template={k: v for k, v in service.content_template_context(product, values['templateId']).items() if k != 'options'},
+                savedCopyNotEvidence={'short': values['description'], 'long': values['technicalDescription'],
+                    'seo': [values[k] for k in ('seoTitle', 'seoDescription', 'geoTitle', 'geoDescription')]})
         # Fingerprint actual source/brief values as well as endpoint-maintained
         # counters: direct ORM edits must invalidate previous proposals too.
         workflow = {'brief': self.brief, 'initialIntent': self.initial_intent or '',
@@ -297,6 +317,7 @@ class StudioSession(models.Model):
         proposals = self.proposal_ids.sorted('id', reverse=True)[:30]
         return {
             'id': self.id, 'name': self.name, 'revision': self.revision, 'productId': self.product_tmpl_id.id,
+            'variantId': self.product_variant_id.id or False,
             'brief': self.brief or {}, 'sources': [s._payload() for s in self.source_ids.sorted('id')],
             'messages': [m._payload() for m in self.message_ids.sorted('id')[-100:]],
             'proposals': [p._payload(snapshot) for p in proposals],
@@ -350,6 +371,9 @@ class StudioSource(models.Model):
         self.ensure_one()
         product = self.product_tmpl_id
         args = (product.name, product._bpi_all_variants().mapped('default_code'), product._bpi_content_facts())
+        if self.session_id.product_variant_id:
+            scope = product._bpi_resolve_variant(self.session_id.product_variant_id.id)
+            args = (scope['name'], [scope['sku']], product._bpi_variant_facts(scope['variantId']))
         conflicts = source_conflicts(*args, self.text or '')
         selected = self.reviewed_facts if selected_facts is None and self.state == 'reviewed' else selected_facts
         if selected is not None:
@@ -518,6 +542,8 @@ class StudioService(models.AbstractModel):
         if not proposal or proposal.product_tmpl_id != product:
             raise ValidationError(_('La propuesta no pertenece a este producto.'))
         session = proposal.session_id
+        if session.product_variant_id.id != self._studio_variant_id(product):
+            raise ValidationError(_('La propuesta pertenece a otra variante o al contenido común.'))
         session._lock()
         session._assert_snapshot(proposal.snapshot, proposal.session_revision, fresh=True)
         self._studio_assert_sources(session)
@@ -613,33 +639,44 @@ class StudioService(models.AbstractModel):
         session = self.env['bpi.content.studio.session'].browse(integer(session_id)).exists()
         if not session or session.product_tmpl_id != product:
             raise MissingError(_('Conversación no encontrada para este producto.'))
+        if session.product_variant_id.id != self._studio_variant_id(product):
+            raise MissingError(_('Conversación no encontrada para esta variante.'))
         session.check_access_rights('read')
         session.check_access_rule('read')
         session._studio_check()
         return session
 
     @api.model
+    def _studio_variant_id(self, product):
+        value = self.env.context.get('bpi_product_variant_id', False)
+        if value is False or value is None:
+            return False
+        return self.env['bpi.variant.content']._variant(product, value).id
+
+    @api.model
     def _studio_envelope(self, session):
         return {'session': session._payload(), 'sessions': [
             {'id': s.id, 'name': s.name, 'createdAt': fields.Datetime.to_string(s.create_date)}
-            for s in self.env['bpi.content.studio.session'].search([('product_tmpl_id', '=', session.product_tmpl_id.id)], limit=50)],
+            for s in self.env['bpi.content.studio.session'].search([('product_tmpl_id', '=', session.product_tmpl_id.id), ('product_variant_id', '=', session.product_variant_id.id or False)], limit=50)],
             'availability': self._studio_availability(),
             'nicheOptions': [{'id': t.id, 'name': t.name} for t in self.env['bpi.taxonomy.term'].search([('axis', '=', 'niche'), ('state', '=', 'approved'), ('active', '=', True)])]}
 
     @api.model
     def _studio_open(self, product_id, session_id=False, new_session=False):
         product = self._meli_product(product_id)
+        variant_id = self._studio_variant_id(product)
         if session_id:
             session = self._studio_session(product.id, session_id)
         elif not new_session:
-            session = self.env['bpi.content.studio.session'].search([('product_tmpl_id', '=', product.id)], limit=1)
+            session = self.env['bpi.content.studio.session'].search([('product_tmpl_id', '=', product.id), ('product_variant_id', '=', variant_id)], limit=1)
         else:
             session = self.env['bpi.content.studio.session']
         if not session:
             session = self.env['bpi.content.studio.session'].create({
                 'product_tmpl_id': product.id, 'name': _('Estrategia — %s') % product.name[:100],
+                'product_variant_id': variant_id,
                 'brief': {'objective': 'consultivo', 'tone': 'Profesional y natural', 'intent': '', 'shortFocus': '', 'longFocus': '',
-                          'nicheIds': [t['id'] for t in product._bpi_semantic_context()['axes']['niche']]},
+                          'nicheIds': [t['id'] for t in (product._bpi_variant_semantic_context(product._bpi_resolve_variant(variant_id)) if variant_id else product._bpi_semantic_context())['axes']['niche']]},
             })
         return self._studio_envelope(session)
 
@@ -647,7 +684,7 @@ class StudioService(models.AbstractModel):
     def _studio_strategy_options(self, product_id, search=''):
         product = self._meli_product(product_id)
         term = text_value(search, 100)
-        domain = [('product_tmpl_id', '!=', product.id),
+        domain = ['|', ('product_tmpl_id', '!=', product.id), ('product_variant_id', '!=', self._studio_variant_id(product)),
                   '|', ('company_id', '=', False), ('company_id', 'in', self.env.companies.ids)]
         if term:
             domain += ['|', '|', ('name', 'ilike', term), ('product_tmpl_id.name', 'ilike', term),
@@ -663,7 +700,7 @@ class StudioService(models.AbstractModel):
             brief['nicheIds'] = [i for i in brief.get('nicheIds', []) if i in allowed]
             options.append({'id': session.id, 'revision': session.revision, 'name': session.name,
                             'productName': session.product_tmpl_id.name,
-                            'sku': session.product_tmpl_id.default_code or '', 'brief': brief})
+                            'sku': (session.product_variant_id.default_code if session.product_variant_id else session.product_tmpl_id.default_code) or '', 'brief': brief})
         return {'strategies': options}
 
     @api.model
@@ -684,7 +721,8 @@ class StudioService(models.AbstractModel):
         if re.search(r'\b\d+(?:[.,]\d+)?\s*(?:mm|cm|kg|gr|g)\b', combined, re.I):
             raise ValidationError(_('Quita medidas y pesos de la estrategia. Se utilizarán los datos guardados del producto de destino.'))
         session = self.env['bpi.content.studio.session'].create({
-            'product_tmpl_id': product.id, 'name': _('Estrategia — %s') % product.name[:100], 'brief': clean})
+            'product_tmpl_id': product.id, 'product_variant_id': self._studio_variant_id(product),
+            'name': _('Estrategia — %s') % product.name[:100], 'brief': clean})
         # No messages, sources, proposals, initial user message or product values
         # are copied. The category recipe is resolved on the destination product.
         return self._studio_envelope(session)
@@ -894,6 +932,7 @@ class StudioService(models.AbstractModel):
                 'message': text, 'draft': draft or {}}
         job = self.env['bpi.ai.job'].create({
             'name': _('Nancy AI Studio — %s') % session.product_tmpl_id.name[:100], 'job_type': 'content_studio',
+            'product_variant_id': session.product_variant_id.id or False,
             'target_audience': False, 'product_tmpl_id': session.product_tmpl_id.id,
             'requested_by_id': self.env.uid, 'studio_session_id': session.id,
             'studio_request_key': request_key, 'studio_request': data,
@@ -1148,7 +1187,8 @@ class StudioJob(models.Model):
             raise UserError(_('El solicitante ya no está disponible.'))
         data = self.studio_request or {}
         service = self.env['bpi.service'].with_user(self.requested_by_id).with_context(
-            allowed_company_ids=data.get('companies', []), lang=data.get('language') or self.requested_by_id.lang)
+            allowed_company_ids=data.get('companies', []), lang=data.get('language') or self.requested_by_id.lang,
+            bpi_product_variant_id=self.studio_session_id.product_variant_id.id or False)
         session = service._studio_session(self.product_tmpl_id.id, self.studio_session_id.id)
         session._assert_snapshot(data['snapshot'], data['sessionRevision'], fresh=True)
         if data.get('sourceId'):

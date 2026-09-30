@@ -18,3 +18,11 @@ from . import description_layout
 from . import content_studio
 
 from . import storefront
+from . import variant_content
+from . import variant_pricing
+
+from . import variant_storefront
+
+from . import variant_search
+
+from . import variant_service

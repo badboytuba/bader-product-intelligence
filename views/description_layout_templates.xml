@@ -3,7 +3,7 @@
     <template id="description_layout_node" name="Bader description block">
         <div t-att-class="'bpi-layout__block bpi-layout__block--%s bpi-layout__preset--%s bpi-layout__align--%s bpi-layout__effect--%s bpi-layout__spacing--%s' % (node['type'], node.get('preset', 'white'), node.get('align', 'left'), node.get('effect', 'none'), node.get('spacing', 'normal'))" t-att-data-block-id="node['id']" t-att-data-bpi-variant-specific="'1' if 'variantIds' in node else None">
             <h3 t-if="node.get('linkedTitle')" class="bpi-layout__video-title" t-att-style="node['linkedTitleCss']" t-out="node['linkedTitle']"/>
-            <div t-if="node['type'] == 'main'" class="bpi-layout__main" t-field="product.bpi_technical_description"/>
+            <t t-if="node['type'] == 'main'"><div t-if="'mainHtml' in node" class="bpi-layout__main" t-out="node['mainHtml']"/><div t-else="" class="bpi-layout__main" t-field="product.bpi_technical_description"/></t>
             <div t-elif="node['type'] in ('text', 'callout')" class="bpi-layout__text" t-out="node['html']"/>
             <figure t-elif="node['type'] == 'image'" class="bpi-layout__image-figure" t-att-style="node['imageStyle']">
                 <h3 t-if="node.get('title') and not node.get('hideTitle')" class="bpi-layout__video-title" t-att-style="node['titleCss']" t-out="node['title']"/>

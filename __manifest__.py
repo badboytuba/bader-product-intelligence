@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Producto Intelligence",
-    "version": "16.0.1.16.0",
+    "version": "16.0.1.17.0",
     "summary": "Producto Intelligence para Bader en Odoo 16",
     "description": """
 Producto Intelligence para Bader Argentina.
@@ -32,6 +32,7 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
         "security/technical_specification_rules.xml",
         "security/product_document_rules.xml",
         "security/content_studio_rules.xml",
+        "security/variant_content_rules.xml",
         "data/ai_job_cron.xml",
         "data/description_media_cron.xml",
         "data/content_template_data.xml",
@@ -42,6 +43,7 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
         "views/product_intelligence_action.xml",
         "views/content_template_views.xml",
         "views/description_layout_templates.xml",
+        "views/variant_storefront_templates.xml",
         "views/website_product_templates.xml",
         "views/taxonomy_views.xml",
         "views/taxonomy_website.xml",
@@ -57,9 +59,11 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
             "bader_product_intelligence/static/src/scss/dashboard.scss",
             "bader_product_intelligence/static/src/scss/catalog.scss",
             "bader_product_intelligence/static/src/scss/detail.scss",
+            "bader_product_intelligence/static/src/scss/variant_workspace.scss",
             "bader_product_intelligence/static/src/scss/content_studio.scss",
             "bader_product_intelligence/static/src/scss/description_layout.scss",
             "bader_product_intelligence/static/src/js/content_studio.js",
+            "bader_product_intelligence/static/src/js/variant_workspace.js",
             "bader_product_intelligence/static/src/js/product_intelligence_action.js",
             "bader_product_intelligence/static/src/xml/product_intelligence_templates.xml",
             "bader_product_intelligence/static/src/xml/content_studio.xml",
@@ -80,6 +84,7 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
             "bader_product_intelligence/static/src/scss/storefront_faq.scss",
             "bader_product_intelligence/static/src/scss/description_layout.scss",
             "bader_product_intelligence/static/src/js/description_layout_public.js",
+            "bader_product_intelligence/static/src/js/variant_storefront.js",
         ],
         "web.qunit_suite_tests": [
             "bader_product_intelligence/static/tests/product_intelligence_tests.js",

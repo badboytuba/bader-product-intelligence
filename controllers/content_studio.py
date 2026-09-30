@@ -26,6 +26,12 @@ class ContentStudioController(http.Controller):
             if not isinstance(allowed, list) or any(isinstance(i, bool) or not isinstance(i, int) or i not in env.user.company_ids.ids for i in allowed):
                 raise AccessError(_('Empresa no disponible.'))
             env = env(context=dict(env.context, allowed_company_ids=allowed))
+            variant_id = context.get('bpi_product_variant_id', False)
+            if variant_id is not False and variant_id is not None and (type(variant_id) is not int or variant_id <= 0):
+                raise ValidationError(_('Variante no válida.'))
+            env = env(context=dict(env.context, bpi_product_variant_id=variant_id))
+        elif 'product_variant_id' in request.params:
+            env = env(context=dict(env.context, bpi_product_variant_id=request.params['product_variant_id']))
         service = env['bpi.service']
         service._ensure_manager()
         return service

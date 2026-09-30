@@ -1,0 +1,22 @@
+.bpi-detail-workspace .bpi-variant-workspace {
+    margin: 0 0 20px; padding: 20px 24px; background: #f3f8f6;
+    border: 1px solid #bad3d1; border-radius: 14px; color: #003841;
+    &__heading { display: flex; gap: 24px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    &__heading label { font-weight: 700; margin: 0; }
+    select { max-width: 100%; min-width: 240px; padding: 10px; border-radius: 8px; border: 1px solid #8baead; background: white; color: #003841; }
+    p { margin: 10px 0 0; font-size: 13px; }
+    &__fields { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 16px; }
+    &__field { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: white; border: 1px solid #bad3d1; border-radius: 8px; }
+    &__field small { display: block; color: #476e75; }
+    button { border: 1px solid #2f7d32; border-radius: 6px; background: #fff; color: #215d24; padding: 6px 10px; }
+    button:focus-visible, select:focus-visible { outline: 3px solid #003841; outline-offset: 3px; }
+    @media (max-width: 575px) { padding: 14px; select { width: 100%; min-width: 0; } &__field { width: 100%; justify-content: space-between; } }
+}
+
+.bpi-detail-workspace .bpi-variant-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:1rem; margin:1rem 0;
+    > div {border:1px solid #c3d9da; border-radius:12px; padding:10px;}
+    img {width:100%; height:120px; object-fit:contain;}
+    label {display:grid; gap:8px;} button {margin:4px;}
+}
+.bpi-detail-workspace .bpi-variant-categories {display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:8px; max-height:320px; overflow:auto; label {display:flex; gap:8px;}}
+.bpi-detail-workspace .bpi-variant-pricing__rules {padding:0; list-style:none; li {display:flex; gap:1rem; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid #c3d9da;}}

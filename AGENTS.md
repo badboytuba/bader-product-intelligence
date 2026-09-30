@@ -1,3 +1,12 @@
+## 2026-09-30 — Full variant workspace
+
+Release `16.0.1.17.0`; read `docs/VARIANT_WORKSPACE_WIP.md` before
+continuing. Explicit common/edition inheritance, scoped Nancy and drafts, native
+pricing, public query-variant URLs and grouped effective search. Activation is
+website-specific and defaults off. Only QAS website1 is authorized; production
+and website2 remain excluded. Runtime deployment evidence is separate from this
+source version. Preserve private media gates and all common/native contracts.
+
 ## 2026-09-30 — Opt-in premium storefront
 
 Release `16.0.1.16.0`: read `docs/STOREFRONT_DESIGN.md`. Website flag defaults off;

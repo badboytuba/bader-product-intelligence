@@ -6,6 +6,7 @@ import { useSetupAction } from "@web/webclient/actions/action_hook";
 import { Component, onWillStart, onWillUnmount, onMounted, onPatched, useState, useRef } from "@odoo/owl";
 
 import { contentStudioMethods, emptyContentStudio, StudioRichEditor } from "./content_studio";
+import { variantWorkspaceMethods } from "./variant_workspace";
 
 const DASHBOARD_PAGE_SIZE = 40;
 const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -255,6 +256,9 @@ export class ProductIntelligenceAction extends Component {
                 hasPrevious: false,
             },
             detail: null,
+            workspaceVariantId: false, variantScopeLoading: false, variantModes: {},
+            variantPricing: null, variantPriceRule: null, variantPriceBusy: false, variantPriceQuery: {pricelistId:'',quantity:1,date:''},
+            variantPublicCategoryIds: [], variantGalleryTokens: [],
             activeTab: "overview",
             detailLeavePrompt: false,
             detailLeaveBusy: false,
@@ -704,9 +708,11 @@ export class ProductIntelligenceAction extends Component {
     rpcWithContext(route, params = {}, settings) {
         if (!route.startsWith('/bader_product_intelligence/')) return this.rawRpc(route, params, settings);
         const context = this.snapshotDraft({ ...(this.user?.context || {}), ...(params.context || {}),
+            ...(this.state.workspaceVariantId ? { bpi_product_variant_id: this.state.workspaceVariantId } : {}),
             ...(this.state.meliAccountId ? { bpi_meli_account_id: Number(this.state.meliAccountId) } : {}),
         });
-        return this.rawRpc(route, { ...params, context }, settings);
+        if (!this.state.workspaceVariantId) delete context.bpi_product_variant_id;
+        return this.rawRpc(route, { ...params, ...(route === '/bader_product_intelligence/data' && this.state.workspaceVariantId && params.product_variant_id === undefined ? {product_variant_id: this.state.workspaceVariantId} : {}), context }, settings);
     }
 
     detailNavGroups() {
@@ -762,7 +768,9 @@ export class ProductIntelligenceAction extends Component {
         const pick = (value, keys) => Object.fromEntries(keys.map((key) => [key, value?.[key] ?? '']));
         return this.snapshotDraft({
             datos: pick(this.state.productForm, ['name', 'sku', 'slug', 'brand', 'categoryId', 'priceUsd', 'previousPriceUsd', 'costUsd', 'featured', 'isPublished', 'technicalSpecifications']),
-            categorization: pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory', 'classification']),
+            categorization: { ...pick(this.state.categoryForm, ['manualMode', 'niches', 'type', 'subcategory']),
+                classification: pick(this.state.categoryForm?.classification, ['termIds', 'excludedTermIds']),
+                publicCategoryIds: this.state.variantPublicCategoryIds || [] },
             content: pick(this.state.contentForm, ['name', 'description', 'technicalDescription', 'tone', 'audience', 'faqs', 'templateId', 'documents', 'descriptionLayout']),
             seo: pick(this.state.seoForm, ['seoTitle', 'seoDescription', 'seoKeywords', 'geoTitle', 'geoDescription', 'geoKeywords', 'geoFeatures', 'seoScore', 'geoScore', 'competitivenessScore']),
             variants_pack: {
@@ -772,7 +780,7 @@ export class ProductIntelligenceAction extends Component {
                     compositions: (this.state.packForm?.compositions || []).map((c) => ({ variantId: c.variantId, components: (c.components || []).map((line) => pick(line, ['lineId', 'productVariantId', 'quantityInput', 'saleDiscountInput'])) })),
                 },
             },
-            images: { ...pick(this.state.imageForm, ['videoUrl', 'addImageUrl', 'uploadedRefUrl', 'generatedPreviewUrl']), input: this.state.playground?.inputText || '' },
+            images: { gallery: this.state.variantGalleryTokens || [], ...pick(this.state.imageForm, ['videoUrl', 'addImageUrl', 'uploadedRefUrl', 'generatedPreviewUrl']), input: this.state.playground?.inputText || '' },
             competitors: pick(this.state.competitorForm, ['competitorName', 'competitorUrl']),
             chat: { input: this.state.chatInput || '' },
         });
@@ -789,11 +797,12 @@ export class ProductIntelligenceAction extends Component {
     }
 
     detailHasUnsavedChanges() {
-        return this.detailDirtySections().length > 0;
+        return !!this.state.variantPriceRule || this.detailDirtySections().length > 0 || this.variantScopeModesDirty() ||
+            Object.entries(this.variantWorkspaceDrafts || {}).some(([key, value]) => key.startsWith(`${this.state.productId}:`) && key !== this.variantWorkspaceKey() && value.dirty);
     }
 
     detailBaseSaveBusy() {
-        return !!(this.state.saveBusy || this.state.contentBusy || this.state.faqBusy || this.state.seoBusy || this.state.categoryBusy);
+        return !!(this.state.variantScopeLoading || this.state.saveBusy || this.state.contentBusy || this.state.faqBusy || this.state.seoBusy || this.state.categoryBusy);
     }
 
     detailSaveLabel() { return this.state.saveBusy ? 'Guardando ficha…' : 'Guardar ficha'; }
@@ -801,7 +810,7 @@ export class ProductIntelligenceAction extends Component {
     detailSaveDisabled() { return !this.state.productId || this.detailBaseSaveBusy(); }
 
     detailCanSaveBeforeLeave() {
-        return this.detailDirtySections().every((section) => ['datos', 'categorization', 'content', 'seo'].includes(section.id));
+        return !this.state.variantPriceRule && !Object.entries(this.variantWorkspaceDrafts || {}).some(([key, value]) => key.startsWith(`${this.state.productId}:`) && key !== this.variantWorkspaceKey() && value.dirty) && this.detailDirtySections().every((section) => ['datos', 'categorization', 'content', 'seo'].includes(section.id));
     }
 
     onDetailBeforeUnload(ev) {
@@ -819,7 +828,7 @@ export class ProductIntelligenceAction extends Component {
         this.state.detailLeavePrompt = {
             title: 'Cambios sin guardar',
             message: 'Puedes seguir editando o descartar los cambios. Las operaciones ya enviadas no se cancelan al salir.',
-            sections: this.detailDirtySections(), canSave: this.detailCanSaveBeforeLeave(),
+            sections: this.detailDirtySections().concat(Object.entries(this.variantWorkspaceDrafts || {}).some(([key, value]) => key.startsWith(`${this.state.productId}:`) && key !== this.variantWorkspaceKey() && value.dirty) ? [{id:'variantDrafts', label:'Borradores de otras variantes (vuelve a cada contexto para guardarlos)'}] : []), canSave: this.detailCanSaveBeforeLeave(),
         };
         this.detailLeavePromise = new Promise((resolve) => { this.detailLeaveResolver = resolve; });
         return this.detailLeavePromise;
@@ -875,6 +884,9 @@ export class ProductIntelligenceAction extends Component {
     }
 
     discardDetailChanges() {
+        for (const key of Object.keys(this.variantWorkspaceDrafts || {})) {
+            if (key.startsWith(`${this.state.productId}:`)) delete this.variantWorkspaceDrafts[key];
+        }
         this.state.playground = { messages: [], canvasUrl: '', inputText: '' };
         if (this.state.detail) this.applyDetailPayload(this.state.detail);
         this.state.seoPreviewPending = false;
@@ -891,6 +903,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveProductOnly() {
+        if (this.state.workspaceVariantId) return this.saveVariantSpecifications();
         if (this.detailBaseSaveBusy()) return false;
         const request = this.beginRequest('save', true);
         this.state.saveBusy = true;
@@ -935,6 +948,7 @@ export class ProductIntelligenceAction extends Component {
             scope,
             sequence,
             generation: this.viewGeneration || 0,
+            variantId: this.state.workspaceVariantId || false,
             productId: this.state.productId,
             companies: JSON.stringify(this.user?.context?.allowed_company_ids || []),
             seoPreviewVersion: this.seoPreviewVersion || 0,
@@ -944,6 +958,7 @@ export class ProductIntelligenceAction extends Component {
 
     isRequestCurrent(request) {
         return !!request && !this.destroyed &&
+            (request.variantId === undefined || request.variantId === (this.state.workspaceVariantId || false)) &&
             (request.companies === undefined || request.companies === JSON.stringify(this.user?.context?.allowed_company_ids || [])) &&
             request.generation === (this.viewGeneration || 0) &&
             request.sequence === (this.requestSequences || {})[request.scope] &&
@@ -951,6 +966,8 @@ export class ProductIntelligenceAction extends Component {
     }
 
     invalidateProductRequests() {
+        this.state.variantScopeLoading = false;
+        this.state.variantPricing = null; this.state.variantPriceRule = null; this.state.variantPriceBusy = false;
         clearTimeout(this.studioPollTimer);
         this.state.contentStudio = emptyContentStudio();
         this.state.descriptionPreviewVariantId = 0; this.state.descriptionMode = "text"; this.state.descriptionCanvasView = "edit"; this.state.descriptionPostersPending = {};
@@ -1590,6 +1607,8 @@ export class ProductIntelligenceAction extends Component {
         this.state.chatBusy = false;
         this.state.exchangeRate = data.exchangeRate || this.state.exchangeRate || 1650;
         this.state.exchangeRateInput = String(this.state.exchangeRate || 1650);
+        if (data.variantContent) this.applyVariantScope(data.variantContent);
+        else { this.state.variantModes = {}; this.state.variantGalleryTokens = []; this.state.variantPublicCategoryIds = []; }
         this.detailBaseline = this.detailDraftSnapshot();
         this.detailBaseline.images.input = '';
     }
@@ -1604,8 +1623,11 @@ export class ProductIntelligenceAction extends Component {
         this.invalidateProductRequests();
         this.state.productId = currentId;
         this.state.viewMode = "detail";
+        if (differentProduct) this.state.workspaceVariantId = false;
         const request = this.beginRequest("detail");
         if (differentProduct) {
+            this.state.workspaceVariantId = false;
+            this.state.variantModes = {};
             this.state.detail = null;
             this.state.chatMessages = [];
             this.state.chatSessionKey = "";
@@ -1710,7 +1732,8 @@ export class ProductIntelligenceAction extends Component {
     }
 
     currentVariants() {
-        return this.state.variantDrafts || [];
+        const rows = this.state.variantDrafts || [];
+        return this.state.workspaceVariantId ? rows.filter(row => row.id === this.state.workspaceVariantId) : rows;
     }
 
     currentPack() {
@@ -2717,6 +2740,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async openProductForm() {
+        if (this.state.workspaceVariantId) return this.openVariantForm(this.state.workspaceVariantId);
         if (this.detailHasUnsavedChanges() && !await this.confirmDetailLeave()) return;
         if (!this.state.productId) {
             return;
@@ -3418,6 +3442,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveAll() {
+        if (this.state.workspaceVariantId) return this.saveVariantScope('all');
         if (!this.state.productId || this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("save", true);
         const drafts = request.drafts;
@@ -3443,6 +3468,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async analyzeSeo() {
+        if (this.state.workspaceVariantId) return this.openContentStudio();
         if (!this.state.productId || this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("seoJob", true);
         this.state.seoBusy = true;
@@ -3469,6 +3495,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveSeoOnly() {
+        if (this.state.workspaceVariantId) return this.saveVariantScope('seo');
         if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("seoSave", true);
         this.state.seoBusy = true;
@@ -3489,6 +3516,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async generateContent() {
+        if (this.state.workspaceVariantId) return this.openContentStudio();
         if (this.state.saveBusy || this.state.categoryBusy || this.state.seoBusy ||
             this.state.contentTemplateBusy || this.state.contentTemplateAdminBusy || this.state.contentTemplateError) return;
         const request = this.beginRequest("content", true);
@@ -3551,6 +3579,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async generateFaq() {
+        if (this.state.workspaceVariantId) return this.openContentStudio();
         if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("faq", true);
         this.state.faqBusy = true;
@@ -3585,6 +3614,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveContentOnly() {
+        if (this.state.workspaceVariantId) return this.saveVariantScope('content');
         if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("content", true);
         this.state.contentBusy = true;
@@ -3834,6 +3864,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveCategoryOnly() {
+        if (this.state.workspaceVariantId) return this.saveVariantScope('categorization');
         if (this.detailBaseSaveBusy()) return;
         const request = this.beginRequest("category", true);
         this.state.categoryBusy = true;
@@ -4224,6 +4255,7 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async saveVideo() {
+        if (this.state.workspaceVariantId) return this.saveVariantScope('images');
         const request = this.beginRequest("image", true);
         this.state.imageBusy = true;
         try {
@@ -4442,6 +4474,12 @@ export class ProductIntelligenceAction extends Component {
     }
 
     async sendChatMessage(text) {
+        if (this.state.workspaceVariantId) {
+            const message = text || this.state.chatInput || '';
+            await this.openContentStudio();
+            if (this.state.contentStudio?.open) this.notify('Conversa en Nancy AI Studio de esta edición. El mensaje anterior se conserva sin enviar.', 'info');
+            return;
+        }
         const msg = (text || this.state.chatInput || "").trim();
         if (!msg || this.state.chatBusy) {
             return;
@@ -4507,6 +4545,7 @@ export class ProductIntelligenceAction extends Component {
 }
 
 Object.assign(ProductIntelligenceAction.prototype, contentStudioMethods);
+Object.assign(ProductIntelligenceAction.prototype, variantWorkspaceMethods);
 
 ProductIntelligenceAction.components = { StudioRichEditor };
 

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="variant_editorial" name="Contenido efectivo de la edición">
+        <section t-if="bpi_variant_public['long'] or bpi_variant_public['layout']" class="bpi-website-technical-description bader-brand" data-bpi-technical-description="variant">
+            <div class="bpi-website-technical-description__header"><span class="bpi-website-technical-description__eyebrow">Información técnica</span><h2>Descripción técnica de <t t-out="bpi_variant_public['name']"/></h2></div>
+            <div class="bpi-description-host"><t t-set="bpi_layout" t-value="bpi_variant_public['layout']"/><t t-if="bpi_layout" t-call="bader_product_intelligence.description_layout"/><div t-else="" class="bpi-website-technical-description__content" t-out="bpi_variant_public['long']"/></div>
+        </section>
+        <section t-if="bpi_variant_public.get('video')" class="bpi-description-host bader-brand" aria-label="Vídeo de esta edición" data-bpi-edition-video="1"><t t-set="bpi_layout" t-value="bpi_variant_public['video']"/><t t-call="bader_product_intelligence.description_layout"/></section>
+        <t t-set="bpi_documents" t-value="bpi_variant_public['documents']"/>
+        <section t-if="bpi_documents" class="bpi-product-documents bader-brand" data-bpi-documents="variant"><div class="bpi-product-documents__cover"><img t-if="bpi_documents['coverUrl']" t-att-src="bpi_documents['coverUrl']" t-att-alt="bpi_documents['title'] or 'Documentación'" loading="lazy"/><i t-else="" class="fa fa-book" aria-hidden="true"/></div><div class="bpi-product-documents__body"><h2 t-out="bpi_documents['title'] or 'Catálogos y documentación'"/><p t-if="bpi_documents['intro']" t-out="bpi_documents['intro']"/><div class="bpi-product-documents__actions"><a t-foreach="bpi_documents['buttons']" t-as="document" t-att-href="document['fileUrl'] or document['url']" target="_blank" rel="noopener noreferrer" class="bpi-product-documents__button"><i class="fa fa-file-pdf-o" aria-hidden="true"/><span t-out="document['label']"/><span class="visually-hidden"> (abre en una pestaña nueva)</span></a></div></div></section>
+        <section t-if="bpi_variant_public['faqs']" class="bpi-website-faq bader-brand" data-bpi-faq="variant" itemscope="itemscope" itemtype="https://schema.org/FAQPage"><div class="bpi-website-faq__header"><span class="bpi-website-faq__eyebrow">FAQ</span><h2>Preguntas frecuentes</h2></div><div class="bpi-website-faq__list"><details t-foreach="bpi_variant_public['faqs']" t-as="faq" class="bpi-website-faq__item" itemprop="mainEntity" itemscope="itemscope" itemtype="https://schema.org/Question"><summary class="bpi-website-faq__question"><span itemprop="name" t-out="faq['question']"/><span class="bpi-website-faq__icon" aria-hidden="true"/></summary><div class="bpi-website-faq__answer" itemprop="acceptedAnswer" itemscope="itemscope" itemtype="https://schema.org/Answer"><p itemprop="text" t-out="faq['answer']"/></div></details></div></section>
+    </template>
+    <template id="variant_head" inherit_id="website.layout" name="Metadatos efectivos de variante" priority="99">
+        <xpath expr="//head/title" position="before"><t t-if="bpi_variant_public"><t t-set="title" t-value="bpi_variant_public['title']"/></t></xpath>
+        <xpath expr="//t[@t-set='website_meta']" position="after"><t t-if="bpi_variant_public"><t t-set="website_meta" t-value="dict(website_meta, opengraph_meta=dict(website_meta.get('opengraph_meta', {}), **{'og:title':bpi_variant_public['title'], 'og:description':bpi_variant_public['description'], 'og:image':website.get_base_url() + bpi_variant_public['image'] if bpi_variant_public['image'].startswith('/') else bpi_variant_public['image'], 'og:url':website.get_base_url() + bpi_variant_public['url']}), twitter_meta=dict(website_meta.get('twitter_meta', {}), **{'twitter:title':bpi_variant_public['title'], 'twitter:description':bpi_variant_public['description'], 'twitter:image':website.get_base_url() + bpi_variant_public['image'] if bpi_variant_public['image'].startswith('/') else bpi_variant_public['image']}))"/></t></xpath>
+        <xpath expr="//meta[@name='description']" position="before"><t t-if="bpi_variant_public"><t t-set="meta_description" t-value="bpi_variant_public['description']"/><t t-set="meta_keywords" t-value="bpi_variant_public['keywords']"/></t></xpath>
+        <xpath expr="//head" position="inside"><script t-if="bpi_variant_jsonld" type="application/ld+json" data-bpi-product-group="1" t-out="bpi_variant_jsonld"/></xpath>
+    </template>
+    <template id="variant_search_card" inherit_id="website_sale.products_item" name="Resultado agrupado con edición seleccionada" priority="99">
+        <xpath expr="//t[@t-set='product_href']" position="after"><t t-set="bpi_variant_card" t-value="product._bpi_variant_shop_card(website, search or '', pricelist) if website.bpi_variant_content_enabled else False"/><t t-if="bpi_variant_card"><t t-set="product_href" t-value="bpi_variant_card['url']"/></t></xpath>
+        <xpath expr="//span[@t-field='image_holder.image_1920']" position="before"><img t-if="bpi_variant_card and bpi_variant_card['image']" t-att-src="bpi_variant_card['image']" t-att-alt="bpi_variant_card['name']" class="oe_product_image_img_wrapper h-100 w-100 position-absolute" style="object-fit:contain" loading="lazy"/></xpath>
+        <xpath expr="//span[@t-field='image_holder.image_1920']" position="attributes"><attribute name="t-if">not bpi_variant_card</attribute></xpath>
+        <xpath expr="//t[@t-set='template_price_vals']" position="after"><t t-if="bpi_variant_card"><t t-set="template_price_vals" t-value="bpi_variant_card['prices']"/></t></xpath>
+    </template>
+    <template id="variant_saved_image" inherit_id="website_sale.shop_product_image" name="Referencia de imagen guardada por edición">
+        <xpath expr="//div[@t-field='product_image.image_1920']" position="before">
+            <div t-elif="product_image._name == 'bpi.product.image'" t-att-class="image_classes + ' oe_unmovable'">
+                <img t-att-src="product_image._bpi_public_gallery_url(website, 1024)" t-att-data-zoom-image="product_image._bpi_public_gallery_url(website, 1920)" data-zoom="1" class="oe_unmovable product_detail_img mh-100" t-att-alt="product_image.name"/>
+            </div>
+        </xpath>
+    </template>
+    <template id="variant_saved_image_thumbnail" inherit_id="website_sale.carousel_product_indicators" name="Miniatura de referencia guardada por edición">
+        <xpath expr="//div[@t-field='product_image.image_128']" position="before"><img t-if="product_image._name == 'bpi.product.image'" t-att-src="product_image._bpi_public_gallery_url(website, 128)" t-att-alt="product_image.name" class="o_image_64_cover"/></xpath>
+        <xpath expr="//div[@t-field='product_image.image_128']" position="attributes"><attribute name="t-if">product_image._name != 'bpi.product.image'</attribute></xpath>
+    </template>
+</odoo>

@@ -219,7 +219,7 @@
                                 <div class="bpi-inline-switch">
                                     <span>Publicado en tienda</span>
                                     <label class="bpi-toggle">
-                                        <input type="checkbox" t-model="state.productForm.isPublished" aria-label="Publicado en tienda, se aplica al guardar ficha"/>
+                                        <input type="checkbox" t-model="state.productForm.isPublished" t-att-disabled="!!state.workspaceVariantId" aria-label="Publicado en tienda, se aplica al guardar ficha"/>
                                         <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
                                     </label>
                                 </div>
@@ -234,7 +234,24 @@
                             </div>
                         </div>
 
-                        <div class="bpi-workspace-save-status" role="status"><span t-if="detailHasUnsavedChanges()" class="bpi-workspace-pending"><i class="fa fa-circle"/> Cambios pendientes · <t t-esc="detailDirtySections().map(section =&gt; section.label).join(', ')"/></span><span t-else=""><i class="fa fa-check-circle-o"/> Ficha sin cambios pendientes</span><small>Guardar ficha: Datos, Clasificación, Descripciones y SEO. Imágenes, variantes, Packs y competidores: acciones propias.</small></div><div class="bpi-workspace-mobile-nav"><label for="bpi-detail-section">Sección del producto</label><select id="bpi-detail-section" t-att-value="state.activeTab" t-on-change="selectDetailSection"><optgroup t-foreach="detailNavGroups()" t-as="group" t-key="group.label" t-att-label="group.label"><option t-foreach="group.tabs" t-as="tab" t-key="tab.id" t-att-value="tab.id" t-att-selected="state.activeTab === tab.id" t-esc="tab.label"/></optgroup></select></div><div class="bpi-workspace-layout"><aside class="bpi-workspace-sidebar" aria-label="Secciones de la ficha"><div class="bpi-workspace-nav-group" t-foreach="detailNavGroups()" t-as="group" t-key="group.label"><span t-esc="group.label"/><button type="button" t-foreach="group.tabs" t-as="tab" t-key="tab.id" t-att-data-detail-section="tab.id" t-att-class="'bpi-workspace-nav-link' + (state.activeTab === tab.id ? ' is-active' : '')" t-att-aria-current="state.activeTab === tab.id ? 'page' : false" t-on-click="() =&gt; this.selectDetailSection(tab.id)"><i t-att-class="'fa ' + tab.icon"/><span t-esc="tab.label"/><span t-if="detailDirtySections().some(section =&gt; section.id === tab.id)" class="bpi-draft-dot" aria-label="Con cambios pendientes"/></button></div><p class="bpi-workspace-nav-note"><i class="fa fa-lock"/> Tus borradores se conservan al cambiar de sección.</p></aside><div class="bpi-detail-content">
+                        <section t-if="state.detail?.variantWorkspaceEnabled &amp;&amp; (state.detail?.variants || []).length &gt; 1" class="bpi-variant-workspace" aria-label="Contexto de edición">
+                            <div class="bpi-variant-workspace__heading"><label for="bpi-workspace-variant">Estás editando</label>
+                                <select id="bpi-workspace-variant" t-att-value="state.workspaceVariantId || ''" t-on-change="switchWorkspaceVariant" t-att-disabled="state.variantScopeLoading || variantScopeBusy()">
+                                    <option value="" t-att-selected="!state.workspaceVariantId">Contenido común · todas las variantes</option>
+                                    <option t-foreach="state.detail.variants" t-as="edition" t-key="edition.id" t-att-value="edition.id" t-att-selected="state.workspaceVariantId === edition.id"><t t-esc="edition.attributeLabel || edition.name"/> · <t t-esc="edition.sku || 'Sin SKU'"/><t t-if="!edition.active"> · Archivada</t></option>
+                                </select>
+                            </div>
+                            <p t-if="state.variantScopeLoading" role="status">Cargando variante…</p>
+                            <p t-elif="state.workspaceVariantId">Los campos heredados usan la base común. Personalizar o volver a heredar solo cambia el borrador hasta guardar.</p>
+                            <p t-else="">Los cambios comunes se reflejan únicamente en las variantes que conservan la herencia.</p>
+                            <div t-if="state.workspaceVariantId" class="bpi-variant-workspace__fields">
+                                <div class="bpi-variant-workspace__field" t-foreach="variantWorkspaceFields()" t-as="field" t-key="field.key">
+                                    <span><t t-esc="field.label"/><small t-esc="field.custom ? 'Personalizado en esta variante' : 'Heredado del producto'"/></span>
+                                    <button type="button" t-att-disabled="detailBaseSaveBusy()" t-on-click="() =&gt; this.toggleVariantInheritance(field.key)"><t t-esc="field.custom ? 'Volver a heredar' : 'Personalizar'"/></button>
+                                </div>
+                            </div>
+                        </section>
+                        <div class="bpi-workspace-save-status" role="status"><span t-if="detailHasUnsavedChanges()" class="bpi-workspace-pending"><i class="fa fa-circle"/> Cambios pendientes · <t t-esc="variantPendingSummary()"/></span><span t-else=""><i class="fa fa-check-circle-o"/> Ficha sin cambios pendientes</span><small>Guardar ficha: Datos, Clasificación, Descripciones y SEO. Imágenes, variantes, Packs y competidores: acciones propias.</small></div><div class="bpi-workspace-mobile-nav"><label for="bpi-detail-section">Sección del producto</label><select id="bpi-detail-section" t-att-value="state.activeTab" t-on-change="selectDetailSection"><optgroup t-foreach="detailNavGroups()" t-as="group" t-key="group.label" t-att-label="group.label"><option t-foreach="group.tabs" t-as="tab" t-key="tab.id" t-att-value="tab.id" t-att-selected="state.activeTab === tab.id" t-esc="tab.label"/></optgroup></select></div><div class="bpi-workspace-layout"><aside class="bpi-workspace-sidebar" aria-label="Secciones de la ficha"><div class="bpi-workspace-nav-group" t-foreach="detailNavGroups()" t-as="group" t-key="group.label"><span t-esc="group.label"/><button type="button" t-foreach="group.tabs" t-as="tab" t-key="tab.id" t-att-data-detail-section="tab.id" t-att-class="'bpi-workspace-nav-link' + (state.activeTab === tab.id ? ' is-active' : '')" t-att-aria-current="state.activeTab === tab.id ? 'page' : false" t-on-click="() =&gt; this.selectDetailSection(tab.id)"><i t-att-class="'fa ' + tab.icon"/><span t-esc="tab.label"/><span t-if="detailDirtySections().some(section =&gt; section.id === tab.id)" class="bpi-draft-dot" aria-label="Con cambios pendientes"/></button></div><p class="bpi-workspace-nav-note"><i class="fa fa-lock"/> Tus borradores se conservan al cambiar de sección.</p></aside><div class="bpi-detail-content" t-att-inert="state.variantScopeLoading ? true : undefined" t-att-aria-busy="state.variantScopeLoading ? 'true' : undefined">
                             <div class="bpi-workspace-section-heading"><div><span class="bpi-workspace-eyebrow">FICHA DE PRODUCTO</span><h2 t-esc="detailSectionTitle()"/><p t-esc="detailSectionDescription()"/></div><button t-if="['datos', 'categorization', 'content', 'seo'].includes(state.activeTab)" type="button" class="bpi-button bpi-button--primary" t-on-click="saveCurrentDetailSection" t-att-disabled="detailSaveDisabled()"><i class="fa fa-floppy-o"/> Guardar sección</button></div><t t-if="state.activeTab === 'overview'">
                                 <div class="bpi-kpi-grid">
                                     <div class="bpi-kpi-card">
@@ -306,7 +323,9 @@
                             </t>
 
                             <t t-if="state.activeTab === 'datos'">
-                                <div class="bpi-grid bpi-grid--2">
+                                <t t-if="state.workspaceVariantId" t-call="bader_product_intelligence.VariantPricing"/>
+                                <p t-if="state.workspaceVariantId" class="bpi-note">Identidad, stock e imagen nativa de este SKU: <button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.selectDetailSection('variants_pack')">Variantes y Pack</button>. El nombre base, marca y publicación se editan en Contenido común.</p>
+                                <div t-if="!state.workspaceVariantId" class="bpi-grid bpi-grid--2">
                                     <div class="bpi-panel">
                                         <div class="bpi-panel__title"><h3><i class="fa fa-cog"/> Informacion Basica</h3></div>
                                         <div class="bpi-form-grid">
@@ -495,14 +514,14 @@
                                     <div class="bpi-grid bpi-grid--3">
                                         <div>
                                             <label>Tipo de Pack</label>
-                                            <select class="bpi-input" t-att-value="currentPack().packType" t-on-change="(ev) =&gt; this.updatePackField('packType', ev.target.value)">
+                                            <select class="bpi-input" t-att-disabled="!!state.workspaceVariantId" t-att-value="currentPack().packType" t-on-change="(ev) =&gt; this.updatePackField('packType', ev.target.value)">
                                                 <option value="detailed">Detallado</option>
                                                 <option value="non_detailed">No detallado</option>
                                             </select>
                                         </div>
                                         <div>
                                             <label>Precio de componentes</label>
-                                            <select class="bpi-input" t-att-value="currentPack().componentPriceMode" t-on-change="(ev) =&gt; this.updatePackField('componentPriceMode', ev.target.value)">
+                                            <select class="bpi-input" t-att-disabled="!!state.workspaceVariantId" t-att-value="currentPack().componentPriceMode" t-on-change="(ev) =&gt; this.updatePackField('componentPriceMode', ev.target.value)">
                                                 <option value="ignored">Ignorado: precio del Pack</option>
                                                 <option value="totalized">Totalizado en el Pack</option>
                                                 <option value="detailed">Detallado por componente</option>
@@ -511,7 +530,7 @@
                                         <div class="bpi-inline-switch bpi-inline-switch--spread">
                                             <span>Componentes modificables</span>
                                             <label class="bpi-toggle">
-                                                <input type="checkbox" t-att-checked="currentPack().modifiable" t-att-disabled="currentPack().packType !== 'detailed' || currentPack().componentPriceMode !== 'detailed'" t-on-change="(ev) =&gt; this.updatePackField('modifiable', ev.target.checked)"/>
+                                                <input type="checkbox" t-att-checked="currentPack().modifiable" t-att-disabled="!!state.workspaceVariantId || currentPack().packType !== 'detailed' || currentPack().componentPriceMode !== 'detailed'" t-on-change="(ev) =&gt; this.updatePackField('modifiable', ev.target.checked)"/>
                                                 <span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span>
                                             </label>
                                         </div>
@@ -562,6 +581,7 @@
                             </t>
 
                             <t t-if="state.activeTab === 'categorization'">
+                                <section t-if="state.workspaceVariantId" class="bpi-panel"><h3>Categorías de la tienda · Esta edición</h3><p>Selección independiente de la categoría interna del ERP.</p><div class="bpi-variant-categories"><label t-foreach="currentCategories()" t-as="category" t-key="category.id"><input type="checkbox" t-att-checked="state.variantPublicCategoryIds.includes(category.id)" t-on-change="() =&gt; this.toggleVariantCategory(category.id)"/><t t-esc="category.completeName"/></label></div></section>
 <div t-if="state.detail.classification" class="bpi-taxonomy-workspace bpi-taxonomy-prime bpi-semantic-map" t-ref="taxonomyMap">
  <header class="bpi-map-heading"><div><span class="bpi-map-overline">NANCY · PRODUCT INTELLIGENCE</span><h3>Mapa de descubrimiento</h3><p>Conecta lo que es, para quién sirve y cómo se utiliza.</p></div><span class="bpi-map-heading__badge"><i class="fa fa-code-fork" aria-hidden="true"/> 4 ejes · múltiples etiquetas</span></header>
  <div class="bpi-tax-status" aria-live="polite"><span t-att-class="'bpi-tax-status__dot ' + (taxonomyDirty ? 'is-draft' : '')"/><strong t-esc="taxonomyMapStatus"/><span class="bpi-tax-status__count"><t t-esc="taxonomySavedCount"/> guardadas<t t-if="taxonomyAddedCount"> · +<t t-esc="taxonomyAddedCount"/> nuevas</t><t t-if="taxonomyRemovedCount"> · −<t t-esc="taxonomyRemovedCount"/> retiradas</t></span><span t-if="taxonomyJobActive" class="bpi-tax-processing"><i class="fa fa-circle-o-notch fa-spin" aria-hidden="true"/> Análisis en curso</span></div>
@@ -963,6 +983,7 @@
                             </t>
 
                             <t t-if="state.activeTab === 'images'">
+                                <section t-if="state.workspaceVariantId" class="bpi-panel"><h3>Galería de esta edición</h3><p>Selecciona referencias y ordénalas. Solo las referencias seleccionadas y guardadas se muestran en la tienda. No se duplican ni eliminan archivos originales. La primera imagen será la portada.</p><div class="bpi-variant-gallery"><div t-foreach="variantGalleryLibrary()" t-as="image" t-key="image.id"><t t-set="token" t-value="image.referenceToken || templateString(image.id)"/><label><img t-att-src="image.imageUrl" t-att-alt="image.name"/><span><input type="checkbox" t-att-checked="variantGallerySelected(token)" t-att-disabled="image.canPublish === false" t-on-change="() =&gt; this.toggleVariantGallery(token)"/><t t-esc="image.name"/><small t-if="image.canPublish === false"> · Referencia privada; usa una imagen nativa para publicar</small></span></label><div t-if="variantGallerySelected(token)"><span t-esc="state.variantGalleryTokens.indexOf(token) + 1"/><button type="button" class="bpi-icon-button" t-on-click="() =&gt; this.moveVariantGallery(token,-1)" t-att-disabled="state.variantGalleryTokens.indexOf(token) === 0" aria-label="Mover antes"><i class="fa fa-arrow-up"/></button><button type="button" class="bpi-icon-button" t-on-click="() =&gt; this.moveVariantGallery(token,1)" t-att-disabled="state.variantGalleryTokens.indexOf(token) === state.variantGalleryTokens.length - 1" aria-label="Mover después"><i class="fa fa-arrow-down"/></button></div></div></div><button type="button" class="bpi-button bpi-button--primary" t-on-click="() =&gt; this.saveVariantScope('images')" t-att-disabled="detailBaseSaveBusy()">Guardar galería y vídeo de esta edición</button></section>
                                 <p class="bpi-workspace-scope-note"><i class="fa fa-info-circle"/> La galería distingue origen y permisos. Guardar ficha no agrega ni elimina imágenes: utiliza la acción de cada recurso.</p><!-- ── E-commerce Gallery Panel ── -->
                                 <div class="bpi-panel">
                                     <div class="bpi-panel__title bpi-panel__title--between">
@@ -1119,12 +1140,14 @@
                                             <span t-esc="(state.seoForm.seoDescription || '').length + '/160 caracteres'"/>
                                         </div>
                                         <textarea class="bpi-textarea" rows="4" maxlength="160" t-model="state.seoForm.seoDescription"/>
+                                        <t t-if="state.workspaceVariantId"><label>URL de esta edición</label><input class="bpi-input" t-att-value="product.websiteUrl" readonly="readonly"/><small class="bpi-muted">Dirección propia de este SKU. El slug del producto se edita en Contenido común.</small></t>
+                                        <t t-else="">
                                         <label>Slug (URL)</label>
                                         <div class="bpi-inline-field">
                                             <input class="bpi-input" t-model="state.productForm.slug"/>
                                             <button type="button" class="bpi-icon-button" t-on-click="() =&gt; this.regenerateSlug('seo')"><i class="fa fa-refresh"/></button>
                                         </div>
-                                        <small class="bpi-muted">El slug se guarda con Guardar ficha.</small>
+                                        <small class="bpi-muted">El slug se guarda con Guardar ficha.</small></t>
                                         <label>Keywords SEO</label>
                                         <textarea class="bpi-textarea" rows="3" t-model="state.seoForm.seoKeywords"/>
                                         <label>Titulo GEO</label>
@@ -1151,7 +1174,8 @@
                                 </div>
                             <section class="bpi-panel bpi-workspace-seo-saved"><div class="bpi-panel__title"><h3>Metadatos guardados</h3><p>Referencia actual de la ficha, separada de los campos que estás editando.</p></div><dl><dt>SEO · Título</dt><dd t-esc="product.catalogHealth &amp;&amp; product.catalogHealth.seo ? (seoData.seoTitle || 'Sin título') : 'Metadatos incompletos'"/><dt>SEO · Descripción</dt><dd t-esc="seoData.seoDescription || 'Sin descripción guardada'"/><dt>GEO · Título</dt><dd t-esc="seoData.geoTitle || 'Sin título guardado'"/><dt>GEO · Descripción</dt><dd t-esc="seoData.geoDescription || 'Sin descripción guardada'"/></dl><p class="bpi-muted">Las evaluaciones SEO/GEO existentes son estimaciones, no mediciones del posicionamiento.</p></section><section class="bpi-panel bpi-workspace-search-preview"><div class="bpi-panel__title"><h3>Vista previa del borrador SEO</h3><p>Simulación visual, no resultado real del buscador. Guardar metadatos no garantiza su publicación o posicionamiento.</p></div><small t-esc="'Tienda / ' + (state.productForm.slug || 'producto')"/><h4 t-esc="state.seoForm.seoTitle || 'Completa el título SEO'"/><p t-esc="state.seoForm.seoDescription || 'Completa la descripción SEO para revisar la vista previa.'"/></section></t>
 
-                            <t t-if="state.activeTab === 'competitors'">
+                            <section t-if="state.activeTab === 'competitors' &amp;&amp; state.workspaceVariantId" class="bpi-panel"><h3>Competencia · contexto común</h3><p>Las observaciones y estrategias competitivas existentes pertenecen al producto común, no a esta edición. No se reutilizan como evidencia técnica ni como comparación de precios de este SKU.</p><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.switchWorkspaceVariant({target: {value: ''}})">Abrir Contenido común</button><p class="bpi-muted">Tus borradores de esta variante se conservan sin guardar.</p></section>
+                            <t t-if="state.activeTab === 'competitors' &amp;&amp; !state.workspaceVariantId">
                                 <p class="bpi-workspace-scope-note"><i class="fa fa-info-circle"/> Las comparaciones usan las últimas coletas registradas y sus monedas normalizadas; no representan precios en tiempo real.</p><div class="bpi-panel bpi-panel--hero">
                                     <div class="bpi-hero-card">
                                         <div class="bpi-hero-card__icon"><i class="fa fa-search"/></div>
@@ -1370,7 +1394,8 @@
                                 </div>
                             </t>
 
-                            <t t-if="state.activeTab === 'chat'">
+                            <section t-if="state.activeTab === 'chat' &amp;&amp; state.workspaceVariantId" class="bpi-panel"><h3>Nancy AI · <t t-esc="currentProduct().name"/></h3><p>Esta edición tiene su propia conversación, fuentes revisadas y propuestas. Las estrategias pueden reutilizarse; los datos técnicos de otro SKU no se transfieren.</p><button type="button" class="bpi-button bpi-button--primary" t-on-click="openContentStudio"><i class="fa fa-comments"/> Abrir Nancy AI Studio de esta edición</button><p class="bpi-muted">Abrir la conversación no inicia una generación ni modifica la ficha.</p></section>
+                            <t t-if="state.activeTab === 'chat' &amp;&amp; !state.workspaceVariantId">
                                 <div class="bpi-chat-shell">
                                     <div class="bpi-chat-header">
                                         <div>
@@ -1437,7 +1462,7 @@
     </article>
     <p class="bpi-meli-provenance">Los objetivos son los valores guardados por el integrador, no un nuevo cálculo. El stock compartido de un User Product no se suma entre anuncios. Full no se compara con el inventario total de Odoo.</p>
   </section>
-<section t-if="state.meliDetail.jobs &amp;&amp; state.meliDetail.jobs.length" class="bpi-panel"><div class="bpi-panel__title"><h3>Últimas consultas solicitadas</h3><p>Estado del observador; no son tareas de publicación ni de sincronización.</p></div><div t-foreach="state.meliDetail.jobs" t-as="job" t-key="job.id" class="bpi-meli-job"><strong t-esc="meliStateLabel(job.state)"/><span><t t-esc="job.completed"/> / <t t-esc="job.total"/> recursos</span><small t-esc="dashboardDateLabel(job.createdAt)"/><span t-esc="job.message"/></div></section></t></div>
+<p t-if="state.meliDetail.scopeNotice" class="bpi-note" t-esc="state.meliDetail.scopeNotice"/><section t-if="state.meliDetail.jobs &amp;&amp; state.meliDetail.jobs.length" class="bpi-panel"><div class="bpi-panel__title"><h3>Últimas consultas solicitadas</h3><p>Estado del observador; no son tareas de publicación ni de sincronización.</p></div><div t-foreach="state.meliDetail.jobs" t-as="job" t-key="job.id" class="bpi-meli-job"><strong t-esc="meliStateLabel(job.state)"/><span><t t-esc="job.completed"/> / <t t-esc="job.total"/> recursos</span><small t-esc="dashboardDateLabel(job.createdAt)"/><span t-esc="job.message"/></div></section></t></div>
                     </div><div t-if="state.detailLeavePrompt" class="bpi-workspace-modal-backdrop"><section class="bpi-workspace-leave-dialog" t-ref="detailLeaveDialog" tabindex="-1" t-on-keydown="onDetailLeaveKeydown" role="alertdialog" aria-modal="true" aria-labelledby="bpi-leave-title" aria-describedby="bpi-leave-message"><span class="bpi-workspace-modal-icon"><i class="fa fa-pencil-square-o"/></span><h2 id="bpi-leave-title" t-esc="state.detailLeavePrompt.title"/><p id="bpi-leave-message" t-esc="state.detailLeavePrompt.message"/><ul><li t-foreach="state.detailLeavePrompt.sections" t-as="section" t-key="section.id" t-esc="section.label"/></ul><div class="bpi-workspace-leave-actions"><button type="button" class="bpi-button bpi-button--primary" data-detail-leave="stay" autofocus="autofocus" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('stay')">Continuar editando</button><button type="button" class="bpi-button bpi-button--secondary" data-detail-leave="discard" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('discard')">Descartar y salir</button><button t-if="state.detailLeavePrompt.canSave" type="button" class="bpi-button bpi-button--secondary" data-detail-leave="save" t-att-disabled="state.detailLeaveBusy" t-on-click="() =&gt; this.resolveDetailLeave('save')">Guardar ficha y salir</button></div></section></div></div>
                 </t>
             </t>
@@ -1448,5 +1473,30 @@
         <aside t-if="state.detail.semanticContext" class="bpi-semantic-context" aria-label="Contexto semántico guardado">
             <i class="fa fa-code-fork" aria-hidden="true"/><div><strong>El mismo producto. Una comprensión compartida.</strong><p t-if="taxonomySavedSemanticCount"><t t-esc="taxonomySavedSemanticCount"/> etiquetas guardadas guían las próximas propuestas.<t t-if="taxonomySavedNiches"> Públicos: <b t-esc="taxonomySavedNiches"/>.</t></p><p t-else="">Aún no hay etiquetas aprobadas guardadas. Puedes preparar el mapa en Clasificación.</p><small>El enfoque editorial prioriza el mensaje, no excluye los demás nichos. No se modifica ni publica contenido automáticamente.</small><p t-if="taxonomyDirty" class="bpi-semantic-context__draft">Hay cambios en el mapa sin guardar: todavía no se usan para generar.</p></div><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.selectDetailSection('categorization')">Ver mapa <i class="fa fa-arrow-right" aria-hidden="true"/></button>
         </aside>
+    </t>
+    <t t-name="bader_product_intelligence.VariantPricing" owl="1">
+        <section class="bpi-panel bpi-variant-pricing" aria-label="Tarifas nativas de la variante">
+            <div class="bpi-panel__title"><h3>Precio de esta edición</h3><p>Consulta Odoo y edita únicamente reglas de este SKU. Las reglas generales y la ficha común no se modifican.</p></div>
+            <div class="bpi-form-grid">
+                <label for="bpi-variant-tariff">Tarifa</label><select id="bpi-variant-tariff" class="bpi-input" t-model="state.variantPriceQuery.pricelistId" t-att-disabled="state.variantPriceBusy"><option value="">Seleccionar tarifa</option><option t-foreach="state.detail.variantPricelists || []" t-as="list" t-key="list.id" t-att-value="list.id"><t t-esc="list.name"/> · <t t-esc="list.currency_id[1]"/></option></select>
+                <label for="bpi-variant-quantity">Cantidad</label><input id="bpi-variant-quantity" class="bpi-input" type="number" min="0.01" step="any" t-model="state.variantPriceQuery.quantity"/>
+                <label for="bpi-variant-date">Fecha de consulta (vacío: ahora)</label><input id="bpi-variant-date" class="bpi-input" type="date" t-model="state.variantPriceQuery.date"/>
+                <button type="button" class="bpi-button bpi-button--secondary" t-on-click="loadVariantPricing" t-att-disabled="state.variantPriceBusy || !state.variantPriceQuery.pricelistId || !!state.variantPriceRule">Consultar precio</button>
+            </div>
+            <t t-if="state.variantPricing"><t t-set="pricing" t-value="state.variantPricing"/>
+                <div class="bpi-note" role="status"><strong><t t-esc="formatNumber(pricing.price)"/> <t t-esc="pricing.currency"/></strong> · <t t-esc="pricing.pricelistName"/> · Cantidad <t t-esc="pricing.quantity"/><br/><t t-esc="pricing.ruleName || 'Precio base de Odoo'"/> · <t t-esc="pricing.ruleIsVariantSpecific ? 'Regla propia del SKU' : 'Regla compartida: solo lectura'"/><br/><small t-esc="pricing.notice"/></div>
+                <ul class="bpi-variant-pricing__rules"><li t-foreach="pricing.rules" t-as="rule" t-key="rule.id"><span><t t-esc="rule.compute_price === 'fixed' ? (rule.fixed_price + ' ' + pricing.currency) : (rule.compute_price === 'percentage' ? rule.percent_price + ' %' : 'Fórmula Odoo')"/> · desde <t t-esc="rule.min_quantity"/> uds. · <t t-esc="rule.date_start || 'Sin inicio'"/> / <t t-esc="rule.date_end || 'Sin fin'"/></span><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.editVariantPriceRule(rule)" t-att-disabled="state.variantPriceBusy || !rule.editable || !!state.variantPriceRule">Editar</button></li></ul>
+                <button t-if="!state.variantPriceRule" type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.editVariantPriceRule()" t-att-disabled="state.variantPriceBusy">Nueva regla para este SKU</button>
+            </t>
+            <fieldset t-if="state.variantPriceRule" t-att-disabled="state.variantPriceBusy" class="bpi-form-grid"><legend>Regla específica · Guardado independiente</legend>
+                <label for="bpi-rule-kind">Cálculo nativo</label><select id="bpi-rule-kind" class="bpi-input" t-model="state.variantPriceRule.compute_price"><option value="fixed">Precio fijo</option><option value="percentage">Descuento porcentual</option></select>
+                <t t-if="state.variantPriceRule.compute_price === 'fixed'"><label for="bpi-rule-price">Importe en la moneda de la tarifa</label><input id="bpi-rule-price" class="bpi-input" type="number" min="0" step="0.01" t-model="state.variantPriceRule.fixed_price"/></t>
+                <t t-else=""><label for="bpi-rule-percent">Descuento (%)</label><input id="bpi-rule-percent" class="bpi-input" type="number" min="0" max="100" step="0.01" t-model="state.variantPriceRule.percent_price"/></t>
+                <label for="bpi-rule-min">Cantidad mínima</label><input id="bpi-rule-min" class="bpi-input" type="number" min="0" step="any" t-model="state.variantPriceRule.min_quantity"/>
+                <label for="bpi-rule-start">Vigencia inicial UTC (AAAA-MM-DD HH:MM:SS, opcional)</label><input id="bpi-rule-start" class="bpi-input" t-model="state.variantPriceRule.date_start" placeholder="2030-01-01 00:00:00"/>
+                <label for="bpi-rule-end">Vigencia final UTC (opcional)</label><input id="bpi-rule-end" class="bpi-input" t-model="state.variantPriceRule.date_end" placeholder="2030-12-31 23:59:59"/>
+                <div class="bpi-footer-actions"><button type="button" class="bpi-button bpi-button--primary" t-on-click="saveVariantPriceRule">Guardar regla de tarifa</button><button type="button" class="bpi-button bpi-button--secondary" t-on-click="() =&gt; this.state.variantPriceRule = null">Cancelar regla</button></div>
+            </fieldset>
+        </section>
     </t>
 </templates>

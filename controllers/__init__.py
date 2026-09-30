@@ -5,3 +5,6 @@ from . import taxonomy
 from . import description_media
 from . import content_studio
 from . import description_variant
+from . import variant_workspace
+
+from . import variant_storefront
