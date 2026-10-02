@@ -33,11 +33,15 @@ class MobileStorefrontRepairTests(unittest.TestCase):
             repair_mobile_storefront(self.reviewed() + '/website/static/src/fonts/old.otf')
 
     def test_scope_and_media_queries(self):
-        self.assertEqual(BLOCK.count('#wrapwrap:has(> #top .bpi-header-search)'), 5)
+        self.assertEqual(BLOCK.count('#wrapwrap:has(> #top .bpi-header-search)'), 6)
         self.assertIn('@media (max-width: 767.98px)', BLOCK)
         self.assertIn('@media (max-width: 575.98px)', BLOCK)
         self.assertIn('#wrap:not(.js_sale) h1', BLOCK)
         self.assertIn('font-size: inherit !important', BLOCK)
+
+    def test_native_nonbreaking_reference_heading_stays_readable(self):
+        self.assertIn('#wrap:not(.js_sale) .s_references h1', BLOCK)
+        self.assertIn('clamp(1.375rem, 6.5vw, 2.25rem)', BLOCK)
 
     def test_fixes_intrinsic_width_not_by_clipping(self):
         self.assertIn('overflow-wrap: anywhere', BLOCK)

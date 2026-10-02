@@ -17,6 +17,8 @@ Contacto y Be-Learning también desbordaban. La barra nativa de catálogo tenía
 - El marcador de búsqueda BPI delimita el website autorizado.
 - Títulos H1 de páginas de contenido no comercial: tamaño fluido hasta 767.98 px,
   con herencia en los elementos de formato y ajuste de palabras largas.
+- Títulos de referencias nativas: escala menor para grupos con espacios no separables,
+  sin cortar la última letra ni editar el texto guardado.
 - Barra nativa del catálogo: controles reorganizados hasta 575.98 px; búsqueda,
   tarifas y filtros permanecen disponibles.
 - No recortar ni ocultar el overflow del documento o de `#wrapwrap`.
