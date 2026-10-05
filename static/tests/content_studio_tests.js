@@ -2,9 +2,29 @@
 import { App } from "@odoo/owl";
 import { templates } from "@web/core/assets";
 import { ProductIntelligenceAction } from "@bader_product_intelligence/js/product_intelligence_action";
-import { emptyContentStudio, defaultDescriptionLayout } from "@bader_product_intelligence/js/content_studio";
+import { emptyContentStudio, defaultDescriptionLayout, StudioRichEditor } from "@bader_product_intelligence/js/content_studio";
 
 QUnit.module("Nancy AI Studio and description design");
+
+QUnit.test('copy-only Studio editor blur does not turn sanitized display into a draft', async assert => {
+    const target = document.createElement('div'); document.body.appendChild(target);
+    const action = Object.create(ProductIntelligenceAction.prototype);
+    const value = '<p class="saved-layout" style="font-weight: 400">Texto<br/>Complementario</p>';
+    const changes = [];
+    const app = new App(StudioRichEditor, {templates, test: true, props: {
+        value, label: 'Texto complementario', sanitize: html => action.sanitizeDescriptionHtml(html),
+        onChange: html => changes.push(html),
+    }});
+    try {
+        await app.mount(target);
+        const editor = target.querySelector('[contenteditable]');
+        editor.focus(); editor.blur(); await patch();
+        assert.deepEqual(changes, [], 'selecting/copying/blur does not change layout or preview');
+        editor.focus(); editor.innerHTML = '<p><strong>Texto</strong> nuevo</p>';
+        editor.dispatchEvent(new Event('input', {bubbles: true})); await patch();
+        assert.strictEqual(changes[0], '<p><strong>Texto</strong> nuevo</p>', 'real formatted edits still notify their owner');
+    } finally { app.destroy(); target.remove(); }
+});
 const copy = value => JSON.parse(JSON.stringify(value));
 const later = () => { let resolve; const promise = new Promise(done => resolve = done); return { promise, resolve }; };
 const patch = () => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));

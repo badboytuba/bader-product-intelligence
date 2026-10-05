@@ -1,3 +1,12 @@
+## 2026-10-05 — Copy-only draft guard
+
+Release candidate `16.0.1.17.2` fixes false unsaved-change warnings when selecting
+or copying descriptions between workspaces. No-op blur preserves the original
+saved text and variant inheritance; actual text/formatting edits remain protected.
+The same guard applies to Studio previews and auxiliary design text.
+See `docs/COPY_DRAFT_GUARD.md` for reproduction and local browser tests. Source
+validation is not a deployment certificate; QAS/PROD installation is separate.
+
 ## 2026-09-30 — Full variant workspace
 
 Release `16.0.1.17.0`; read `docs/VARIANT_WORKSPACE_WIP.md` before

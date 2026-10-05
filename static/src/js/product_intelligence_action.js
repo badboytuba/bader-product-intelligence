@@ -2062,7 +2062,12 @@ export class ProductIntelligenceAction extends Component {
         if (ev.currentTarget.innerHTML !== html) {
             ev.currentTarget.innerHTML = html;
         }
-        this.state.contentForm.description = html;
+        // Focus/selection/copy can trigger blur without any edit. The displayed
+        // HTML is normalized, but the original draft may be plain text or use
+        // server formatting. Do not turn that display conversion into a draft.
+        if (html !== this.normalizedDescriptionHtml()) {
+            this.state.contentForm.description = html;
+        }
         this.lastContentDescriptionEditorHtml = html;
     }
 
@@ -2245,7 +2250,9 @@ export class ProductIntelligenceAction extends Component {
         if (ev.currentTarget.innerHTML !== html) {
             ev.currentTarget.innerHTML = html;
         }
-        this.state.contentForm.technicalDescription = html;
+        if (html !== this.normalizedTechnicalDescriptionHtml()) {
+            this.state.contentForm.technicalDescription = html;
+        }
         this.lastTechnicalDescriptionEditorHtml = html;
     }
 

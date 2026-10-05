@@ -1,3 +1,12 @@
+## 2026-10-05 — 1.17.2 copy-only guard (source candidate)
+
+See `COPY_DRAFT_GUARD.md`. Focus/selection/copy followed by blur previously wrote
+sanitized display HTML into untouched drafts, creating false leave prompts and
+variant overrides. Short/long blur and Studio change now ignore equivalent
+display representations while preserving genuine edits. No data migration,
+cross-window synchronization, automatic save or draft deletion. Deployment and
+native QAS certification remain separate from this source candidate.
+
 ## 2026-09-30 — 1.17.1 storefront refinements delivered to QAS
 
 See `STOREFRONT_DESIGN.md`: bounded desktop gallery follows real wrapwrap scroll;

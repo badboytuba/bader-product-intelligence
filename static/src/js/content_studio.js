@@ -42,7 +42,13 @@ export class StudioRichEditor extends Component {
         else { const range = document.createRange(); range.selectNodeContents(el); range.collapse(false); selection.addRange(range); }
     }
     toolbarDown(ev) { this.remember(); if (ev.target.closest('button')) ev.preventDefault(); }
-    change() { this.remember(); this.props.onChange(this.props.sanitize(this.editor.el?.innerHTML || "")); }
+    change() {
+        this.remember();
+        const html = this.props.sanitize(this.editor.el?.innerHTML || "");
+        // Opening/copying a sanitized preview is not a layout/proposal edit.
+        // Notify the owner only for a real change to its displayed content.
+        if (html !== this.props.sanitize(this.props.value || "")) this.props.onChange(html);
+    }
     blur() { this.change(); }
     paste(ev) {
         ev.preventDefault();

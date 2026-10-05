@@ -1640,6 +1640,123 @@ QUnit.test('canonical draft baseline excludes display fields and retains edits m
     assert.ok(action.detailHasUnsavedChanges(), 'failed saves do not reset baseline');
 });
 
+QUnit.test('copy-only description focus and blur preserve the original saved representation', assert => {
+    const action = stabilizationAction();
+    const originals = [
+        'Texto plano\nSegunda línea',
+        '<p class="saved-copy" style="font-weight: 400; color: #003841">Texto<br/>Técnico</p>',
+        '<p><font face="Arial" size="3">Formato anterior</font></p>',
+        '',
+    ];
+    for (const original of originals) {
+        for (const [key, handler] of [['description', 'normalizeContentDescriptionEditor'], ['technicalDescription', 'normalizeTechnicalDescriptionEditor']]) {
+            action.state.contentForm[key] = original;
+            action.detailBaseline = action.detailDraftSnapshot();
+            const editor = document.createElement('div');
+            editor.innerHTML = action.normalizedDescriptionHtml(original);
+            action[handler]({currentTarget: editor});
+            assert.strictEqual(action.state.contentForm[key], original, `${key}: blur is not an edit`);
+            assert.notOk(action.detailHasUnsavedChanges(), `${key}: no false leave prompt`);
+        }
+    }
+});
+
+QUnit.test('copy-only blur guards still retain genuine text and formatting changes', assert => {
+    const action = stabilizationAction();
+    for (const [key, handler] of [['description', 'normalizeContentDescriptionEditor'], ['technicalDescription', 'normalizeTechnicalDescriptionEditor']]) {
+        action.state.contentForm[key] = '<p>Original</p>';
+        action.detailBaseline = action.detailDraftSnapshot();
+        const editor = document.createElement('div');
+        editor.innerHTML = '<p><strong>Original</strong> editado</p>';
+        action[handler]({currentTarget: editor});
+        assert.strictEqual(action.state.contentForm[key], '<p><strong>Original</strong> editado</p>');
+        assert.ok(action.detailHasUnsavedChanges(), `${key}: real changes still warn`);
+        const ev = {preventDefault() { this.prevented = true; }};
+        action.onDetailBeforeUnload(ev);
+        assert.ok(ev.prevented, 'browser close still protects unsaved edits');
+    }
+});
+
+QUnit.test('copy-only variant blur does not create overrides or cached dirty editions', assert => {
+    const action = stabilizationAction();
+    action.applyDetailPayload(variantWorkspacePayload());
+    const editor = document.createElement('div');
+    editor.innerHTML = action.normalizedDescriptionHtml();
+    action.normalizeContentDescriptionEditor({currentTarget: editor});
+    assert.notOk(action.variantFieldCustomized('description'), 'inherited plain copy remains inherited');
+    assert.notOk(action.detailHasUnsavedChanges());
+    action.applyDetailPayload(variantWorkspacePayload(10, 1, {description: ''}));
+    editor.innerHTML = '';
+    action.normalizeContentDescriptionEditor({currentTarget: editor});
+    assert.ok(action.variantFieldCustomized('description'), 'intentional empty override remains customized');
+    assert.notOk(action.detailHasUnsavedChanges());
+    action.state.contentForm.technicalDescription = '<p>Real unsaved edition edit</p>';
+    assert.ok(action.detailHasUnsavedChanges(), 'independent variant edits stay protected');
+});
+
+QUnit.test('copy-only two mounted workspaces isolate copy, save, and pending edits', async assert => {
+    const containers = [document.createElement('div'), document.createElement('div')];
+    const apps = [], actions = [], writes = [];
+    containers.forEach(target => document.body.appendChild(target));
+    try {
+        for (let index = 0; index < 2; index++) {
+            const id = index + 1;
+            const data = stabilizationPayload(id);
+            data.seoData.aiTechnicalDescriptionHtml = '<p class="from-server">Texto técnico<br/>Para copiar</p>';
+            const app = new App(ProductIntelligenceAction, {templates, test: true,
+                props: {action: {params: {product_tmpl_id: id}, context: {}}},
+                env: {services: {user: {context: {}}, notification: {add() {}}, action: {doAction() {}},
+                    rpc: async (route, params) => {
+                        if (route.endsWith('/data')) return JSON.parse(JSON.stringify(data));
+                        if (route.endsWith('/save_all')) {
+                            writes.push(params.product_tmpl_id);
+                            data.seoData.aiGeneratedDescriptionHtml = params.content_values.description;
+                            data.seoData.aiTechnicalDescriptionHtml = params.content_values.technicalDescription;
+                            return JSON.parse(JSON.stringify(data));
+                        }
+                        throw new Error(`Unexpected RPC: ${route}`);
+                    },
+                }},
+            });
+            apps.push(app);
+            const action = await app.mount(containers[index]);
+            actions.push(action);
+            await action.selectDetailSection('content');
+        }
+        await workspacePatched();
+        const source = containers[0].querySelector('.bpi-rich-editor--technical');
+        const destination = containers[1].querySelector('.bpi-rich-editor--compact');
+        const initial = actions[0].captureDrafts();
+        source.focus();
+        const range = document.createRange(); range.selectNodeContents(source);
+        window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+        source.dispatchEvent(new Event('copy', {bubbles: true}));
+        destination.focus(); // Native blur on source, without an input event.
+        destination.innerHTML = '<p>Copiado y modificado</p>';
+        destination.dispatchEvent(new Event('input', {bubbles: true}));
+        await workspacePatched();
+        assert.deepEqual(actions[0].captureDrafts(), initial, 'source draft is unchanged after copy/blur');
+        assert.notOk(actions[0].detailHasUnsavedChanges(), 'untouched source has no false prompt');
+        assert.ok(actions[1].detailHasUnsavedChanges(), 'destination has real pending content');
+        await actions[1].saveAll();
+        await workspacePatched();
+        assert.deepEqual(writes, [2], 'save targets only the edited product');
+        assert.notOk(actions[1].detailHasUnsavedChanges(), 'destination acknowledges its own save');
+        assert.notOk(actions[0].detailHasUnsavedChanges(), 'saving another window does not dirty the source');
+        const leaving = actions[0].confirmDetailLeave();
+        if (actions[0].state.detailLeavePrompt) await actions[0].resolveDetailLeave('stay');
+        assert.ok(await leaving, 'untouched source exits without discard dialog');
+        source.focus(); source.innerHTML = '<p>Real source edit</p>';
+        source.dispatchEvent(new Event('input', {bubbles: true}));
+        await actions[1].saveAll(); await workspacePatched();
+        assert.ok(actions[0].detailHasUnsavedChanges(), 'another save cannot clear real source edits');
+    } finally {
+        window.getSelection().removeAllRanges();
+        apps.forEach(app => app.destroy());
+        containers.forEach(target => target.remove());
+    }
+});
+
 QUnit.test('detail leave stays or discards every independent draft without saving or automatically generating', async (assert) => {
     const action = stabilizationAction();
     action.state.contentForm.description = 'Pending description';
