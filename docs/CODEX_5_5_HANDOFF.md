@@ -1,11 +1,15 @@
-## 2026-10-05 — 1.17.2 copy-only guard (source candidate)
+## 2026-10-05 — 1.17.2 copy-only guard delivered QAS and PROD
 
 See `COPY_DRAFT_GUARD.md`. Focus/selection/copy followed by blur previously wrote
 sanitized display HTML into untouched drafts, creating false leave prompts and
 variant overrides. Short/long blur and Studio change now ignore equivalent
 display representations while preserving genuine edits. No data migration,
 cross-window synchronization, automatic save or draft deletion. Deployment and
-native QAS certification remain separate from this source candidate.
+native certification are recorded separately: authorized QAS then PROD upgrade,
+539 native backend tests, 191 native frontend tests/1,477 assertions, actual
+two-tab clone save pilot and live compiled assets/public-site acceptance. See
+`COPY_DRAFT_GUARD.md`; no stored catalog/price/media or server Git/config changes.
+Save real drafts before Ctrl+F5 in both windows.
 
 ## 2026-09-30 — 1.17.1 storefront refinements delivered to QAS
 

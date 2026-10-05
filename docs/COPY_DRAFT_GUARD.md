@@ -56,10 +56,48 @@ For all 191 frontend tests, additionally provide the local native Odoo 16
 `BPI_EXPECTED_TESTS=191`. The runner mimics native test-only image-attribute
 suppression; it never changes source templates or public markup.
 
-## Delivery boundary
+## Runtime delivery — 2026-10-05
 
-This release is a **source candidate**. Before installation, obtain specific
-environment approval, test native Odoo QUnit/assets in an isolated runtime,
-verify fresh external backups and prepare rollback. Install QAS first. PROD
-requires separate authorization. No server, stored text or price has been
-modified by the local correction.
+The user separately authorized **QAS and PROD**, with maintenance now after tests
+and backups. Runtime source `0e6213b` was installed as **16.0.1.17.2**, QAS first;
+PROD began only after live QAS acceptance. Only the manifest, two editor JS files
+and their two QUnit test files were copied. Server Git/remotes, configuration,
+unrelated addon files and native cron activation/schedule were preserved.
+
+Gates and evidence:
+- Fresh coherent database/filestore/private-media/addon/configuration backups,
+  verified outside each server; rollback prepared before the maintenance window.
+- Disposable QAS snapshot, neutralized providers/crons and loopback-only isolated
+  networking: **539 native backend tests**, zero failures/errors.
+- Actual native QUnit asset compilation: **191 tests / 1,477 assertions**, zero
+  browser errors, unknown writes or external requests.
+- Two real native browser tabs on synthetic **clone-only** products: select/copy
+  plain and HTML descriptions, paste/edit and save the destination through the
+  actual backend; source data unchanged and clean exit without a false warning.
+  A genuine source edit still invokes the leave guard. No live product was used
+  for this write pilot. Long rich copy is `bpiTechnicalDescriptionHtml`; the
+  payload's `technicalDescription` denotes the legacy internal description.
+- Protected data hashes frozen with the live service stopped stayed identical
+  after each target-only upgrade: catalog, variants, native prices/Packs,
+  editorial/media/document/FAQ/classification data, website settings, custom
+  assets and system parameters. No historical content migration or draft reset.
+- Live compiled backend bundles contain all three no-op guards and the registered
+  action. Public read-only smoke passed **8 QAS** and **16 PROD** route/width cases
+  (360/1440 px; home/shop/product/contact, including PROD website2 controls), with
+  zero page errors, asset failures or unknown writes. Target upgrade and inspected
+  post-start log windows had no BPI error/critical events.
+- Main service downtime measured **36.83 seconds QAS / 48.95 seconds PROD**;
+  both services active and installed/manifest version matched at acceptance.
+
+Private proof and backups: `audit_outputs/copy_drafts_deploy_20261005/` (workspace,
+not deployed or committed). Live acceptance certificates bind source, upgrade,
+compiled assets and smoke receipts; no credentials or business bodies are in
+this document. The older local proof remains a separate certificate.
+
+**Operator reload:** save genuine pending work first, then reload **both** windows
+with Ctrl+F5. Already-open browser tabs retain their previous JavaScript until
+reloaded; deployment never clears their drafts automatically.
+
+For subsequent installations, repeat explicit environment/window approval,
+isolated native tests, fresh external backup/rollback and QAS-before-PROD gates.
+Source version alone is never a deployment certificate.

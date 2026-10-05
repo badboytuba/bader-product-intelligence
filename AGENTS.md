@@ -1,6 +1,7 @@
 ## 2026-10-05 — Copy-only draft guard
 
-Release candidate `16.0.1.17.2`; read `docs/COPY_DRAFT_GUARD.md`. Selecting/copying
+Release `16.0.1.17.2` delivered QAS then PROD on 2026-10-05; read
+`docs/COPY_DRAFT_GUARD.md` for authorized runtime evidence. Selecting/copying
 and blur are not edits. Compare normalized displayed content before notifying a
 draft owner, but retain the original raw value on a no-op. Never clear baselines,
 drop draft caches or disable leave/concurrency guards to suppress a false warning.
