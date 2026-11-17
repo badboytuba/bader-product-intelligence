@@ -5,6 +5,7 @@ These are real Odoo ACL/record-rule tests. All fixtures are transaction-local;
 the suite must never call a provider, publish a product, or commit a job.
 """
 
+import base64
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
@@ -250,6 +251,61 @@ class TestBPIModuleAccess(TransactionCase):
         with patch.object(type(variant), "check_access_rule", side_effect=AccessError("Product denied")):
             with self.assertRaises(AccessError):
                 self.product.with_user(self.module_only)._bpi_stock_payload(variant)
+        self.network.assert_not_called()
+
+    def test_module_operator_image_presence_uses_only_authorized_metadata(self):
+        png = base64.b64encode(base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        ))
+        category = self.env["product.public.category"].create({"name": "BPI private image coverage"})
+        self.product.write({"image_1920": png, "public_categ_ids": [(6, 0, category.ids)]})
+        self.env.flush_all()
+        attachment_model = self.env["ir.attachment"]
+        attachment_type = type(attachment_model)
+        image_ids = set(attachment_model.search([
+            ("res_model", "=", "product.template"), ("res_field", "=", "image_1920"),
+            ("res_id", "=", self.product.id), ("file_size", ">", 0),
+        ]).ids)
+        self.assertTrue(image_ids, "The fixture must use actual native attachment-backed image storage")
+        service = self._service(self.module_only)
+        product = service.env["product.template"].browse(self.product.id)
+        original_read = attachment_type.read
+        projected = []
+
+        def metadata_read(records, fields=None, load="_classic_read"):
+            if fields:
+                self.assertFalse(any(records._fields[name].type == "binary" for name in fields),
+                                 "Image coverage must never read binary values")
+            if records.env.su:
+                self.assertEqual(fields, ["res_id"], "Only parent IDs may be projected with elevated metadata access")
+                self.assertTrue(set(records.ids) <= image_ids)
+                projected.extend(records.ids)
+            return original_read(records, fields, load=load)
+
+        def no_file_read(records, *args, **kwargs):
+            raise AssertionError("Image coverage must not read attachment bytes")
+
+        def catalog_row(record, **unused):
+            return {"id": record.id}
+
+        self.env.invalidate_all()
+        with patch.object(attachment_type, "_file_read", no_file_read), \
+                patch.object(attachment_type, "read", metadata_read), \
+                patch.object(type(product), "bpi_dashboard_payload", autospec=True, side_effect=catalog_row):
+            self.assertEqual(service._dashboard_image_record_ids(product, "image_1920"), {self.product.id})
+            overview = service.dashboard_overview(category_id=category.id)
+            self.assertEqual(next(k["count"] for k in overview["kpis"] if k["key"] == "image"), 1)
+            catalog = service.dashboard_payload(category_id=category.id, quality_filter="image")
+            self.assertEqual(catalog["pager"]["total"], 1)
+            self.assertTrue(catalog["products"][0]["catalogHealth"]["image"])
+        self.assertTrue(projected, "The non-system user exercised the narrow parent-ID metadata path")
+        for guard in ("check_access_rights", "check_access_rule", "check_field_access_rights"):
+            with self.subTest(guard=guard), \
+                    patch.object(type(product), guard, side_effect=AccessError("Parent image access denied")), \
+                    patch.object(attachment_type, "read") as forbidden_metadata:
+                with self.assertRaises(AccessError):
+                    service._dashboard_image_record_ids(product, "image_1920")
+                forbidden_metadata.assert_not_called()
         self.network.assert_not_called()
 
     def test_editor_saves_reviewed_content_without_global_administration(self):

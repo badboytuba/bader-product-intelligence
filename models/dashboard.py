@@ -84,6 +84,13 @@ class BPIDashboardService(models.AbstractModel):
         """
         if not records:
             return set()
+        if (records._name, field_name) not in {
+            ("product.template", "image_1920"), ("product.image", "image_1920"),
+            ("product.product", "image_variant_1920"),
+        }:
+            raise UserError(_("Campo de imagen de catálogo no permitido."))
+        records.check_access_rights("read")
+        records.check_access_rule("read")
         records.check_field_access_rights("read", [field_name])
         field = records._fields[field_name]
         if field.attachment:
@@ -91,7 +98,12 @@ class BPIDashboardService(models.AbstractModel):
                 ("res_model", "=", records._name), ("res_field", "=", field_name),
                 ("res_id", "in", records.ids), ("file_size", ">", 0),
             ])
-            return {row["res_id"] for row in attachments.read(["res_id"], load=False)}
+            # Native ir.attachment.read rejects res_field-backed records for
+            # non-system users even when their owning image field is readable.
+            # Search remains unelevated. Only already-authorized parent IDs are
+            # projected under sudo: no binary, name, storage path or token read.
+            rows = attachments.sudo().read(["res_id"], load=False)
+            return {row["res_id"] for row in rows} & set(records.ids)
         # Stored non-attachment binary fields can be filtered in SQL without
         # selecting the bytes. Also preserves the normal search of related fields.
         return set(records.search([("id", "in", records.ids), (field_name, "!=", False)]).ids)
