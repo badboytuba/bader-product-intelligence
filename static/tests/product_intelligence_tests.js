@@ -3265,19 +3265,19 @@ QUnit.test("administration controls require an explicit successful system-group 
     const groups = [];
     action.user = { hasGroup: async group => { groups.push(group); return true; } };
     await action.loadAdministrationAccess();
-    assert.true(action.state.canAdminister, "existing system admins retain configuration controls");
+    assert.strictEqual(action.state.canAdminister, true, "existing system admins retain configuration controls");
     assert.deepEqual(groups, ["base.group_system"], "module checkbox cannot imply global configuration access");
     action.user = { hasGroup: async () => false };
     await action.loadAdministrationAccess();
-    assert.false(action.state.canAdminister, "module-only operator sees no configuration controls");
+    assert.strictEqual(action.state.canAdminister, false, "module-only operator sees no configuration controls");
     action.state.canAdminister = true;
     action.user = { hasGroup: async () => { throw new Error("unavailable"); } };
     await action.loadAdministrationAccess();
-    assert.false(action.state.canAdminister, "failed lookup is closed");
+    assert.strictEqual(action.state.canAdminister, false, "failed lookup is closed");
     action.state.canAdminister = true;
     action.user = {};
     await action.loadAdministrationAccess();
-    assert.false(action.state.canAdminister, "missing lookup is closed");
+    assert.strictEqual(action.state.canAdminister, false, "missing lookup is closed");
 });
 
 QUnit.test("unavailable inventory is neutral and never a zero-stock warning", (assert) => {
