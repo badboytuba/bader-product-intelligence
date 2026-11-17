@@ -8,7 +8,9 @@ superuser mode from a client-supplied context value. Keep native product/company
 ACLs, legacy company rules, private media ownership and explicit saves intact.
 Configuration/credentials/view synchronization remain system-admin-only. Paid
 jobs must retain requester authorization and reject forged ORM creation or job
-rewrites. No existing user is assigned automatically. This is local preparation,
+rewrites. The native automatic Boolean section is debug-only; retain the explicit normal
+user-form view with XML-ID interpolation of the same virtual group field. Retire
+that view before its group on rollback. No existing user is assigned automatically. This is local preparation,
 not a QAS/PROD installation or a grant to the three requested accounts.
 
 ## 2026-10-05 — Copy-only draft guard

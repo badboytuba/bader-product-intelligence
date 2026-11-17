@@ -6,6 +6,7 @@ the suite must never call a provider, publish a product, or commit a job.
 """
 
 import base64
+import xml.etree.ElementTree as ET
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
@@ -92,6 +93,16 @@ class TestBPIModuleAccess(TransactionCase):
         description = self.env["res.users"].fields_get([self.checkbox])
         self.assertEqual(description[self.checkbox]["type"], "boolean")
         self.assertEqual(self.group.implied_ids, self.employee_group)
+        view = self.env.ref("bader_product_intelligence.view_users_form_bpi_access")
+        self.assertIn(self.checkbox, view.arch_db, "XML loader must resolve the native group ID")
+        self.assertNotIn("%(", view.arch_db, "No unresolved interpolation may reach the view")
+        self.assertNotIn("base.group_no_one", view.arch_db, "The access control must not require debug mode")
+        native = self.env["res.users"].with_user(self.admin).sudo(False).with_context(debug=False).get_view(
+            view_id=self.env.ref("base.view_users_form").id, view_type="form",
+        )
+        form = ET.fromstring(native["arch"])
+        control = form.find(".//group[@name='bpi_module_access']/field[@name='%s']" % self.checkbox)
+        self.assertIsNotNone(control, "An ordinary active administrator must receive the visible native checkbox")
 
     def test_group_never_implies_system_access_rights_product_or_marketplace_roles(self):
         for xmlid in (

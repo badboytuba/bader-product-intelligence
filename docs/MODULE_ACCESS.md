@@ -9,7 +9,7 @@ real account permissions changed. Existing PROD was inspected read-only at
 ## Checkbox
 
 After an authorized installation, a user-rights administrator opens
-**Ajustes → Usuarios y compañías → Usuarios → Derechos de acceso → Otros** and
+**Ajustes → Usuarios y compañías → Usuarios → Permisos de acceso → Producto Intelligence** and
 checks **Acceso a Producto Intelligence** for an active internal account, then
 saves. Unchecking and saving revokes the module role. Reload the backend after
 rights change; subsequent server requests recheck access even in an already-open
@@ -18,8 +18,10 @@ tab. Genuine unsaved drafts are not discarded by a permission change.
 Technical group: `bader_product_intelligence.group_bpi_user`. The group has no
 application category: Odoo 16's native uncategorized-group form generates a
 Boolean `in_group_<id>` field, rather than the single-group selection generated
-for an application category. No hardcoded numeric group ID, writable custom user
-field, duplicated flag or new user-management privilege is introduced.
+for an application category. Its automatic section is debug-only in this Odoo16
+runtime, so an explicit inherited normal user form displays that SAME virtual
+field with XML-loader ID interpolation. No numeric hardcode, writable custom user
+field, duplicated permission flag or new user-management privilege is introduced.
 
 The group implies **only** `base.group_user`. It does not imply Settings,
 Administration/Access Rights, product management, website management or Mercado
@@ -84,6 +86,7 @@ Facundo Colombo (uid22) and Nicolás Pollicino (uid19). The old inactive Facundo
 - On approval assign the group only to the three active accounts, verify access
   as each user without sharing/changing passwords, then certify service/logs.
 
+Retire the explicit user-form view before deleting its group during rollback.
 Rollback access by removing only this group, retaining unrelated rights. A source
 rollback must first revoke the new role and explicitly retire its ACL/menu/rule
 records; loading an old manifest alone does not remove new XML IDs from the DB.

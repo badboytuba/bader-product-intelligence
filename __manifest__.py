@@ -39,6 +39,7 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
         "data/description_media_cron.xml",
         "data/content_template_data.xml",
         "data/taxonomy_data.xml",
+        "views/res_users_views.xml",
         "views/product_views.xml",
         "views/category_views.xml",
         "views/res_config_settings_views.xml",
