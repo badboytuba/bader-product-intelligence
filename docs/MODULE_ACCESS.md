@@ -1,14 +1,24 @@
-# Per-user module access — 16.0.1.18.0 candidate
+# Per-user module access — 16.0.1.18.0 delivered
 
 ## Delivery status
 
-Local source preparation only, 2026-11-17. Not installed in QAS or PROD and no
-real account permissions changed. Existing PROD was inspected read-only at
-`16.0.1.17.2`. Static/offline checks do not certify a native registry upgrade.
+Installed in QAS, then PROD on 2026-11-17 following explicit authorization and
+native certification. Both targets upgraded from `16.0.1.17.2` to `16.0.1.18.0`;
+services and live acceptance passed. Only the dedicated module group was added
+to the three reviewed active internal accounts in each environment. Existing
+administrative and unrelated memberships were preserved. Individual assignments
+and account identifiers are retained in private audit receipts, not this guide.
+
+Runtime source: `ba92d8691572c4814b045577fa253501badbc584`.
+Exact 33-file package SHA256:
+`81c8c635d3c091e9348c7fe8348cf765ae35556fca9da2aff91fba82aed5821c`.
+This delivery-documentation update is a separate source commit, not a repackaging
+or a second runtime deployment. Server documentation still reflects the original
+certified package; runtime file identity is recorded by the deployment receipts.
 
 ## Checkbox
 
-After an authorized installation, a user-rights administrator opens
+A user-rights administrator opens
 **Ajustes → Usuarios y compañías → Usuarios → Permisos de acceso → Producto Intelligence** and
 checks **Acceso a Producto Intelligence** for an active internal account, then
 saves. Unchecking and saving revokes the module role. Reload the backend after
@@ -32,9 +42,9 @@ Trusted server-side superuser mode continues to support installation and workers
 including inactive OdooBot; client context values never enable superuser mode.
 
 No automatic assignment to existing users or the default/new-user template is
-included. The requested active PROD accounts were identified as Male (uid20),
-Facundo Colombo (uid22) and Nicolás Pollicino (uid19). The old inactive Facundo
-(uid21) is excluded. Assignment is a separate authorized runtime operation.
+included. The separate authorized runtime operation added exactly three reviewed
+memberships per environment. The inactive legacy duplicate account was excluded;
+no account was reactivated and no password was changed.
 
 ## Scope and boundaries
 
@@ -65,7 +75,43 @@ Facundo Colombo (uid22) and Nicolás Pollicino (uid19). The old inactive Facundo
 - The optional Mercado Libre bridge and its independent permissions are not
   changed. No ML group, external read/write switch or account is enabled.
 
-## Validation and rollout gates
+## Completed certification and live acceptance
+
+- The exact package passed **565 native backend tests**, including 26 access
+  regressions, with zero failures/errors in the isolated QAS clone.
+- **193 native QUnit tests / 1,488 assertions** passed with zero browser errors,
+  asset failures or blocked writes. The native browser pilot verified the normal
+  Users administration action (without debug), the actual Boolean checkbox and
+  retained system-admin exchange-rate controls.
+- Live QAS and PROD acceptance verified the explicit normal-form view, compiled
+  backend assets/action, HTTP 200 for `/web/login` and `/shop`, and zero target
+  upgrade-log errors. Each real account passed menu, dashboard and actual product
+  detail checks; native product-write rights were already present, not granted.
+- Target-only upgrades measured **59.13 seconds** stopped in QAS and **48.49
+  seconds** in PROD. Frozen catalog/pricing/Pack/media/website/config/user/contact
+  data matched before/after upgrade. Server Git/config, BPI cron activation and
+  next-call settings, and unrelated user memberships were preserved.
+- Post-start log inspection found zero BPI errors and zero critical events in
+  both environments. PROD also recorded two database-serialization events; these
+  are not represented as an entirely error-free server log.
+- Verified external database, filestore/media and addon/config recovery chains
+  are retained. The exact disposable clone was removed with ownership checks;
+  task-owned snapshot pins were released after full external re-verification.
+  No unrelated backup, runtime path, shared inode permission or live DB is removed.
+- Final read-only checks after resuming the interrupted desktop session confirmed
+  both services active, version `16.0.1.18.0`, zero pending modules, all deployed
+  file hashes exact and Git/config unchanged. Approximately 4.06 GB remained free
+  in QAS and 111.85 GB in PROD at that check; unrelated backups were not purged.
+
+Private evidence directory in the deployment workspace:
+`audit_outputs/bpi_access_deploy_20261117/` (not part of this addon repository).
+Key evidence: `clone_backend_certificate.json`,
+`clone_qunit/clone_qunit_certificate.json`,
+`clone_pilot/clone_pilot_certificate.json`, and the QAS/PROD upgrade, acceptance,
+grant, final-role, post-start-log and owned-cleanup certificates. Do not publish
+private account details, archive contents, configuration or credentials.
+
+## Future validation and rollout gates
 
 - Run the addon static validator and `git diff --check`.
 - Run the offline OWL suite via `tests/browser_copy_drafts.cjs`: this uses real
@@ -83,7 +129,7 @@ Facundo Colombo (uid22) and Nicolás Pollicino (uid19). The old inactive Facundo
 - A live QAS/PROD upgrade requires explicit authorization, verified addon/database/
   filestore backups, rollback and a maintenance window if a restart is needed.
   Preserve all server `.git` directories/remotes and upgrade only this addon.
-- On approval assign the group only to the three active accounts, verify access
+- On approval assign the group only to reviewed active accounts, verify access
   as each user without sharing/changing passwords, then certify service/logs.
 
 Retire the explicit user-form view before deleting its group during rollback.

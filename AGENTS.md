@@ -1,6 +1,6 @@
-## 2026-11-17 — Delegated module access (local candidate)
+## 2026-11-17 — Delegated module access delivered QAS and PROD
 
-Candidate `16.0.1.18.0` adds the native user-rights checkbox `Acceso a Producto
+Release `16.0.1.18.0` adds the native user-rights checkbox `Acceso a Producto
 Intelligence` (`group_bpi_user`). Read `docs/MODULE_ACCESS.md`. Module users are
 active internal accounts; system admins retain access, and trusted server-side
 superuser mode remains available for workers/install/tests. Never infer trusted
@@ -10,8 +10,15 @@ Configuration/credentials/view synchronization remain system-admin-only. Paid
 jobs must retain requester authorization and reject forged ORM creation or job
 rewrites. The native automatic Boolean section is debug-only; retain the explicit normal
 user-form view with XML-ID interpolation of the same virtual group field. Retire
-that view before its group on rollback. No existing user is assigned automatically. This is local preparation,
-not a QAS/PROD installation or a grant to the three requested accounts.
+that view before its group on rollback. Installation never assigns users
+automatically. Authorized QAS then PROD deployment and the three reviewed active
+account grants passed live acceptance on 2026-11-17. Runtime source is
+`ba92d8691572c4814b045577fa253501badbc584`; later delivery-documentation commits
+are not a new runtime package. Native certification: 565 backend tests and
+193 QUnit tests / 1,488 assertions, plus the normal user-form browser pilot.
+Checkbox path: Ajustes → Usuarios y compañías → Usuarios → Permisos de acceso →
+Producto Intelligence. Preserve the private rollout receipts and external backups;
+see `docs/MODULE_ACCESS.md` for exact evidence and rollback boundaries.
 
 ## 2026-10-05 — Copy-only draft guard
 

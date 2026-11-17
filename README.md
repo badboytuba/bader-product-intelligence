@@ -1,11 +1,16 @@
-## 16.0.1.18.0 — Per-user access checkbox (local candidate)
+## 16.0.1.18.0 — Per-user access checkbox delivered QAS and PROD
 
 Adds **Acceso a Producto Intelligence** to the native user access-rights form.
 An existing rights administrator can grant/revoke the module without granting
 global Odoo administration. Native catalog/company permissions and sensitive
 admin-only configuration remain unchanged. No users are assigned automatically.
-This is local source preparation, **not installed in QAS/PROD**. See
-[`docs/MODULE_ACCESS.md`](docs/MODULE_ACCESS.md) for scope and rollout gates.
+Installed in QAS, then PROD on 2026-11-17 after authorization, verified external
+backups, 565 native backend tests and 193 native QUnit tests / 1,488 assertions.
+The three reviewed active accounts received only the module group; live service,
+assets, normal checkbox and per-user access checks passed. Save genuine drafts,
+then Ctrl+F5. Manage the checkbox under **Ajustes → Usuarios y compañías →
+Usuarios → Permisos de acceso → Producto Intelligence**. See
+[`docs/MODULE_ACCESS.md`](docs/MODULE_ACCESS.md) for scope and delivery evidence.
 
 ## 2026-10-05 — Copy-only draft guard
 
@@ -287,7 +292,7 @@ Environment fallbacks:
   user-management, global administration, native product management or ML role.
 - Native catalog ACLs/company rules remain authoritative; sensitive global
   settings and provider credentials remain administrator-only.
-- See [`docs/MODULE_ACCESS.md`](docs/MODULE_ACCESS.md); this candidate is not live.
+- Delivered in QAS and PROD; see [`docs/MODULE_ACCESS.md`](docs/MODULE_ACCESS.md).
 - Variant and Pack mutations validate template ownership, company, allowed fields, component eligibility and concurrent Pack revisions.
 
 ## Compatibility Notes
