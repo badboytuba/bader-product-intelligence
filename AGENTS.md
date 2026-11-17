@@ -1,3 +1,16 @@
+## 2026-11-17 — Delegated module access (local candidate)
+
+Candidate `16.0.1.18.0` adds the native user-rights checkbox `Acceso a Producto
+Intelligence` (`group_bpi_user`). Read `docs/MODULE_ACCESS.md`. Module users are
+active internal accounts; system admins retain access, and trusted server-side
+superuser mode remains available for workers/install/tests. Never infer trusted
+superuser mode from a client-supplied context value. Keep native product/company
+ACLs, legacy company rules, private media ownership and explicit saves intact.
+Configuration/credentials/view synchronization remain system-admin-only. Paid
+jobs must retain requester authorization and reject forged ORM creation or job
+rewrites. No existing user is assigned automatically. This is local preparation,
+not a QAS/PROD installation or a grant to the three requested accounts.
+
 ## 2026-10-05 — Copy-only draft guard
 
 Release `16.0.1.17.2` delivered QAS then PROD on 2026-10-05; read
@@ -215,7 +228,7 @@ bader_product_intelligence
 1. **Never commit or print secrets.** Local `.env` files may contain production host, database, GitHub token, OpenAI key, Firecrawl key, or deploy credentials. `.env` and `.env.*` are ignored; use `.env.example` only as a template.
 2. **Treat any host/database in `.env` as live production** until proven otherwise. Do not deploy, restart services, run `-u all`, run destructive SQL, or change server packages unless the user explicitly asks.
 3. **Develop in Git first.** Keep changes in this addon, validate locally, then push. For production/QAS, upgrade only the target module: `bader_product_intelligence`.
-4. **Admin-only feature.** Backend routes and menus are intended for `base.group_system` users.
+4. **Explicit module authorization.** Operational backend access requires `base.group_system` or `bader_product_intelligence.group_bpi_user`; sensitive global configuration remains system-admin-only. Preserve actual server-side superuser operation without accepting client context as authority.
 5. **Use Odoo 16 patterns.** Keep code organized in `models/`, `controllers/`, `views/`, `security/`, `data/`, `static/src/`, and add ACL rows for new persistent models.
 
 ## Skills / operating mode expected for future Codex agents
@@ -262,7 +275,7 @@ Read these files before changing code:
 
 ## Stabilization status
 
-Release `16.0.1.3.1` is the 2026-09-11 QAS-only stabilization. Preserve the atomic `/save_all` contract (`product_tmpl_id`, `product_values`, `category_values`, `content_values`, `seo_data`) and canonical category in `productForm`. SEO generation is metadata-only preview and must not publish or overwrite commercial/technical content or FAQs. Job payloads contain `seoData`, not a full `detailPayload`; the frontend must only update the SEO draft. The job partial unique index and session advisory locks prevent duplicate active jobs/execution; never automatically replay an interrupted paid request. Model-level admin guards must remain in place even when controllers also check access. PROD remains explicitly out of scope.
+Release `16.0.1.3.1` is the 2026-09-11 QAS-only stabilization. Preserve the atomic `/save_all` contract (`product_tmpl_id`, `product_values`, `category_values`, `content_values`, `seo_data`) and canonical category in `productForm`. SEO generation is metadata-only preview and must not publish or overwrite commercial/technical content or FAQs. Job payloads contain `seoData`, not a full `detailPayload`; the frontend must only update the SEO draft. The job partial unique index and session advisory locks prevent duplicate active jobs/execution; never automatically replay an interrupted paid request. Model-level authorization guards must remain in place even when controllers also check access. PROD remains explicitly out of scope.
 
 Release `16.0.1.1.14` addresses the previously documented backend stabilization issues:
 

@@ -5,6 +5,8 @@ import json
 
 from odoo import fields, models
 
+from .access import has_bpi_admin_access
+
 
 class EditorialImportProduct(models.Model):
     _inherit = "product.template"
@@ -24,7 +26,8 @@ class EditorialImportProduct(models.Model):
     def bpi_build_payload(self):
         result = super().bpi_build_payload()
         self.env["bpi.service"]._meli_product(self.id)
-        receipt = self.bpi_editorial_import or {}
+        # Keep the protected import receipt out of module-operator payloads.
+        receipt = (self.bpi_editorial_import or {}) if has_bpi_admin_access(self.env) else {}
         result["product"]["editorialImport"] = {
             "date": receipt.get("date", ""), "sku": receipt.get("sku", ""),
             "differences": receipt.get("differences", []),

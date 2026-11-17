@@ -27,7 +27,10 @@ class ProductPublicCategory(models.Model):
     bpi_last_analyzed_at = fields.Datetime(string="Último Análisis")
 
     def bpi_to_payload(self):
+        self.env["bpi.service"]._ensure_manager()
         self.ensure_one()
+        self.check_access_rights("read")
+        self.check_access_rule("read")
         descriptions = self.bpi_audience_descriptions or {}
         return {
             "id": self.id,

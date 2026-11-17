@@ -46,7 +46,8 @@
                         </div>
                         <section t-if="state.showDashboardSettings" id="bpi-home-settings" class="bpi-home-settings" aria-label="Configuración del tipo de cambio">
                             <div><h2>Tipo de cambio</h2><p>Conversión de los precios del catálogo de USD a ARS.</p></div>
-                            <div class="bpi-home-rate"><label for="bpi-home-rate">ARS por USD</label><input id="bpi-home-rate" class="bpi-input bpi-input--small" type="number" min="1" step="1" t-model="state.exchangeRateInput"/><button type="button" class="bpi-button bpi-button--primary" t-on-click="saveExchangeRate" t-att-disabled="state.exchangeRateBusy"><t t-if="state.exchangeRateBusy">Guardando…</t><t t-else="">Guardar</t></button></div>
+                            <div t-if="state.canAdminister" class="bpi-home-rate"><label for="bpi-home-rate">ARS por USD</label><input id="bpi-home-rate" class="bpi-input bpi-input--small" type="number" min="1" step="1" t-model="state.exchangeRateInput"/><button type="button" class="bpi-button bpi-button--primary" t-on-click="saveExchangeRate" t-att-disabled="state.exchangeRateBusy"><t t-if="state.exchangeRateBusy">Guardando…</t><t t-else="">Guardar</t></button></div>
+                            <div t-else="" class="bpi-home-rate"><span>ARS por USD: <t t-esc="state.exchangeRate"/></span><small>Configuración administrada</small></div>
                         </section>
                         <t t-if="state.dashboardSection === 'overview'">
                             <div t-if="state.overviewError" class="bpi-home-feedback bpi-home-feedback--error" role="alert"><i class="fa fa-exclamation-circle"/><div><strong>No se pudo actualizar la visión general</strong><p t-esc="state.overviewError"/></div><button type="button" class="bpi-button bpi-button--secondary" t-on-click="refreshDashboardHome">Reintentar</button></div>
@@ -162,7 +163,7 @@
                                                                 </button>
                                                             </td>
                                                             <td class="bpi-catalog-price-cell" data-label="Precio y margen" t-att-title="'Orden por precio base: ' + formatUSD(row.priceUsd)"><strong t-esc="formatProductPriceLocal(row)"/><p t-esc="formatProductPrice(row)"/><span t-if="catalogMarginKnown(row)" t-att-class="'bpi-catalog-margin' + (row.margin &lt; 0 ? ' is-negative' : '')">Margen est. <b t-esc="formatPercent(row.margin)"/></span><span t-else="" class="bpi-catalog-cost-missing">Margen no disponible</span></td>
-                                                            <td class="bpi-catalog-stock-cell" data-label="Existencias"><strong t-esc="formatNumber(row.qtyAvailable)"/><span t-att-class="'bpi-catalog-stock ' + catalogStockClass(row)"><i class="fa fa-circle"/><t t-esc="catalogStockLabel(row)"/></span><small t-if="row.variantCount &gt; 1">Total de variantes</small><small t-else="">Cantidad en inventario</small></td>
+                                                            <td class="bpi-catalog-stock-cell" data-label="Existencias"><strong t-esc="formatStockNumber(row.qtyAvailable)"/><span t-att-class="'bpi-catalog-stock ' + catalogStockClass(row)"><i class="fa fa-circle"/><t t-esc="catalogStockLabel(row)"/></span><small t-if="row.variantCount &gt; 1">Total de variantes</small><small t-else="">Cantidad en inventario</small></td>
                                                             <td class="bpi-catalog-visibility-cell" data-label="Visibilidad" t-on-click.stop="() =&gt; {}">
                                                                 <label class="bpi-catalog-switch"><span class="bpi-toggle"><input type="checkbox" t-att-disabled="catalogRowBusy(row)" t-att-aria-label="'Publicar ' + row.name" t-att-checked="row.isPublished" t-on-change="(ev) =&gt; this.toggleDashboardPublish(row.id, ev.target.checked, ev)"/><span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span></span><span t-att-class="catalogPublicationClass(row)" t-esc="catalogPublicationLabel(row)"/></label>
                                                                 <label class="bpi-catalog-switch bpi-catalog-switch--featured"><span class="bpi-toggle"><input type="checkbox" t-att-disabled="catalogRowBusy(row)" t-att-aria-label="'Destacar ' + row.name" t-att-checked="row.featured" t-on-change="(ev) =&gt; this.toggleDashboardFeatured(row.id, ev.target.checked, ev)"/><span class="bpi-toggle__track"><span class="bpi-toggle__thumb"/></span></span><span><i class="fa fa-star-o"/> Destacado</span></label>
@@ -265,7 +266,7 @@
                                     <div class="bpi-kpi-card">
                                         <div class="bpi-kpi-card__copy">
                                             <span>Existencias Odoo</span>
-                                            <strong t-esc="formatNumber(product.qtyAvailable || 0)"/>
+                                            <strong t-esc="formatStockNumber(product.qtyAvailable)"/>
                                         </div>
                                         <div class="bpi-kpi-card__icon bpi-kpi-card__icon--dark"><i class="fa fa-cube"/></div>
                                     </div>
@@ -365,7 +366,7 @@
                                         </div>
                                         <div class="bpi-form-grid">
                                             <label>Stock</label>
-                                            <input class="bpi-input" type="number" t-model="state.productForm.qtyAvailable" disabled="disabled"/>
+                                            <input class="bpi-input" type="text" t-att-value="formatStockNumber(product.qtyAvailable)" disabled="disabled"/>
                                             <div class="bpi-inline-switch bpi-inline-switch--spread">
                                                 <span>Producto Destacado</span>
                                                 <label class="bpi-toggle">
@@ -438,7 +439,7 @@
                                         <div class="bpi-panel__title bpi-panel__title--between">
                                             <div>
                                                 <h3><i class="fa fa-tag"/> <t t-esc="variant.attributeLabel || variant.name"/></h3>
-                                                <p t-esc="'Precio efectivo: ' + formatUSD(variant.effectivePriceUsd) + ' · Stock: ' + formatNumber(variant.qtyAvailable)"/>
+                                                <p t-esc="'Precio efectivo: ' + formatUSD(variant.effectivePriceUsd) + ' · Stock: ' + formatStockNumber(variant.qtyAvailable)"/>
                                             </div>
                                             <button type="button" class="bpi-icon-button" t-on-click="() =&gt; this.openVariantForm(variant.id)" title="Abrir variante en Odoo"><i class="fa fa-external-link"/></button>
                                         </div>
@@ -452,7 +453,7 @@
                                             <label>Precio adicional</label>
                                             <input class="bpi-input" type="text" t-att-value="formatUSD(variant.priceExtraUsd)" disabled="disabled"/>
                                             <label>Stock disponible</label>
-                                            <input class="bpi-input" type="text" t-att-value="formatNumber(variant.qtyAvailable)" disabled="disabled"/>
+                                            <input class="bpi-input" type="text" t-att-value="formatStockNumber(variant.qtyAvailable)" disabled="disabled"/>
                                             <div class="bpi-inline-switch bpi-inline-switch--spread">
                                                 <span>Variante activa</span>
                                                 <label class="bpi-toggle">
@@ -540,7 +541,7 @@
                                     <div class="bpi-pack-composition" t-if="composition">
                                         <div class="bpi-panel__title">
                                             <h3 t-esc="'Composicion: ' + composition.variantName"/>
-                                            <p t-esc="'Disponibilidad del Pack: ' + formatNumber(composition.qtyAvailable) + ' · Precio efectivo: ' + formatUSD(composition.effectivePriceUsd)"/>
+                                            <p t-esc="'Disponibilidad del Pack: ' + formatStockNumber(composition.qtyAvailable) + ' · Precio efectivo: ' + formatUSD(composition.effectivePriceUsd)"/>
                                         </div>
                                         <div class="bpi-table-wrap" t-if="composition.components.length">
                                             <table class="bpi-table bpi-pack-table">
@@ -554,7 +555,7 @@
                                                         </td>
                                                         <td><input class="bpi-input bpi-input--compact" type="number" min="0.0001" step="0.01" t-att-value="component.quantityInput" t-on-input="(ev) =&gt; this.updatePackComponent(component, 'quantityInput', ev.target.value)"/></td>
                                                         <td><input class="bpi-input bpi-input--compact" type="number" min="0" max="100" step="0.01" t-att-value="component.saleDiscountInput" t-on-input="(ev) =&gt; this.updatePackComponent(component, 'saleDiscountInput', ev.target.value)"/></td>
-                                                        <td><span t-esc="formatNumber(component.qtyAvailable)"/><p t-esc="'Hasta ' + formatNumber(component.possiblePackQty) + ' Packs'"/></td>
+                                                        <td><span t-esc="formatStockNumber(component.qtyAvailable)"/><p t-esc="component.possiblePackQty == null ? 'Inventario no disponible' : 'Hasta ' + formatNumber(component.possiblePackQty) + ' Packs'"/></td>
                                                         <td><span t-esc="formatUSD(component.lineCostUsd)"/></td>
                                                         <td><button type="button" class="bpi-icon-button bpi-icon-button--danger" t-on-click="() =&gt; this.removePackComponent(composition, component_index)"><i class="fa fa-trash"/></button></td>
                                                     </tr>

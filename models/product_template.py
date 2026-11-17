@@ -280,6 +280,25 @@ class ProductTemplate(models.Model):
             for line in variant.pack_line_ids
         )
 
+    def _bpi_stock_payload(self, record):
+        """Keep native inventory denials unknown, never zero or privileged.
+
+        Product access is checked outside the catch: this fallback is only for
+        dependent stock/MRP quantity computations, not inaccessible products.
+        """
+        record.ensure_one()
+        record.check_access_rights("read")
+        record.check_access_rule("read")
+        names = {"qtyAvailable": "qty_available"}
+        if record._name == "product.product":
+            names.update({"freeQty": "free_qty", "virtualAvailable": "virtual_available",
+                          "incomingQty": "incoming_qty", "outgoingQty": "outgoing_qty"})
+        try:
+            result = {key: float(record[field] or 0.0) for key, field in names.items()}
+        except AccessError:
+            return {**dict.fromkeys(names), "inStock": None, "stockReadAllowed": False}
+        return {**result, "inStock": result["qtyAvailable"] > 0, "stockReadAllowed": True}
+
     def _bpi_variant_payload(self, variant):
         self.ensure_one()
         attributes = self._bpi_variant_attribute_payload(variant)
@@ -301,12 +320,7 @@ class ProductTemplate(models.Model):
             "priceExtraUsd": float(variant.price_extra or 0.0),
             "effectivePriceUsd": self._bpi_effective_variant_price(variant),
             "costUsd": float(variant.standard_price or 0.0),
-            "qtyAvailable": float(variant.qty_available or 0.0),
-            "freeQty": float(variant.free_qty or 0.0),
-            "virtualAvailable": float(variant.virtual_available or 0.0),
-            "incomingQty": float(variant.incoming_qty or 0.0),
-            "outgoingQty": float(variant.outgoing_qty or 0.0),
-            "inStock": bool((variant.qty_available or 0.0) > 0),
+            **self._bpi_stock_payload(variant),
             "hasOwnImage": has_own_image,
             "imageUrl": image_url,
             "imageToken": "variant:%s" % variant.id if has_own_image else False,
@@ -324,7 +338,8 @@ class ProductTemplate(models.Model):
         return {
             "count": len(variants),
             "activeCount": len(active_variants),
-            "availableCount": len([variant for variant in active_variants if variant["inStock"]]),
+            "availableCount": (len([variant for variant in active_variants if variant["inStock"]])
+                               if all(variant.get("stockReadAllowed", True) for variant in active_variants) else None),
             "hasVariants": len(variants) > 1,
             "effectivePriceMinUsd": min(prices) if prices else 0.0,
             "effectivePriceMaxUsd": max(prices) if prices else 0.0,
@@ -408,7 +423,8 @@ class ProductTemplate(models.Model):
                 sale_discount = float(line.sale_discount or 0.0)
                 line_price = unit_price * quantity * (1.0 - sale_discount / 100.0)
                 unit_cost = component.product_tmpl_id._bpi_variant_component_cost(component)
-                possible_pack_qty = math.floor(max(float(component.free_qty or 0.0), 0.0) / quantity) if quantity else 0
+                stock = self._bpi_stock_payload(component)
+                possible_pack_qty = (math.floor(max(stock["freeQty"], 0.0) / quantity) if quantity else 0) if stock["stockReadAllowed"] else None
                 if not component.active:
                     warnings.append(
                         _("El componente %s está archivado y debe revisarse.")
@@ -429,8 +445,9 @@ class ProductTemplate(models.Model):
                         "linePriceUsd": line_price,
                         "unitCostUsd": unit_cost,
                         "lineCostUsd": unit_cost * quantity,
-                        "qtyAvailable": float(component.qty_available or 0.0),
-                        "freeQty": float(component.free_qty or 0.0),
+                        "qtyAvailable": stock["qtyAvailable"],
+                        "freeQty": stock["freeQty"],
+                        "stockReadAllowed": stock["stockReadAllowed"],
                         "possiblePackQty": possible_pack_qty,
                         "imageUrl": component.product_tmpl_id._bpi_primary_image_url(),
                     }
@@ -450,8 +467,7 @@ class ProductTemplate(models.Model):
                 {
                     "variantId": variant.id,
                     "variantName": variant.display_name or self.name or "",
-                    "qtyAvailable": float(variant.qty_available or 0.0),
-                    "freeQty": float(variant.free_qty or 0.0),
+                    **self._bpi_stock_payload(variant),
                     "effectivePriceUsd": effective_price,
                     "componentCostUsd": component_cost,
                     "marginPercent": margin,
@@ -655,7 +671,10 @@ class ProductTemplate(models.Model):
             product.bpi_video_embed_url = embed_url
 
     def action_open_product_intelligence(self):
+        self.env["bpi.service"]._ensure_manager()
         self.ensure_one()
+        self.check_access_rights("read")
+        self.check_access_rule("read")
         return {
             "type": "ir.actions.client",
             "tag": "bader_product_intelligence.action",
@@ -729,7 +748,10 @@ class ProductTemplate(models.Model):
         ]
 
     def bpi_dashboard_payload(self, exchange_rate=False):
+        self.env["bpi.service"]._ensure_manager()
         self.ensure_one()
+        self.check_access_rights("read")
+        self.check_access_rule("read")
         exchange_rate = exchange_rate or self._bpi_exchange_rate()
         category = self._bpi_main_category()
         variant_payloads = [self._bpi_variant_payload(variant) for variant in self._bpi_all_variants()]
@@ -759,8 +781,7 @@ class ProductTemplate(models.Model):
             "localExchangeRate": exchange_rate,
             "priceLocal": local_price,
             "mainImageUrl": self._bpi_primary_image_url(),
-            "qtyAvailable": float(self.qty_available or 0.0),
-            "inStock": bool((self.qty_available or 0.0) > 0),
+            **self._bpi_stock_payload(self),
             "productKind": self._bpi_product_kind(variant_summary),
             "variantCount": variant_summary["count"],
             "availableVariantCount": variant_summary["availableCount"],
@@ -887,8 +908,7 @@ class ProductTemplate(models.Model):
                 ),
                 "localExchangeRate": exchange_rate,
                 "priceLocal": float(self.list_price or 0.0) * exchange_rate,
-                "qtyAvailable": float(self.qty_available or 0.0),
-                "inStock": bool((self.qty_available or 0.0) > 0),
+                **self._bpi_stock_payload(self),
                 "productKind": self._bpi_product_kind(variant_summary),
                 "variantCount": variant_summary["count"],
                 "isPack": bool(self.pack_ok),

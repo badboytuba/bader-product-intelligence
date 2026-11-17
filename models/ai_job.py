@@ -7,7 +7,9 @@ from psycopg2 import IntegrityError
 from psycopg2.errors import InFailedSqlTransaction
 
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
+
+from .access import _BPI_JOB_CREATE, ensure_bpi_access, has_bpi_admin_access
 
 _logger = logging.getLogger(__name__)
 
@@ -66,12 +68,42 @@ class BPIAIJob(models.Model):
     started_at = fields.Datetime()
     finished_at = fields.Datetime()
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        ensure_bpi_access(self.env)
+        if not has_bpi_admin_access(self.env):
+            if self.env.context.get('_bpi_job_create') is not _BPI_JOB_CREATE:
+                raise AccessError(_('Inicia los trabajos de IA desde las acciones de Producto Intelligence.'))
+            if any(vals.get('requested_by_id') != self.env.uid for vals in vals_list):
+                raise AccessError(_('No puedes iniciar trabajos en nombre de otro usuario.'))
+        return super().create(vals_list)
+
+    def write(self, vals):
+        # Operators request jobs, but only the worker/admin advances or changes
+        # them. In particular an RPC caller cannot replace requester/request data.
+        if not has_bpi_admin_access(self.env):
+            raise AccessError(_('Los trabajos de IA son administrados por el procesador.'))
+        return super().write(vals)
+
+    def unlink(self):
+        if not has_bpi_admin_access(self.env):
+            raise AccessError(_('Solo los administradores pueden eliminar trabajos de IA.'))
+        return super().unlink()
+
     def _commit_for_visibility(self):
         if not self.env.context.get("bpi_no_job_commit"):
             self.env.cr.commit()
 
     def bpi_to_payload(self):
+        ensure_bpi_access(self.env)
         self.ensure_one()
+        self.check_access_rights("read")
+        self.check_access_rule("read")
+        if not self.env.su:
+            # Cron may finalize a historical job outside its default company;
+            # do not change trusted worker payload semantics. HTTP/user reads
+            # still require current native product/company access.
+            self.env["bpi.service"]._meli_product(self.product_tmpl_id.id)
         return {
             "id": self.id,
             "name": self.name,
@@ -89,6 +121,9 @@ class BPIAIJob(models.Model):
 
     @api.model
     def create_seo_job(self, product, target_audience="clinicas", user=False):
+        ensure_bpi_access(self.env)
+        if user and user != self.env.user and not has_bpi_admin_access(self.env):
+            raise AccessError(_('No puedes iniciar trabajos en nombre de otro usuario.'))
         product.ensure_one()
         requester = user or self.env.user
         service = self.env["bpi.service"].with_user(requester)
@@ -127,7 +162,7 @@ class BPIAIJob(models.Model):
             }
         try:
             with self.env.cr.savepoint():
-                return self.create(values)
+                return self.with_context(_bpi_job_create=_BPI_JOB_CREATE).create(values).with_context(_bpi_job_create=None)
         except IntegrityError as error:
             if getattr(error.diag, "constraint_name", None) != "bpi_ai_job_unique_active":
                 raise

@@ -53,7 +53,7 @@
         <field name="name">Modelos de descripción</field>
         <field name="res_model">bpi.content.template</field>
         <field name="view_mode">tree,form</field>
-        <field name="groups_id" eval="[(4, ref('base.group_system'))]"/>
+        <field name="groups_id" eval="[(4, ref('base.group_system')), (4, ref('group_bpi_user'))]"/>
     </record>
     <record id="view_product_category_content_template" model="ir.ui.view">
         <field name="name">product.category.bpi.content.template</field>
@@ -61,9 +61,9 @@
         <field name="inherit_id" ref="product.product_category_form_view"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='parent_id']" position="after">
-                <field name="bpi_content_template_id" groups="base.group_system" options="{'no_create': True}"/>
+                <field name="bpi_content_template_id" groups="base.group_system,bader_product_intelligence.group_bpi_user" options="{'no_create': True}"/>
             </xpath>
         </field>
     </record>
-    <menuitem id="menu_bpi_content_templates" name="Modelos de descripción" parent="menu_bpi_root" action="action_bpi_content_template" sequence="25" groups="base.group_system"/>
+    <menuitem id="menu_bpi_content_templates" name="Modelos de descripción" parent="menu_bpi_root" action="action_bpi_content_template" sequence="25" groups="base.group_system,bader_product_intelligence.group_bpi_user"/>
 </odoo>

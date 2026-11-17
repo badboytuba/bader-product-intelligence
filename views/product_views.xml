@@ -10,7 +10,7 @@
                         type="object"
                         class="oe_stat_button bader-brand bpi-brand-stat-button"
                         icon="fa-line-chart"
-                        groups="base.group_system">
+                        groups="base.group_system,bader_product_intelligence.group_bpi_user">
                     <div class="o_stat_info">
                         <span class="o_stat_text">Producto Intelligence</span>
                     </div>

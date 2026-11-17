@@ -23,6 +23,8 @@ from odoo.exceptions import AccessError, UserError
 from odoo.osv import expression
 from odoo.tools import html2plaintext
 
+from .access import ensure_bpi_access, ensure_bpi_admin, has_bpi_access
+
 _logger = logging.getLogger(__name__)
 
 
@@ -1302,6 +1304,7 @@ class BPIService(models.AbstractModel):
     @api.model
     def save_seo_payload(self, product, data):
         """Save only supplied keys; omitted editorial/keyword data stays intact."""
+        self._ensure_manager()
         product.ensure_one()
         data = data or {}
         metadata = self._normalize_seo_metadata(data)
@@ -1339,6 +1342,7 @@ class BPIService(models.AbstractModel):
 
     @api.model
     def analyze_seo(self, product, target_audience):
+        self._ensure_manager()
         product.ensure_one()
         product = self._meli_product(product.id)
         semantics = product._bpi_semantic_context()
@@ -1474,9 +1478,16 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
         return active_sale_domain
 
     @api.model
+    def _has_module_access(self):
+        return has_bpi_access(self.env)
+
+    @api.model
     def _ensure_manager(self):
-        if not self.env.user.has_group("base.group_system"):
-            raise AccessError(_("Producto Intelligence requiere permisos de administrador."))
+        ensure_bpi_access(self.env)
+
+    @api.model
+    def _ensure_admin(self):
+        ensure_bpi_admin(self.env)
 
     @api.model
     def save_all(self, product, product_values=None, category_values=None, content_values=None, seo_data=None):
@@ -1507,7 +1518,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
 
     @api.model
     def update_exchange_rate(self, exchange_rate):
-        self._ensure_manager()
+        self._ensure_admin()
         try:
             numeric_value = float(exchange_rate)
         except (TypeError, ValueError, OverflowError) as error:
@@ -1520,6 +1531,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
 
     @api.model
     def update_product(self, product, values):
+        self._ensure_manager()
         product.ensure_one()
         values = values or {}
         write_values = {}
@@ -1569,6 +1581,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
 
     @api.model
     def update_variant(self, product, variant, values):
+        self._ensure_manager()
         product.ensure_one()
         variant.ensure_one()
         if variant.product_tmpl_id != product:
@@ -1608,6 +1621,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
         image_data_url=False,
         remove=False,
     ):
+        self._ensure_manager()
         product.ensure_one()
         variant.ensure_one()
         if variant.product_tmpl_id != product:
@@ -1630,6 +1644,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
 
     @api.model
     def search_pack_components(self, product, query="", limit=20):
+        self._ensure_manager()
         product.ensure_one()
         try:
             safe_limit = min(max(int(limit or 20), 1), 20)
@@ -1671,7 +1686,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
                     "isPack": bool(variant.pack_ok),
                     "effectivePriceUsd": variant.product_tmpl_id._bpi_effective_variant_price(variant),
                     "costUsd": variant.product_tmpl_id._bpi_variant_component_cost(variant),
-                    "qtyAvailable": float(variant.qty_available or 0.0),
+                    **variant.product_tmpl_id._bpi_stock_payload(variant),
                 }
                 for variant in variants
             ]
@@ -1679,6 +1694,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
 
     @api.model
     def update_pack(self, product, pack_revision, values):
+        self._ensure_manager()
         product.ensure_one()
         selected_id = self.env.context.get('bpi_product_variant_id')
         if selected_id:
@@ -1821,6 +1837,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
 
     @api.model
     def save_content(self, product, values):
+        self._ensure_manager()
         product.ensure_one()
         product = self._meli_product(product.id)
         values = values or {}
@@ -1850,6 +1867,7 @@ Español argentino natural y profesional. Si no hay clasificación guardada, no 
 
     @api.model
     def generate_faq(self, product, audience="clinicas"):
+        self._ensure_manager()
         product.ensure_one()
         product = self._meli_product(product.id)
         semantics = product._bpi_semantic_context()
@@ -1893,6 +1911,7 @@ REGLAS:
 
     @api.model
     def save_category(self, product, values):
+        self._ensure_manager()
         product.ensure_one()
         values = values or {}
         product.write(
@@ -1920,6 +1939,7 @@ REGLAS:
 
     @api.model
     def reclassify_category(self, product):
+        self._ensure_manager()
         product.ensure_one()
         prompt = """Sos Nancy AI. Clasifica un producto dental para el catalogo de Bader Argentina.
 
@@ -1970,6 +1990,7 @@ Reglas:
 
     @api.model
     def generate_image(self, product, prompt, reference_tokens=None, style="professional", use_pro=False, uploaded_ref=""):
+        self._ensure_manager()
         product.ensure_one()
         image_model = self._get_config("bader_product_intelligence.openai_image_model", "gpt-image-2")
         image_edit_model = self._get_config("bader_product_intelligence.openai_image_edit_model", "gpt-image-1.5")
@@ -2041,6 +2062,7 @@ Reglas:
 
     @api.model
     def save_generated_image(self, product, data_url, prompt):
+        self._ensure_manager()
         product.ensure_one()
         _raw, mime_type, encoded = self._parse_image_data_url(data_url)
         image = self.env["bpi.product.image"].create(
@@ -2141,6 +2163,7 @@ Reglas:
 
     @api.model
     def add_image_from_url(self, product, image_url):
+        self._ensure_manager()
         product.ensure_one()
         raw, mime_type = self._download_external_image(image_url)
         encoded = base64.b64encode(raw).decode()
@@ -2166,6 +2189,7 @@ Reglas:
 
     @api.model
     def delete_image(self, image):
+        self._ensure_manager()
         image.unlink()
         return True
 
@@ -2543,6 +2567,7 @@ CANDIDATOS:
 
     @api.model
     def discover_competitors(self, product, limit=10):
+        self._ensure_manager()
         product.ensure_one()
         limit = max(1, min(int(limit or 10), 12))
         queries = self._build_competitor_queries(product)
@@ -2842,6 +2867,7 @@ CANDIDATOS:
 
     @api.model
     def scrape_competitor(self, competitor):
+        self._ensure_manager()
         self._check_competitor_access(competitor)
         self.env.cr.execute("SELECT pg_try_advisory_xact_lock(%s, %s)", (4345949, competitor.id))
         if not self.env.cr.fetchone()[0]:
@@ -2935,6 +2961,7 @@ CANDIDATOS:
 
     @api.model
     def analyze_competitor(self, competitor):
+        self._ensure_manager()
         self._check_competitor_access(competitor)
         self.env.cr.execute("SELECT pg_try_advisory_xact_lock(%s, %s)", (4345949, competitor.id))
         if not self.env.cr.fetchone()[0]:
@@ -3026,6 +3053,7 @@ Competidor:
 
     @api.model
     def generate_competitive_strategy(self, product):
+        self._ensure_manager()
         product.ensure_one()
         competitors = product.bpi_competitor_ids
         if not competitors:
@@ -3093,6 +3121,7 @@ Competidores:
 
     @api.model
     def chat_with_product(self, product, message, session_key=False):
+        self._ensure_manager()
         product.ensure_one()
         clean_message = (message or "").strip() if isinstance(message, str) else ""
         if not clean_message:

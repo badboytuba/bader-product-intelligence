@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Admin-owned editorial recipes, independent of eCommerce categorization."""
+"""Module-owned editorial recipes, independent of eCommerce categorization."""
 
 import math
 
 from odoo import _, api, fields, models
-from odoo.exceptions import AccessError, UserError, ValidationError
+from odoo.exceptions import UserError, ValidationError
+
+from .access import BPI_GROUPS, ensure_bpi_access
 
 
 class ContentTemplate(models.Model):
@@ -48,8 +50,7 @@ class ContentTemplate(models.Model):
 
     @api.model
     def _ensure_manager(self):
-        if not self.env.user.has_group("base.group_system"):
-            raise AccessError(_("Los modelos de descripción requieren permisos de administrador."))
+        ensure_bpi_access(self.env)
 
     @api.constrains("short_min_words", "short_max_words", "long_min_words", "long_max_words", "short_instructions", "long_instructions")
     def _check_recipe(self):
@@ -156,7 +157,7 @@ class ProductCategory(models.Model):
 
     bpi_content_template_id = fields.Many2one(
         "bpi.content.template", string="Modelo de descripción Nancy", ondelete="restrict",
-        groups="base.group_system", copy=False,
+        groups=BPI_GROUPS, copy=False,
         help="Se hereda por las subcategorías sin modelo propio. Las categorías duplicadas vuelven a la selección heredada.",
     )
 
@@ -178,7 +179,7 @@ class ProductTemplate(models.Model):
 
     bpi_content_template_id = fields.Many2one(
         "bpi.content.template", string="Excepción de modelo Nancy", ondelete="restrict",
-        groups="base.group_system", copy=False,
+        groups=BPI_GROUPS, copy=False,
         help="Vacío: selección automática por la categoría interna y sus antecesoras.",
     )
 

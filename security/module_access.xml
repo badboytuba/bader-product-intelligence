@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="group_bpi_user" model="res.groups">
+        <field name="name">Acceso a Producto Intelligence</field>
+        <!-- Uncategorized groups are native Boolean checkboxes on res.users.
+             A one-group application category would render a selection instead. -->
+        <field name="category_id" eval="False"/>
+        <field name="implied_ids" eval="[(6, 0, [ref('base.group_user')])]"/>
+        <field name="comment">Permite utilizar Producto Intelligence en las empresas autorizadas. Conserva los permisos nativos del catálogo y no concede administración de Odoo, acceso a claves ni permisos de Mercado Libre. Las acciones de IA solicitadas pueden generar consumo. Los administradores de Odoo mantienen su acceso.</field>
+    </record>
+</odoo>

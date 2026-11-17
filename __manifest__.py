@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Producto Intelligence",
-    "version": "16.0.1.17.2",
+    "version": "16.0.1.18.0",
     "summary": "Producto Intelligence para Bader en Odoo 16",
     "description": """
 Producto Intelligence para Bader Argentina.
@@ -28,7 +28,9 @@ Replica dentro de Odoo las capacidades principales del módulo Product Intellige
         "stock_product_pack",
     ],
     "data": [
+        "security/module_access.xml",
         "security/ir.model.access.csv",
+        "security/module_access_rules.xml",
         "security/technical_specification_rules.xml",
         "security/product_document_rules.xml",
         "security/content_studio_rules.xml",

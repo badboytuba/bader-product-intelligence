@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from odoo import http
-from odoo.exceptions import AccessError, MissingError
+from odoo.exceptions import MissingError
 from odoo.http import request
 
 
 class BaderProductIntelligenceController(http.Controller):
     def _ensure_manager(self):
-        if not request.env.user.has_group("base.group_system"):
-            raise AccessError("Producto Intelligence requiere permisos de administrador.")
+        request.env["bpi.service"]._ensure_manager()
 
     def _product(self, product_tmpl_id):
         self._ensure_manager()
@@ -221,8 +220,8 @@ class BaderProductIntelligenceController(http.Controller):
     @http.route("/bader_product_intelligence/ai_job/start_seo", type="json", auth="user")
     def start_seo_job(self, product_tmpl_id, target_audience="clinicas", **kwargs):
         product = self._product(product_tmpl_id)
-        job = request.env["bpi.ai.job"].sudo().create_seo_job(
-            product.sudo(),
+        job = request.env["bpi.ai.job"].create_seo_job(
+            product,
             target_audience=target_audience or "clinicas",
             user=request.env.user,
         )

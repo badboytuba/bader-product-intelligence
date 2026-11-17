@@ -3258,3 +3258,38 @@ QUnit.test('variant navigation preserves image/chat input and waits for synchron
     assert.equal(action.state.playground.messages[0].text,'Referencia High');
     assert.equal(action.state.chatInput,'Nota sin enviar');
 });
+
+QUnit.test("administration controls require an explicit successful system-group lookup", async (assert) => {
+    const action = Object.create(ProductIntelligenceAction.prototype);
+    action.state = { canAdminister: false };
+    const groups = [];
+    action.user = { hasGroup: async group => { groups.push(group); return true; } };
+    await action.loadAdministrationAccess();
+    assert.true(action.state.canAdminister, "existing system admins retain configuration controls");
+    assert.deepEqual(groups, ["base.group_system"], "module checkbox cannot imply global configuration access");
+    action.user = { hasGroup: async () => false };
+    await action.loadAdministrationAccess();
+    assert.false(action.state.canAdminister, "module-only operator sees no configuration controls");
+    action.state.canAdminister = true;
+    action.user = { hasGroup: async () => { throw new Error("unavailable"); } };
+    await action.loadAdministrationAccess();
+    assert.false(action.state.canAdminister, "failed lookup is closed");
+    action.state.canAdminister = true;
+    action.user = {};
+    await action.loadAdministrationAccess();
+    assert.false(action.state.canAdminister, "missing lookup is closed");
+});
+
+QUnit.test("unavailable inventory is neutral and never a zero-stock warning", (assert) => {
+    const action = Object.create(ProductIntelligenceAction.prototype);
+    assert.equal(action.formatStockNumber(null), "No disponible");
+    assert.equal(action.formatStockNumber(0), "0", "real zero remains a known quantity");
+    assert.equal(action.catalogStockLabel({qtyAvailable: null, stockReadAllowed: false}), "Inventario no disponible");
+    assert.equal(action.catalogStockClass({qtyAvailable: null, stockReadAllowed: false}), "is-unknown");
+    action.currentProduct = () => ({qtyAvailable: null, stockReadAllowed: false});
+    action.detailMargin = () => 0;
+    action.priceVsCompetition = () => null;
+    assert.deepEqual(action.overviewInsights(), [], "unknown inventory must not manufacture a low-stock claim");
+    action.currentProduct = () => ({qtyAvailable: 0, stockReadAllowed: true});
+    assert.equal(action.overviewInsights()[0].title, "Stock bajo", "authorized real zero keeps its previous behavior");
+});

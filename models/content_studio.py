@@ -28,6 +28,7 @@ from odoo.exceptions import AccessError, MissingError, UserError, ValidationErro
 from odoo.tools import html_sanitize
 
 from .studio_fetch import PublicFetchError, fetch_public_page
+from .access import BPI_GROUPS, _BPI_JOB_CREATE, has_bpi_admin_access
 from .studio_diagnostics import StudioRequestError, http_failure
 
 MODEL = 'gpt-6-astra'  # Internal only; never included in operator payloads.
@@ -498,7 +499,7 @@ class StudioProduct(models.Model):
 
     bpi_content_studio_proposal_id = fields.Many2one(
         'bpi.content.studio.proposal', string='Última propuesta Nancy aplicada',
-        ondelete='set null', copy=False, readonly=True, groups='base.group_system',
+        ondelete='set null', copy=False, readonly=True, groups=BPI_GROUPS,
     )
 
     def write(self, values):
@@ -615,6 +616,7 @@ class StudioService(models.AbstractModel):
 
     @api.model
     def _studio_activate(self, product_id):
+        self._ensure_admin()
         self._meli_product(product_id)
         key = self._get_config('bader_product_intelligence.openai_api_key', '')
         if not key:
@@ -930,13 +932,13 @@ class StudioService(models.AbstractModel):
                 'reviewProposalId': review_proposal_id or False,
                 'companies': self.env.companies.ids, 'language': self.env.context.get('lang') or self.env.user.lang,
                 'message': text, 'draft': draft or {}}
-        job = self.env['bpi.ai.job'].create({
+        job = self.env['bpi.ai.job'].with_context(_bpi_job_create=_BPI_JOB_CREATE).create({
             'name': _('Nancy AI Studio — %s') % session.product_tmpl_id.name[:100], 'job_type': 'content_studio',
             'product_variant_id': session.product_variant_id.id or False,
             'target_audience': False, 'product_tmpl_id': session.product_tmpl_id.id,
             'requested_by_id': self.env.uid, 'studio_session_id': session.id,
             'studio_request_key': request_key, 'studio_request': data,
-        })
+        }).with_context(_bpi_job_create=None)
         return dict(self._studio_envelope(session), job=job.bpi_to_payload())
 
     @api.model
@@ -1166,7 +1168,8 @@ class StudioJob(models.Model):
     def bpi_to_payload(self):
         result = super().bpi_to_payload()
         if self.job_type == 'content_studio':
-            result['diagnostic'] = self.studio_diagnostic or {}
+            # Do not read the system-only diagnostic field for module operators.
+            result['diagnostic'] = (self.studio_diagnostic or {}) if has_bpi_admin_access(self.env) else {}
         return result
 
     def init(self):

@@ -233,6 +233,7 @@ export class ProductIntelligenceAction extends Component {
             showDashboardSettings: false,
             dashboardTab: "all",
             searchTerm: "",
+            canAdminister: false,
             exchangeRateInput: "1650",
             exchangeRate: 1650,
             dashboardRows: [],
@@ -342,6 +343,7 @@ export class ProductIntelligenceAction extends Component {
         });
 
         onWillStart(async () => {
+            await this.loadAdministrationAccess();
             const productId = this.resolveProductId();
             this.state.origin = this.resolveOrigin();
             if (productId) {
@@ -375,6 +377,16 @@ export class ProductIntelligenceAction extends Component {
             this._cleanupScrollListener();
             this._cleanupKeyboardShortcuts();
         });
+    }
+
+    async loadAdministrationAccess() {
+        // Presentation only: the server independently guards every privileged
+        // action. Missing/failed group lookup must not expose admin controls.
+        try {
+            this.state.canAdminister = Boolean(await this.user.hasGroup?.("base.group_system"));
+        } catch {
+            this.state.canAdminister = false;
+        }
     }
 
     _setupScrollListener() {
@@ -2455,6 +2467,10 @@ export class ProductIntelligenceAction extends Component {
         return new Intl.NumberFormat("es-AR").format(Number(value || 0));
     }
 
+    formatStockNumber(value) {
+        return value === null || value === undefined ? "No disponible" : this.formatNumber(value);
+    }
+
     formatPercent(value) {
         return `${Number(value || 0).toFixed(1)}%`;
     }
@@ -2608,10 +2624,12 @@ export class ProductIntelligenceAction extends Component {
     }
 
     catalogStockLabel(row) {
+        if (row?.stockReadAllowed === false || row?.qtyAvailable === null) return "Inventario no disponible";
         return Number(row?.qtyAvailable) > 0 ? "En stock" : "Sin stock";
     }
 
     catalogStockClass(row) {
+        if (row?.stockReadAllowed === false || row?.qtyAvailable === null) return "is-unknown";
         return Number(row?.qtyAvailable) > 0 ? "is-in-stock" : "is-out-of-stock";
     }
 
@@ -2860,7 +2878,7 @@ export class ProductIntelligenceAction extends Component {
         const insights = [];
         const margin = this.detailMargin();
         const priceVs = this.priceVsCompetition();
-        if (Number(product.qtyAvailable || 0) < 10) {
+        if (product.stockReadAllowed !== false && product.qtyAvailable !== null && Number(product.qtyAvailable || 0) < 10) {
             insights.push({
                 type: "warning",
                 title: "Stock bajo",
@@ -3086,8 +3104,9 @@ export class ProductIntelligenceAction extends Component {
             linePriceUsd: candidate.effectivePriceUsd || 0,
             unitCostUsd: candidate.costUsd || 0,
             lineCostUsd: candidate.costUsd || 0,
-            qtyAvailable: candidate.qtyAvailable || 0,
-            possiblePackQty: Number(candidate.qtyAvailable || 0),
+            qtyAvailable: candidate.qtyAvailable ?? null,
+            stockReadAllowed: candidate.stockReadAllowed !== false && candidate.qtyAvailable != null,
+            possiblePackQty: candidate.qtyAvailable == null ? null : Number(candidate.qtyAvailable),
         });
         this.state.componentSearch.results = [];
         this.state.componentSearch.query = "";

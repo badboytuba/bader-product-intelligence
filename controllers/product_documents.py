@@ -24,7 +24,7 @@ class ProductDocuments(http.Controller):
                 edition = request.env['product.product'].search([('id','=',variant_id), ('product_tmpl_id','=',product.id)],limit=1)
                 if not edition:
                     return request.not_found()
-            manager = request.env.user.has_group('base.group_system')
+            manager = request.env['bpi.service']._has_module_access()
             if manager:
                 product = request.env['bpi.service']._meli_product(product_id)
                 panel = request.env['bpi.product.document.panel'].search([('product_id','=',product.id), ('product_variant_id','=',variant_id)],limit=1)

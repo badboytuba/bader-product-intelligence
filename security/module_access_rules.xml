@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Legacy models predate delegated access. Apply company isolation to the
+         new operator role without changing historical system-admin ACLs. -->
+    <record id="bpi_keyword_operator_company_rule" model="ir.rule">
+        <field name="name">Keywords BPI: empresas autorizadas</field>
+        <field name="model_id" ref="model_bpi_product_keyword"/>
+        <field name="groups" eval="[(4, ref('group_bpi_user'))]"/>
+        <field name="domain_force">['|', ('product_tmpl_id.company_id', '=', False), ('product_tmpl_id.company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_faq_operator_company_rule" model="ir.rule">
+        <field name="name">FAQs BPI: empresas autorizadas</field>
+        <field name="model_id" ref="model_bpi_product_faq"/>
+        <field name="groups" eval="[(4, ref('group_bpi_user'))]"/>
+        <field name="domain_force">['|', ('product_tmpl_id.company_id', '=', False), ('product_tmpl_id.company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_image_operator_company_rule" model="ir.rule">
+        <field name="name">Imágenes BPI: empresas autorizadas</field>
+        <field name="model_id" ref="model_bpi_product_image"/>
+        <field name="groups" eval="[(4, ref('group_bpi_user'))]"/>
+        <field name="domain_force">['|', ('product_tmpl_id.company_id', '=', False), ('product_tmpl_id.company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_competitor_operator_company_rule" model="ir.rule">
+        <field name="name">Competidores BPI: empresas autorizadas</field>
+        <field name="model_id" ref="model_bpi_product_competitor"/>
+        <field name="groups" eval="[(4, ref('group_bpi_user'))]"/>
+        <field name="domain_force">['|', ('product_tmpl_id.company_id', '=', False), ('product_tmpl_id.company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_chat_session_operator_company_rule" model="ir.rule">
+        <field name="name">Chat BPI: empresas autorizadas</field>
+        <field name="model_id" ref="model_bpi_product_chat_session"/>
+        <field name="groups" eval="[(4, ref('group_bpi_user'))]"/>
+        <field name="domain_force">['|', ('product_tmpl_id.company_id', '=', False), ('product_tmpl_id.company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_chat_message_operator_company_rule" model="ir.rule">
+        <field name="name">Mensajes BPI: empresas autorizadas</field>
+        <field name="model_id" ref="model_bpi_product_chat_message"/>
+        <field name="groups" eval="[(4, ref('group_bpi_user'))]"/>
+        <field name="domain_force">['|', ('session_id.product_tmpl_id.company_id', '=', False), ('session_id.product_tmpl_id.company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="bpi_job_operator_company_rule" model="ir.rule">
+        <field name="name">Trabajos BPI: empresas autorizadas</field>
+        <field name="model_id" ref="model_bpi_ai_job"/>
+        <field name="groups" eval="[(4, ref('group_bpi_user'))]"/>
+        <field name="domain_force">['|', ('product_tmpl_id.company_id', '=', False), ('product_tmpl_id.company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>

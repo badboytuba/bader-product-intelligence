@@ -1,3 +1,14 @@
+## 2026-11-17 — Module-access checkbox (local candidate)
+
+Candidate `16.0.1.18.0` introduces uncategorized `group_bpi_user` as the native
+Boolean **Acceso a Producto Intelligence**. Read `MODULE_ACCESS.md`. No real
+users have been assigned and no QAS/PROD installation is authorized/performed.
+Keep operational guards coherent, native ACLs/company isolation intact and
+sensitive settings/credentials system-only. Job constructors carry an unforgeable
+in-process capability; never accept caller context as a permission. Trusted
+server `env.su` remains valid for inactive OdooBot/workers. Native QAS registry,
+security and full regressions are still mandatory before production rollout.
+
 ## 2026-10-05 — 1.17.2 copy-only guard delivered QAS and PROD
 
 See `COPY_DRAFT_GUARD.md`. Focus/selection/copy followed by blur previously wrote

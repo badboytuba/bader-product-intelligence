@@ -432,6 +432,7 @@ class VariantProduct(models.Model):
         result['studioProposalId'] = scope['proposalId']
         result['product'].update(sku=scope['sku'], name=scope['name'], websiteUrl=scope['websiteUrl'],
             qtyAvailable=selected['qtyAvailable'], inStock=selected['inStock'],
+            stockReadAllowed=selected.get('stockReadAllowed', True),
             effectivePriceMinUsd=selected['effectivePriceUsd'], effectivePriceMaxUsd=selected['effectivePriceUsd'],
             costUsd=selected['costUsd'], effectiveCostMinUsd=selected['costUsd'], effectiveCostMaxUsd=selected['costUsd'],
             contentDescription=self._bpi_plain_text(values['description']),

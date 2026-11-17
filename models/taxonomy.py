@@ -9,6 +9,8 @@ from psycopg2 import IntegrityError
 from odoo import _, api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
+from .access import BPI_GROUPS, _BPI_JOB_CREATE, ensure_bpi_access
+
 AXES = [('niche', 'Nicho'), ('commercial', 'Aplicación comercial'),
         ('technical', 'Aplicación técnica'), ('use', 'Uso / Procedimiento')]
 
@@ -23,8 +25,7 @@ def digest(value):
 
 
 def manager(env):
-    if not env.user.has_group('base.group_system'):
-        raise AccessError(_('La clasificación requiere permisos de administrador.'))
+    ensure_bpi_access(env)
 
 
 class TaxonomyTerm(models.Model):
@@ -130,7 +131,7 @@ class TaxonomyProduct(models.Model):
     _inherit = 'product.template'
 
     bpi_taxonomy_term_ids = fields.Many2many('bpi.taxonomy.term', 'bpi_product_taxonomy_rel', 'product_id', 'term_id', string='Clasificación aprobada', copy=False)
-    bpi_classification_excluded_ids = fields.Json(default=list, copy=False, groups='base.group_system', string='Términos retirados manualmente')
+    bpi_classification_excluded_ids = fields.Json(default=list, copy=False, groups=BPI_GROUPS, string='Términos retirados manualmente')
     bpi_classification_revision = fields.Integer(default=0, readonly=True, copy=False)
     bpi_classification_reviewed_at = fields.Datetime(readonly=True, copy=False)
     bpi_classification_reviewed_by = fields.Many2one('res.users', readonly=True, copy=False)
@@ -418,7 +419,7 @@ class ClassificationJob(models.Model):
                     'companies':self.env.companies.ids, 'language':self.env.context.get('lang') or self.env.user.lang}}
         try:
             with self.env.cr.savepoint():
-                return self.create(values)
+                return self.with_context(_bpi_job_create=_BPI_JOB_CREATE).create(values).with_context(_bpi_job_create=None)
         except IntegrityError as error:
             if getattr(error.diag,'constraint_name',None) != 'bpi_ai_job_unique_active':
                 raise

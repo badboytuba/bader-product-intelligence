@@ -6,12 +6,13 @@ from odoo.tools import html2plaintext
 from odoo.tools.sql import escape_psql
 from .taxonomy import AXES
 from .taxonomy import normalize
+from .access import BPI_GROUPS
 
 
 class VariantSearchIndex(models.Model):
     _inherit = 'product.product'
 
-    bpi_variant_profile_ids = fields.One2many('bpi.variant.content', 'product_id', groups='base.group_system')
+    bpi_variant_profile_ids = fields.One2many('bpi.variant.content', 'product_id', groups=BPI_GROUPS)
     bpi_effective_term_ids = fields.Many2many('bpi.taxonomy.term', 'bpi_variant_effective_term_rel',
         'variant_id', 'term_id', compute='_compute_bpi_variant_index', store=True, compute_sudo=True)
     bpi_effective_category_ids = fields.Many2many('product.public.category', 'bpi_variant_effective_category_rel',
